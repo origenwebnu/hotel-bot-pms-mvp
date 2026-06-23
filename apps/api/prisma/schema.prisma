@@ -1,0 +1,178 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [vector]
+}
+
+model Hotel {
+  id                    String   @id @default(cuid())
+  name                  String
+  slug                  String   @unique
+  timezone              String   @default("America/Bogota")
+  currency              String   @default("COP")
+  whatsappPhoneNumberId String?  @map("whatsapp_phone_number_id")
+  isActive              Boolean  @default(true) @map("is_active")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  users         AdminUser[]
+  integration   HotelIntegration?
+  credentials   EncryptedCredential[]
+  knowledge     KnowledgeDocument[]
+  reservations  Reservation[]
+  conversations ConversationSession[]
+  vectors       KnowledgeVector[]
+
+  @@map("hotels")
+}
+
+model AdminUser {
+  id           String   @id @default(cuid())
+  hotelId      String   @map("hotel_id")
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  role         String   @default("owner")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@map("admin_users")
+}
+
+model HotelIntegration {
+  id               String    @id @default(cuid())
+  hotelId          String    @unique @map("hotel_id")
+  pmsProvider      String?   @map("pms_provider")
+  pmsPropertyId    String?   @map("pms_property_id")
+  paymentProvider  String?   @map("payment_provider")
+  pmsConnected     Boolean   @default(false) @map("pms_connected")
+  paymentConnected Boolean   @default(false) @map("payment_connected")
+  lastValidatedAt  DateTime? @map("last_validated_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@map("hotel_integrations")
+}
+
+model EncryptedCredential {
+  id             String   @id @default(cuid())
+  hotelId        String   @map("hotel_id")
+  credentialType String   @map("credential_type")
+  encryptedValue String   @map("encrypted_value")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@unique([hotelId, credentialType])
+  @@map("encrypted_credentials")
+}
+
+model KnowledgeDocument {
+  id         String   @id @default(cuid())
+  hotelId    String   @map("hotel_id")
+  title      String
+  content    String   @db.Text
+  sourceType String   @default("text") @map("source_type")
+  fileName   String?  @map("file_name")
+  isIndexed  Boolean  @default(false) @map("is_indexed")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@map("knowledge_documents")
+}
+
+model KnowledgeVector {
+  id         String                      @id @default(cuid())
+  hotelId    String                      @map("hotel_id")
+  documentId String                      @map("document_id")
+  chunkIndex Int                         @map("chunk_index")
+  content    String                      @db.Text
+  embedding  Unsupported("vector(1536)")?
+  createdAt  DateTime                    @default(now()) @map("created_at")
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId])
+  @@map("knowledge_vectors")
+}
+
+model ConversationSession {
+  id                 String   @id @default(cuid())
+  hotelId            String   @map("hotel_id")
+  whatsappPhone      String   @map("whatsapp_phone")
+  state              String   @default("idle")
+  checkIn            String?  @map("check_in")
+  checkOut           String?  @map("check_out")
+  adults             Int?
+  children           Int?
+  selectedRoomTypeId String?  @map("selected_room_type_id")
+  reservationId      String?  @map("reservation_id")
+  contextJson        Json?    @map("context_json")
+  lastMessageAt      DateTime @default(now()) @map("last_message_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@unique([hotelId, whatsappPhone])
+  @@map("conversation_sessions")
+}
+
+model Reservation {
+  id                 String    @id @default(cuid())
+  hotelId            String    @map("hotel_id")
+  whatsappSessionId  String    @map("whatsapp_session_id")
+  idempotencyKey     String    @unique @map("idempotency_key")
+  status             String    @default("inquiry")
+  roomTypeId         String?   @map("room_type_id")
+  roomName           String?   @map("room_name")
+  checkIn            String?   @map("check_in")
+  checkOut           String?   @map("check_out")
+  adults             Int?
+  children           Int?
+  totalAmount        Float?    @map("total_amount")
+  currency           String?
+  pmsReservationId   String?   @map("pms_reservation_id")
+  holdExpiresAt      DateTime? @map("hold_expires_at")
+  paymentLink        String?   @map("payment_link")
+  paymentId          String?   @map("payment_id")
+  guestFirstName     String?   @map("guest_first_name")
+  guestLastName      String?   @map("guest_last_name")
+  guestEmail         String?   @map("guest_email")
+  guestPhone         String?   @map("guest_phone")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@map("reservations")
+}
+
+model PaymentEvent {
+  id            String   @id @default(cuid())
+  hotelId       String   @map("hotel_id")
+  reservationId String?  @map("reservation_id")
+  provider      String
+  externalId    String   @map("external_id")
+  status        String
+  amount        Float
+  currency      String
+  rawPayload    Json     @map("raw_payload")
+  processed     Boolean  @default(false)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@unique([provider, externalId])
+  @@map("payment_events")
+}

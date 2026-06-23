@@ -1,0 +1,20 @@
+{
+  "name": "hotel-bot-pms-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chatbot SaaS de Reservas Directas para Hoteles (WhatsApp Native)",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @hotel-bot/api --filter @hotel-bot/web dev",
+    "dev:api": "pnpm --filter @hotel-bot/api dev",
+    "dev:web": "pnpm --filter @hotel-bot/web dev",
+    "build": "pnpm --filter @hotel-bot/shared build && pnpm --filter @hotel-bot/pms-adapters build && pnpm --filter @hotel-bot/api build && pnpm --filter @hotel-bot/web build",
+    "lint": "pnpm -r lint",
+    "db:migrate": "pnpm --filter @hotel-bot/api db:migrate",
+    "db:generate": "pnpm --filter @hotel-bot/api db:generate"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.0"
+}
