@@ -2,7 +2,6 @@
 const internalApi = process.env.INTERNAL_API_URL || 'http://api:4000';
 
 const nextConfig = {
-  output: 'standalone',
   async rewrites() {
     return [
       {
