@@ -36,6 +36,8 @@ services:
       DATABASE_URL: postgresql://hotelbot:hotelbot_secret@postgres:5432/hotelbot?schema=public
       REDIS_URL: redis://redis:6379
       PORT: 4000
+    ports:
+      - "127.0.0.1:4000:4000"
     depends_on:
       postgres:
         condition: service_healthy
