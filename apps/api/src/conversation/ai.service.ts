@@ -1,18 +1,15 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
-import OpenAI from 'openai';
 import { KnowledgeService } from '../knowledge/knowledge.service';
+import { getOpenAiClient } from '../common/openai.client';
 
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
-  private readonly openai: OpenAI;
 
   constructor(
     @Inject(forwardRef(() => KnowledgeService))
     private readonly knowledge: KnowledgeService,
-  ) {
-    this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  }
+  ) {}
 
   async generateResponse(
     hotelId: string,
@@ -35,7 +32,8 @@ ${ragContext || 'No hay documentos cargados aún.'}
 CONTEXTO DE LA CONVERSACIÓN:
 ${systemContext}`;
 
-    const response = await this.openai.chat.completions.create({
+    const openai = getOpenAiClient();
+    const response = await openai.chat.completions.create({
       model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
       messages: [
         { role: 'system', content: systemPrompt },
@@ -54,7 +52,8 @@ ${systemContext}`;
     guests?: { adults?: number; children?: number };
     room_id?: string;
   }> {
-    const response = await this.openai.chat.completions.create({
+    const openai = getOpenAiClient();
+    const response = await openai.chat.completions.create({
       model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
       messages: [
         {

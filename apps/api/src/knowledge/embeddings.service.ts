@@ -1,16 +1,11 @@
 import { Injectable } from '@nestjs/common';
-import OpenAI from 'openai';
+import { getOpenAiClient } from '../common/openai.client';
 
 @Injectable()
 export class EmbeddingsService {
-  private readonly openai: OpenAI;
-
-  constructor() {
-    this.openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  }
-
   async generateEmbedding(text: string): Promise<number[]> {
-    const response = await this.openai.embeddings.create({
+    const openai = getOpenAiClient();
+    const response = await openai.embeddings.create({
       model: process.env.OPENAI_EMBEDDING_MODEL ?? 'text-embedding-3-small',
       input: text,
     });
