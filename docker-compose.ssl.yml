@@ -1,0 +1,21 @@
+# Override para HTTPS en app.bookichat.com
+# Uso: docker compose -f docker-compose.yml -f docker-compose.ssl.yml up -d
+
+services:
+  web:
+    ports: !reset []
+    expose:
+      - "3000"
+
+  nginx:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./docker/nginx-ssl.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/certs:/etc/nginx/certs:ro
+    depends_on:
+      - web
+      - api

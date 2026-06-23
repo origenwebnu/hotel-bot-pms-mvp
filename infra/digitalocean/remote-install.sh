@@ -18,8 +18,9 @@ if [ "$KEY_LEN" -lt 64 ]; then
   sed -i "s/ENCRYPTION_KEY=.*/ENCRYPTION_KEY=$(openssl rand -hex 32)/" .env
 fi
 
-sed -i "s|APP_URL=.*|APP_URL=http://${PUBLIC_IP}|" .env
-sed -i "s|API_URL=.*|API_URL=http://${PUBLIC_IP}|" .env
+sed -i "s|APP_URL=.*|APP_URL=https://app.bookichat.com|" .env
+sed -i "s|API_URL=.*|API_URL=https://app.bookichat.com|" .env
+grep -q '^CORS_ORIGINS=' .env && sed -i "s|CORS_ORIGINS=.*|CORS_ORIGINS=https://app.bookichat.com|" .env || echo "CORS_ORIGINS=https://app.bookichat.com" >> .env
 
 export API_URL="http://${PUBLIC_IP}"
 

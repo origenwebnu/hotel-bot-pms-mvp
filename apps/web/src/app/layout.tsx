@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'HotelBot — Panel de Administración',
+  title: 'BookiChat — Panel del Hotel',
   description: 'Chatbot SaaS de reservas directas para hoteles vía WhatsApp',
 };
 

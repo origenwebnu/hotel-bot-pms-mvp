@@ -47,7 +47,7 @@ export default function DashboardPage() {
         <div className="sidebar-brand">
           <span>🏨</span>
           <div>
-            <strong>HotelBot</strong>
+            <strong>BookiChat</strong>
             <small>{hotel.name}</small>
           </div>
         </div>
