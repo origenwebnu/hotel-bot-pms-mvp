@@ -54,12 +54,33 @@ if grep -q "sk-your-openai-key" .env || grep -q "OPENAI_API_KEY=$" .env; then
 fi
 
 echo "==> Construyendo e iniciando contenedores..."
-docker compose build
+docker compose down --remove-orphans 2>/dev/null || true
+docker compose build --no-cache
 docker compose up -d
 
-echo "==> Esperando servicios..."
-sleep 15
+echo "==> Esperando servicios (60s)..."
+for i in $(seq 1 12); do
+  if docker compose exec -T api node -e "fetch('http://127.0.0.1:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" 2>/dev/null; then
+    echo "API lista"
+    break
+  fi
+  echo "  esperando... ($i/12)"
+  sleep 5
+done
+
 docker compose exec -T api npx prisma migrate deploy || true
+
+echo ""
+echo "=== Estado final ==="
+docker compose ps
+
+if ! docker compose exec -T web node -e "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" 2>/dev/null; then
+  echo ""
+  echo "⚠️  WEB o API no responden. Ejecuta:"
+  echo "    bash infra/digitalocean/diagnose.sh"
+  docker compose logs api --tail 30
+  docker compose logs web --tail 30
+fi
 
 echo ""
 echo "✅ Instalación completada"
