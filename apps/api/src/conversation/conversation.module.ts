@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
+import { QUEUE_NAMES } from '@hotel-bot/shared';
 import { ConversationService } from './conversation.service';
 import { ConversationProcessor } from './conversation.processor';
 import { WhatsAppWebhookController } from './whatsapp-webhook.controller';
@@ -9,7 +11,17 @@ import { CheckoutModule } from '../checkout/checkout.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 
 @Module({
-  imports: [CoreIntegratorModule, KnowledgeModule, CheckoutModule, WhatsAppModule, AiModule],
+  imports: [
+    BullModule.registerQueue(
+      { name: QUEUE_NAMES.WHATSAPP_INBOUND },
+      { name: QUEUE_NAMES.WHATSAPP_OUTBOUND },
+    ),
+    CoreIntegratorModule,
+    KnowledgeModule,
+    CheckoutModule,
+    WhatsAppModule,
+    AiModule,
+  ],
   controllers: [WhatsAppWebhookController],
   providers: [
     ConversationService,
