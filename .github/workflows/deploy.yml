@@ -17,16 +17,17 @@ jobs:
           host: ${{ secrets.DROPLET_IP }}
           username: root
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 20m
           script: |
+            set -e
             export PUBLIC_IP="${{ secrets.DROPLET_IP }}"
             if [ -d /opt/hotel-bot/.git ]; then
               cd /opt/hotel-bot
               git fetch origin
               git checkout main
               git pull origin main
-              bash infra/digitalocean/remote-install.sh
             else
               git clone --branch main https://github.com/origenwebnu/hotel-bot-pms-mvp.git /opt/hotel-bot
               cd /opt/hotel-bot
-              bash infra/digitalocean/remote-install.sh
             fi
+            bash infra/digitalocean/remote-install.sh

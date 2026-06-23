@@ -1,4 +1,5 @@
 FROM node:20-alpine AS base
+RUN apk add --no-cache openssl libc6-compat
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
 
@@ -21,26 +22,18 @@ RUN pnpm --filter @hotel-bot/pms-adapters build
 RUN cd apps/api && npx prisma generate
 RUN pnpm --filter @hotel-bot/api build
 
-FROM node:20-alpine AS runner
+FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=4000
 
-RUN apk add --no-cache openssl
+RUN apk add --no-cache netcat-openbsd
 
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/apps/api/dist ./apps/api/dist
-COPY --from=builder /app/apps/api/package.json ./apps/api/package.json
-COPY --from=builder /app/apps/api/prisma ./apps/api/prisma
-COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
-COPY --from=builder /app/packages/shared/package.json ./packages/shared/package.json
-COPY --from=builder /app/packages/pms-adapters/dist ./packages/pms-adapters/dist
-COPY --from=builder /app/packages/pms-adapters/package.json ./packages/pms-adapters/package.json
+COPY --from=builder /app/apps/api ./apps/api
+COPY --from=builder /app/packages ./packages
+COPY docker/entrypoint-api.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-WORKDIR /app/apps/api
 EXPOSE 4000
-
-HEALTHCHECK --interval=15s --timeout=5s --start-period=60s --retries=5 \
-  CMD node -e "fetch('http://127.0.0.1:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/main.js"]
+ENTRYPOINT ["/entrypoint.sh"]
