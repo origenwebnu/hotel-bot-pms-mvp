@@ -1,5 +1,5 @@
-FROM node:20-alpine AS base
-RUN apk add --no-cache openssl libc6-compat
+FROM node:20-slim AS base
+RUN apt-get update && apt-get install -y openssl ca-certificates netcat-openbsd && rm -rf /var/lib/apt/lists/*
 RUN corepack enable && corepack prepare pnpm@9.15.0 --activate
 WORKDIR /app
 
@@ -26,8 +26,6 @@ FROM base AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=4000
-
-RUN apk add --no-cache netcat-openbsd
 
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/apps/api ./apps/api

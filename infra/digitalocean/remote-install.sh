@@ -25,6 +25,8 @@ export API_URL="http://${PUBLIC_IP}"
 
 echo "==> Reconstruyendo contenedores..."
 docker compose down --remove-orphans 2>/dev/null || true
+docker stop hotel-bot-nginx-1 2>/dev/null || true
+docker rm hotel-bot-nginx-1 2>/dev/null || true
 docker compose build --no-cache api web
 docker compose up -d
 
@@ -33,9 +35,11 @@ OK=0
 for i in $(seq 1 18); do
   API_OK=0
   WEB_OK=0
+  PUBLIC_OK=0
   docker compose exec -T api node -e "fetch('http://127.0.0.1:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" 2>/dev/null && API_OK=1 || true
   docker compose exec -T web node -e "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" 2>/dev/null && WEB_OK=1 || true
-  if [ "$API_OK" = "1" ] && [ "$WEB_OK" = "1" ]; then
+  curl -sf http://localhost/api/health >/dev/null 2>&1 && PUBLIC_OK=1 || PUBLIC_OK=0
+  if [ "$API_OK" = "1" ] && [ "$WEB_OK" = "1" ] && [ "$PUBLIC_OK" = "1" ]; then
     OK=1
     echo "✅ API y WEB responden"
     break

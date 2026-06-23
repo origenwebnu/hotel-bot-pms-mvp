@@ -20,13 +20,9 @@ echo ""
 echo "=== Últimos logs NGINX ==="
 docker compose logs nginx --tail 20 2>&1 || true
 
-echo ""
-echo "=== Test interno API ==="
-docker compose exec -T api node -e "fetch('http://127.0.0.1:4000/api/health').then(r=>r.text()).then(console.log).catch(e=>console.error(e))" 2>&1 || echo "API no responde"
-
-echo ""
-echo "=== Test interno WEB ==="
-docker compose exec -T web node -e "fetch('http://127.0.0.1:3000/').then(r=>console.log(r.status)).catch(e=>console.error(e))" 2>&1 || echo "WEB no responde"
+echo "=== Test vía puerto 80 (web) ==="
+curl -sf http://localhost/api/health && echo "" || echo "❌ /api/health no responde"
+curl -sf -o /dev/null -w "WEB status: %{http_code}\n" http://localhost/ || echo "❌ WEB no responde"
 
 echo ""
 echo "=== ENCRYPTION_KEY en .env ==="
