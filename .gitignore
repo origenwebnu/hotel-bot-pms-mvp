@@ -8,6 +8,9 @@ dist/
 out/
 build/
 *.tsbuildinfo
+packages/**/src/**/*.js
+packages/**/src/**/*.js.map
+packages/**/src/**/*.d.ts
 
 # Environment
 .env
