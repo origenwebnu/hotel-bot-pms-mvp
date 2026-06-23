@@ -21,6 +21,7 @@ RUN pnpm --filter @hotel-bot/shared build
 RUN pnpm --filter @hotel-bot/pms-adapters build
 RUN cd apps/api && npx prisma generate
 RUN pnpm --filter @hotel-bot/api build
+RUN test -f /app/apps/api/dist/main.js || (echo "ERROR: dist/main.js no generado" && find /app/apps/api/dist -name "main.js" && exit 1)
 
 FROM base AS runner
 WORKDIR /app

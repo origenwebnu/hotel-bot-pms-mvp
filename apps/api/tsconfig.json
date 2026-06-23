@@ -18,8 +18,8 @@
     "forceConsistentCasingInFileNames": true,
     "noFallthroughCasesInSwitch": true,
     "paths": {
-      "@hotel-bot/shared": ["../../packages/shared/src"],
-      "@hotel-bot/pms-adapters": ["../../packages/pms-adapters/src"]
+      "@hotel-bot/shared": ["../../packages/shared/dist"],
+      "@hotel-bot/pms-adapters": ["../../packages/pms-adapters/dist"]
     }
   },
   "include": ["src/**/*"],

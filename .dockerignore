@@ -1,0 +1,12 @@
+node_modules
+.git
+.env
+.env.*
+!.env.example
+**/.next
+**/dist
+*.md
+.docker
+coverage
+.turbo
+.pnpm-store
