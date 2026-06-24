@@ -46,20 +46,26 @@ ${systemContext}`;
     return response.choices[0]?.message?.content ?? 'Lo siento, no pude procesar tu mensaje.';
   }
 
-  async extractBookingIntent(message: string): Promise<{
-    intent: 'book' | 'faq' | 'select_room' | 'confirm' | 'unknown';
-    dates?: { check_in?: string; check_out?: string };
-    guests?: { adults?: number; children?: number };
-    room_id?: string;
-  }> {
+  async extractBookingIntent(message: string): Promise<BookingIntent> {
+    const today = new Date().toISOString().slice(0, 10);
     const openai = getOpenAiClient();
     const response = await openai.chat.completions.create({
       model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: `Analiza el mensaje del huésped y extrae la intención. Responde SOLO JSON válido:
-{"intent":"book|faq|select_room|confirm|unknown","dates":{"check_in":"YYYY-MM-DD","check_out":"YYYY-MM-DD"},"guests":{"adults":N,"children":N},"room_id":"id si seleccionó habitación"}`,
+          content: `Analiza el mensaje del huésped de un hotel y extrae datos de reserva.
+Hoy es ${today} (YYYY-MM-DD). Usa el año correcto si no lo mencionan (si la fecha ya pasó este año, usa el próximo).
+
+REGLAS:
+- Si preguntan precio, tarifa, cuánto vale, disponibilidad o habitación CON fechas → intent = "book"
+- Extrae fechas aunque digan "del 28 al 29 de junio", "28-29 jun", etc. → formato YYYY-MM-DD
+- "2 personas", "para 2", "2 adultos", "una pareja" → guests.adults (pareja = 2)
+- Si hay fechas Y huéspedes en el mismo mensaje, extrae ambos
+- intent = "faq" solo para preguntas generales SIN intención de reservar/cotizar
+
+Responde SOLO JSON:
+{"intent":"book|faq|select_room|confirm|unknown","dates":{"check_in":"YYYY-MM-DD","check_out":"YYYY-MM-DD"},"guests":{"adults":N,"children":N},"room_id":""}`,
         },
         { role: 'user', content: message },
       ],
@@ -68,9 +74,16 @@ ${systemContext}`;
     });
 
     try {
-      return JSON.parse(response.choices[0]?.message?.content ?? '{}');
+      return JSON.parse(response.choices[0]?.message?.content ?? '{}') as BookingIntent;
     } catch {
       return { intent: 'unknown' };
     }
   }
 }
+
+export type BookingIntent = {
+  intent: 'book' | 'faq' | 'select_room' | 'confirm' | 'unknown';
+  dates?: { check_in?: string; check_out?: string };
+  guests?: { adults?: number; children?: number };
+  room_id?: string;
+};

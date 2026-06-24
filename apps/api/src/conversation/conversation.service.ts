@@ -11,7 +11,7 @@ import {
 } from '@hotel-bot/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CoreIntegratorService } from '../core-integrator/core-integrator.service';
-import { AiService } from './ai.service';
+import { AiService, type BookingIntent } from './ai.service';
 import { WhatsAppRendererService } from '../whatsapp/whatsapp-renderer.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { CheckoutService } from '../checkout/checkout.service';
@@ -58,13 +58,8 @@ export class ConversationService {
     switch (session.state) {
       case 'idle':
       case 'faq':
-        if (intent.intent === 'book' || text.match(/reserv|habitaci|disponib|book/i)) {
-          await this.updateSession(session.id, { state: 'collecting_dates' });
-          await this.whatsapp.sendText(
-            hotelId,
-            phone,
-            '¡Con gusto te ayudo a reservar! 📅 ¿Para qué fechas necesitas la habitación? (ej: del 15 al 18 de julio)',
-          );
+        if (this.shouldStartBooking(text, intent)) {
+          await this.advanceBookingFlow(hotelId, session.id, phone, text, intent);
           return;
         }
         {
@@ -75,41 +70,16 @@ export class ConversationService {
         return;
 
       case 'collecting_dates':
-        if (intent.dates?.check_in && intent.dates?.check_out) {
-          await this.updateSession(session.id, {
-            state: 'collecting_guests',
-            checkIn: intent.dates.check_in,
-            checkOut: intent.dates.check_out,
-          });
-          await this.whatsapp.sendText(
-            hotelId,
-            phone,
-            `Perfecto, del ${intent.dates.check_in} al ${intent.dates.check_out}. ¿Cuántos huéspedes? (ej: 2 adultos)`,
-          );
-        } else {
-          await this.whatsapp.sendText(
-            hotelId,
-            phone,
-            'No pude entender las fechas. Por favor indica check-in y check-out (ej: 2025-07-15 al 2025-07-18).',
-          );
-        }
+        await this.advanceBookingFlow(hotelId, session.id, phone, text, intent);
         return;
 
       case 'collecting_guests':
-        {
-          const adults = intent.guests?.adults ?? parseInt(text.match(/\d+/)?.[0] ?? '2', 10);
-          await this.updateSession(session.id, {
-            state: 'showing_rooms',
-            adults,
-            children: intent.guests?.children ?? 0,
-          });
-          await this.showAvailableRooms(hotelId, session.id, phone);
-        }
+        await this.advanceBookingFlow(hotelId, session.id, phone, text, intent);
         return;
 
       case 'showing_rooms':
         if (this.wantsNewBooking(text, intent)) {
-          await this.startBookingFlow(hotelId, session.id, phone);
+          await this.startBookingFlow(hotelId, session.id, phone, text, intent);
           return;
         }
         if (this.isGreetingOrReset(text)) {
@@ -126,7 +96,7 @@ export class ConversationService {
 
       case 'room_selected':
         if (this.wantsNewBooking(text, intent) || this.isGreetingOrReset(text)) {
-          await this.startBookingFlow(hotelId, session.id, phone);
+          await this.startBookingFlow(hotelId, session.id, phone, text, intent);
           return;
         }
         await this.whatsapp.sendText(
@@ -138,7 +108,7 @@ export class ConversationService {
 
       case 'collecting_guest_info':
         if (this.wantsNewBooking(text, intent) || this.isGreetingOrReset(text)) {
-          await this.startBookingFlow(hotelId, session.id, phone);
+          await this.startBookingFlow(hotelId, session.id, phone, text, intent);
           return;
         }
         await this.handleGuestInfo(hotelId, session, text);
@@ -146,7 +116,7 @@ export class ConversationService {
 
       case 'awaiting_payment':
         if (this.wantsNewBooking(text, intent) || this.isGreetingOrReset(text)) {
-          await this.startBookingFlow(hotelId, session.id, phone);
+          await this.startBookingFlow(hotelId, session.id, phone, text, intent);
           return;
         }
         if (text.match(/pagar|pago|link|reintentar/i)) {
@@ -498,13 +468,242 @@ export class ConversationService {
     });
   }
 
-  private wantsNewBooking(
-    text: string,
-    intent: { intent?: string },
-  ): boolean {
+  private wantsNewBooking(text: string, intent: BookingIntent): boolean {
     return (
       intent.intent === 'book' ||
       /reserv|habitaci|disponib|book/i.test(text)
+    );
+  }
+
+  private shouldStartBooking(text: string, intent: BookingIntent): boolean {
+    const enriched = this.enrichIntent(text, intent);
+    if (enriched.intent === 'book') return true;
+    if (this.wantsNewBooking(text, enriched)) return true;
+    if (
+      this.isPricingOrAvailabilityQuery(text) &&
+      (enriched.dates?.check_in || /personas|adultos|huéspedes|pareja/i.test(text))
+    ) {
+      return true;
+    }
+    if (
+      enriched.dates?.check_in &&
+      enriched.dates?.check_out &&
+      (enriched.guests?.adults || this.parseGuestsFallback(text))
+    ) {
+      return true;
+    }
+    return false;
+  }
+
+  private isPricingOrAvailabilityQuery(text: string): boolean {
+    return /cuánto|cuanto|precio|tarifa|vale|costo|disponib/i.test(text);
+  }
+
+  private enrichIntent(text: string, intent: BookingIntent): BookingIntent {
+    const enriched: BookingIntent = {
+      ...intent,
+      dates: { ...intent.dates },
+      guests: { ...intent.guests },
+    };
+
+    if (!enriched.dates?.check_in || !enriched.dates?.check_out) {
+      const parsed = this.parseDatesFallback(text);
+      if (parsed.check_in && parsed.check_out) {
+        enriched.dates = parsed;
+        if (enriched.intent === 'unknown' || enriched.intent === 'faq') {
+          enriched.intent = 'book';
+        }
+      }
+    }
+
+    if (!enriched.guests?.adults) {
+      const adults = this.parseGuestsFallback(text);
+      if (adults) {
+        enriched.guests = { adults, children: enriched.guests?.children ?? 0 };
+        if (enriched.intent === 'unknown' || enriched.intent === 'faq') {
+          enriched.intent = 'book';
+        }
+      }
+    }
+
+    if (/pareja/i.test(text) && !enriched.guests?.adults) {
+      enriched.guests = { adults: 2, children: enriched.guests?.children ?? 0 };
+      enriched.intent = 'book';
+    }
+
+    return enriched;
+  }
+
+  private parseDatesFallback(text: string): { check_in?: string; check_out?: string } {
+    const months: Record<string, number> = {
+      enero: 1,
+      febrero: 2,
+      marzo: 3,
+      abril: 4,
+      mayo: 5,
+      junio: 6,
+      julio: 7,
+      agosto: 8,
+      septiembre: 9,
+      setiembre: 9,
+      octubre: 10,
+      noviembre: 11,
+      diciembre: 12,
+    };
+
+    const iso = text.match(/(\d{4}-\d{2}-\d{2})\s*(?:al|-)\s*(\d{4}-\d{2}-\d{2})/);
+    if (iso) {
+      return { check_in: iso[1], check_out: iso[2] };
+    }
+
+    const spanish = text.match(
+      /(?:del?\s*)?(\d{1,2})\s*(?:al|-)\s*(\d{1,2})\s+de\s+(\w+)(?:\s+de\s+(\d{4}))?/i,
+    );
+    if (spanish) {
+      const day1 = parseInt(spanish[1], 10);
+      const day2 = parseInt(spanish[2], 10);
+      const month = months[spanish[3].toLowerCase()];
+      if (month) {
+        const year = spanish[4]
+          ? parseInt(spanish[4], 10)
+          : this.inferYear(month, Math.min(day1, day2));
+        return {
+          check_in: this.formatDate(year, month, day1),
+          check_out: this.formatDate(year, month, day2),
+        };
+      }
+    }
+
+    return {};
+  }
+
+  private parseGuestsFallback(text: string): number | undefined {
+    if (/pareja/i.test(text)) return 2;
+
+    const patterns = [
+      /(\d+)\s*(?:personas?|adultos?|hu[eé]spedes?|pax)/i,
+      /para\s+(\d+)/i,
+      /(\d+)\s*personas?/i,
+    ];
+
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      if (match) {
+        const n = parseInt(match[1], 10);
+        if (n > 0 && n < 20) return n;
+      }
+    }
+
+    return undefined;
+  }
+
+  private inferYear(month: number, day: number): number {
+    const now = new Date();
+    let year = now.getFullYear();
+    const candidate = new Date(year, month - 1, day);
+    if (candidate < new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
+      year += 1;
+    }
+    return year;
+  }
+
+  private formatDate(year: number, month: number, day: number): string {
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+  }
+
+  private async advanceBookingFlow(
+    hotelId: string,
+    sessionId: string,
+    phone: string,
+    text: string,
+    rawIntent: BookingIntent,
+  ) {
+    const intent = this.enrichIntent(text, rawIntent);
+    const session = await this.getSession(sessionId);
+
+    const checkIn = intent.dates?.check_in ?? session.checkIn ?? undefined;
+    const checkOut = intent.dates?.check_out ?? session.checkOut ?? undefined;
+    const adults =
+      intent.guests?.adults ??
+      this.parseGuestsFallback(text) ??
+      session.adults ??
+      undefined;
+    const children = intent.guests?.children ?? session.children ?? 0;
+
+    const hasDates = !!(checkIn && checkOut);
+
+    if (hasDates && adults) {
+      await this.updateSession(sessionId, {
+        state: 'showing_rooms',
+        checkIn,
+        checkOut,
+        adults,
+        children,
+      });
+
+      if (this.isPricingOrAvailabilityQuery(text)) {
+        await this.whatsapp.sendText(
+          hotelId,
+          phone,
+          `Estas son las opciones del *${checkIn}* al *${checkOut}* para *${adults}* huésped${adults > 1 ? 'es' : ''}:`,
+        );
+      }
+
+      await this.showAvailableRooms(hotelId, sessionId, phone);
+      return;
+    }
+
+    if (session.state === 'collecting_dates' && !hasDates) {
+      await this.whatsapp.sendText(
+        hotelId,
+        phone,
+        'No pude entender las fechas. Prueba así: *del 28 al 29 de junio* o *2026-06-28 al 2026-06-29*',
+      );
+      return;
+    }
+
+    if (session.state === 'collecting_guests' && hasDates && !adults) {
+      await this.whatsapp.sendText(
+        hotelId,
+        phone,
+        '¿Cuántos huéspedes? (ej: *2 adultos* o *2 personas*)',
+      );
+      return;
+    }
+
+    if (hasDates) {
+      await this.updateSession(sessionId, {
+        state: 'collecting_guests',
+        checkIn,
+        checkOut,
+      });
+      await this.whatsapp.sendText(
+        hotelId,
+        phone,
+        `Perfecto, del *${checkIn}* al *${checkOut}*. ¿Cuántos huéspedes? (ej: 2 adultos)`,
+      );
+      return;
+    }
+
+    if (adults) {
+      await this.updateSession(sessionId, {
+        state: 'collecting_dates',
+        adults,
+        children,
+      });
+      await this.whatsapp.sendText(
+        hotelId,
+        phone,
+        `Entendido, *${adults}* huésped${adults > 1 ? 'es' : ''}. 📅 ¿Para qué fechas? (ej: del 28 al 29 de junio)`,
+      );
+      return;
+    }
+
+    await this.updateSession(sessionId, { state: 'collecting_dates' });
+    await this.whatsapp.sendText(
+      hotelId,
+      phone,
+      '¡Con gusto te ayudo! 📅 Puedes decir fechas y huéspedes en un solo mensaje (ej: *2 personas del 28 al 29 de junio*).',
     );
   }
 
@@ -534,13 +733,19 @@ export class ConversationService {
     hotelId: string,
     sessionId: string,
     phone: string,
+    text?: string,
+    rawIntent?: BookingIntent,
   ) {
     await this.resetSession(sessionId);
+    if (text && rawIntent) {
+      await this.advanceBookingFlow(hotelId, sessionId, phone, text, rawIntent);
+      return;
+    }
     await this.updateSession(sessionId, { state: 'collecting_dates' });
     await this.whatsapp.sendText(
       hotelId,
       phone,
-      '¡Con gusto te ayudo a reservar! 📅 ¿Para qué fechas necesitas la habitación? (ej: del 15 al 18 de julio)',
+      '¡Con gusto te ayudo! 📅 Puedes decir fechas y huéspedes en un solo mensaje (ej: *2 personas del 28 al 29 de junio*).',
     );
   }
 
