@@ -144,4 +144,61 @@ export class WhatsAppRendererService {
       },
     };
   }
+
+  renderWelcomeMenu(hotelName: string): WhatsAppButtonMessage {
+    return {
+      type: 'button',
+      body: {
+        text:
+          `Hola, bienvenido a *${hotelName}* 👋\n\n` +
+          `Te ayudaré con tu reserva de forma ágil y todo desde este chat.\n\n` +
+          `¿Qué te gustaría hacer?`,
+      },
+      action: {
+        buttons: [
+          {
+            type: 'reply',
+            reply: { id: WHATSAPP_BUTTON_IDS.MENU_BOOK, title: 'Reservar habitación' },
+          },
+          {
+            type: 'reply',
+            reply: { id: WHATSAPP_BUTTON_IDS.MENU_FAQ, title: 'Resolver dudas' },
+          },
+          {
+            type: 'reply',
+            reply: { id: WHATSAPP_BUTTON_IDS.MENU_RATES, title: 'Conocer tarifas' },
+          },
+        ],
+      },
+    };
+  }
+
+  renderRatesList(
+    rooms: Array<{ name: string; price: number; currency: string; description?: string | null }>,
+    hotelName: string,
+  ): WhatsAppTextMessage {
+    if (rooms.length === 0) {
+      return {
+        type: 'text',
+        text: {
+          body: `*Tarifas de ${hotelName}*\n\nPor el momento no tenemos tarifas publicadas. Escribe *menu* para volver al inicio.`,
+        },
+      };
+    }
+
+    const lines = rooms.map(
+      (r) =>
+        `• *${r.name}* — ${r.currency} ${r.price.toLocaleString()}/noche` +
+        (r.description ? `\n  _${r.description.slice(0, 80)}_${r.description.length > 80 ? '…' : ''}` : ''),
+    );
+
+    return {
+      type: 'text',
+      text: {
+        body:
+          `*Tarifas de ${hotelName}*\n\n${lines.join('\n\n')}\n\n` +
+          `Para reservar, escribe *menu* y elige *Reservar habitación*, o indica fechas y huéspedes (ej: *2 personas del 28 al 29 de junio*).`,
+      },
+    };
+  }
 }

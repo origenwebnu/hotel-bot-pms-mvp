@@ -9,6 +9,7 @@ import {
   type StandardRoomAvailability,
   type WhatsAppInboundMessage,
 } from '@hotel-bot/shared';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CoreIntegratorService } from '../core-integrator/core-integrator.service';
 import { AiService, type BookingIntent } from './ai.service';
@@ -62,10 +63,23 @@ export class ConversationService {
           await this.advanceBookingFlow(hotelId, session.id, phone, text, intent);
           return;
         }
+        if (this.isGreetingOrReset(text) || this.isMenuRequest(text)) {
+          await this.resetSession(session.id);
+          await this.sendWelcomeMenu(hotelId, session.id, phone);
+          return;
+        }
+        if (session.state === 'idle' && !this.hasSeenWelcome(session)) {
+          await this.sendWelcomeMenu(hotelId, session.id, phone);
+          return;
+        }
         {
           const context = `Estado: ${session.state}. Fechas: ${session.checkIn ?? 'N/A'} - ${session.checkOut ?? 'N/A'}`;
           const reply = await this.ai.generateResponse(hotelId, text, context);
-          await this.whatsapp.sendText(hotelId, phone, reply);
+          await this.whatsapp.sendText(
+            hotelId,
+            phone,
+            `${reply}\n\n_Escribe *menu* para volver al inicio._`,
+          );
         }
         return;
 
@@ -84,18 +98,14 @@ export class ConversationService {
         }
         if (this.isGreetingOrReset(text)) {
           await this.resetSession(session.id);
-          await this.whatsapp.sendText(
-            hotelId,
-            phone,
-            '¡Hola! 👋 Escribe *reservar* para buscar habitaciones disponibles.',
-          );
+          await this.sendWelcomeMenu(hotelId, session.id, phone);
           return;
         }
         await this.handleTextRoomSelection(hotelId, session, text);
         return;
 
       case 'room_selected':
-        if (this.wantsNewBooking(text, intent) || this.isGreetingOrReset(text)) {
+        if (this.wantsNewBooking(text, intent) || this.isGreetingOrReset(text) || this.isMenuRequest(text)) {
           await this.startBookingFlow(hotelId, session.id, phone, text, intent);
           return;
         }
@@ -107,7 +117,7 @@ export class ConversationService {
         return;
 
       case 'collecting_guest_info':
-        if (this.wantsNewBooking(text, intent) || this.isGreetingOrReset(text)) {
+        if (this.wantsNewBooking(text, intent) || this.isGreetingOrReset(text) || this.isMenuRequest(text)) {
           await this.startBookingFlow(hotelId, session.id, phone, text, intent);
           return;
         }
@@ -115,7 +125,7 @@ export class ConversationService {
         return;
 
       case 'awaiting_payment':
-        if (this.wantsNewBooking(text, intent) || this.isGreetingOrReset(text)) {
+        if (this.wantsNewBooking(text, intent) || this.isGreetingOrReset(text) || this.isMenuRequest(text)) {
           await this.startBookingFlow(hotelId, session.id, phone, text, intent);
           return;
         }
@@ -253,6 +263,26 @@ export class ConversationService {
     session: { id: string; whatsappPhone: string },
     buttonId: string,
   ) {
+    if (buttonId === WHATSAPP_BUTTON_IDS.MENU_BOOK) {
+      await this.startBookingFlow(hotelId, session.id, session.whatsappPhone);
+      return;
+    }
+
+    if (buttonId === WHATSAPP_BUTTON_IDS.MENU_FAQ) {
+      await this.updateSession(session.id, { state: 'faq' });
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        '¡Con gusto! 🤝 Cuéntame tu duda sobre el hotel y te respondo enseguida.\n\n_Escribe *menu* para volver al inicio._',
+      );
+      return;
+    }
+
+    if (buttonId === WHATSAPP_BUTTON_IDS.MENU_RATES) {
+      await this.sendRatesOverview(hotelId, session.whatsappPhone);
+      return;
+    }
+
     if (buttonId === WHATSAPP_BUTTON_IDS.RESERVE) {
       await this.updateSession(session.id, { state: 'collecting_guest_info' });
       await this.whatsapp.sendText(
@@ -466,6 +496,67 @@ export class ConversationService {
       adults: session.adults ?? 2,
       children: session.children ?? 0,
     });
+  }
+
+  private hasSeenWelcome(session: { contextJson: unknown }): boolean {
+    const ctx = session.contextJson as { welcomed?: boolean } | null;
+    return ctx?.welcomed === true;
+  }
+
+  private isMenuRequest(text: string): boolean {
+    return /^(menu|menú)$/i.test(text.trim());
+  }
+
+  private async sendWelcomeMenu(
+    hotelId: string,
+    sessionId: string,
+    phone: string,
+  ) {
+    const hotel = await this.prisma.hotel.findUniqueOrThrow({
+      where: { id: hotelId },
+      select: { name: true },
+    });
+
+    const msg = this.renderer.renderWelcomeMenu(hotel.name);
+    await this.whatsapp.sendInteractive(hotelId, phone, msg);
+
+    await this.prisma.conversationSession.update({
+      where: { id: sessionId },
+      data: {
+        state: 'idle',
+        contextJson: { welcomed: true },
+      },
+    });
+  }
+
+  private async sendRatesOverview(hotelId: string, phone: string) {
+    const [hotel, rooms] = await Promise.all([
+      this.prisma.hotel.findUniqueOrThrow({
+        where: { id: hotelId },
+        select: { name: true },
+      }),
+      this.prisma.roomType.findMany({
+        where: { hotelId, isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { pricePerNight: 'asc' }],
+        select: {
+          name: true,
+          pricePerNight: true,
+          currency: true,
+          description: true,
+        },
+      }),
+    ]);
+
+    const msg = this.renderer.renderRatesList(
+      rooms.map((r) => ({
+        name: r.name,
+        price: r.pricePerNight,
+        currency: r.currency,
+        description: r.description,
+      })),
+      hotel.name,
+    );
+    await this.whatsapp.sendText(hotelId, phone, msg.text.body);
   }
 
   private wantsNewBooking(text: string, intent: BookingIntent): boolean {
@@ -725,6 +816,7 @@ export class ConversationService {
         children: null,
         selectedRoomTypeId: null,
         reservationId: null,
+        contextJson: Prisma.DbNull,
       },
     });
   }

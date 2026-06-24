@@ -8,6 +8,9 @@ export const WHATSAPP_BUTTON_IDS = {
   RESERVE: 'btn_reserve',
   BACK_TO_ROOMS: 'btn_back_rooms',
   CONFIRM_DATES: 'btn_confirm_dates',
+  MENU_BOOK: 'btn_menu_book',
+  MENU_FAQ: 'btn_menu_faq',
+  MENU_RATES: 'btn_menu_rates',
 } as const;
 
 export const QUEUE_NAMES = {
