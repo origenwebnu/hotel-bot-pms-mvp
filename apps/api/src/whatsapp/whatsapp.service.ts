@@ -21,6 +21,43 @@ export class WhatsAppService {
     await this.sendMessage(hotelId, to, message);
   }
 
+  async sendImage(hotelId: string, to: string, imageUrl: string, caption?: string) {
+    const payload: Record<string, unknown> = {
+      messaging_product: 'whatsapp',
+      recipient_type: 'individual',
+      to: to.replace(/\D/g, ''),
+      type: 'image',
+      image: { link: imageUrl },
+    };
+    if (caption) {
+      (payload.image as { caption?: string }).caption = caption;
+    }
+
+    const { phoneNumberId, accessToken } =
+      await this.credentials.resolve(hotelId);
+    if (!phoneNumberId || !accessToken) {
+      throw new Error('WhatsApp no configurado para este hotel');
+    }
+
+    const response = await fetch(
+      `https://graph.facebook.com/${this.apiVersion}/${phoneNumberId}/messages`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      },
+    );
+
+    if (!response.ok) {
+      const error = await response.text();
+      this.logger.error(`WhatsApp image send failed: ${response.status} ${error}`);
+      throw new Error(`WhatsApp API error: ${response.status}`);
+    }
+  }
+
   private async sendMessage(
     hotelId: string,
     to: string,
@@ -92,6 +129,18 @@ export class WhatsAppService {
           header: message.header,
           body: message.body,
           footer: message.footer,
+          action: message.action,
+        },
+      };
+    }
+
+    if (message.type === 'cta_url') {
+      return {
+        ...base,
+        type: 'interactive',
+        interactive: {
+          type: 'cta_url',
+          body: message.body,
           action: message.action,
         },
       };

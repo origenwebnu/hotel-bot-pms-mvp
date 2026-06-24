@@ -84,14 +84,47 @@ export class WhatsAppRendererService {
     };
   }
 
-  renderPaymentLink(amount: number, currency: string, url: string, expiresMinutes: number): WhatsAppTextMessage {
+  renderPaymentLink(
+    summary: {
+      roomName: string;
+      checkIn: string;
+      checkOut: string;
+      guests: number;
+      amount: number;
+      currency: string;
+    },
+    url: string,
+    expiresMinutes: number,
+  ): import('@hotel-bot/shared').WhatsAppCtaUrlMessage {
+    const nights = this.estimateNights(summary.checkIn, summary.checkOut);
     return {
-      type: 'text',
-      text: {
-        body: `✅ Tu habitación está reservada temporalmente.\n\n💳 Completa el pago de *${currency} ${amount.toLocaleString()}* aquí:\n${url}\n\n⏱ El link expira en ${expiresMinutes} minutos.`,
-        preview_url: true,
+      type: 'cta_url',
+      body: {
+        text:
+          `📋 *Resumen de tu reserva*\n\n` +
+          `🏨 ${summary.roomName}\n` +
+          `📅 ${summary.checkIn} → ${summary.checkOut} (${nights} noche${nights > 1 ? 's' : ''})\n` +
+          `👥 ${summary.guests} huésped${summary.guests > 1 ? 'es' : ''}\n` +
+          `💰 *Total: ${summary.currency} ${summary.amount.toLocaleString()}*\n\n` +
+          `⏱ Tienes *${expiresMinutes} minutos* para pagar. Después se libera la habitación.`,
+      },
+      action: {
+        name: 'cta_url',
+        parameters: {
+          display_text: 'Pagar reserva',
+          url,
+        },
       },
     };
+  }
+
+  private estimateNights(checkIn: string, checkOut: string): number {
+    const start = new Date(`${checkIn}T12:00:00`);
+    const end = new Date(`${checkOut}T12:00:00`);
+    return Math.max(
+      1,
+      Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)),
+    );
   }
 
   renderConfirmation(guestName: string, confirmationCode?: string): WhatsAppTextMessage {

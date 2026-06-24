@@ -7,9 +7,10 @@ import { api, type Hotel, type IntegrationStatus } from '@/lib/api';
 import { IntegrationsPanel } from '@/components/IntegrationsPanel';
 import { WhatsAppPanel } from '@/components/WhatsAppPanel';
 import { KnowledgePanel } from '@/components/KnowledgePanel';
+import { InventoryPanel } from '@/components/InventoryPanel';
 import { ChatSimulator } from '@/components/ChatSimulator';
 
-type Tab = 'integrations' | 'knowledge' | 'simulator';
+type Tab = 'integrations' | 'inventory' | 'knowledge' | 'simulator';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -60,6 +61,12 @@ export default function DashboardPage() {
             ⚙️ Integraciones
           </button>
           <button
+            className={tab === 'inventory' ? 'active' : ''}
+            onClick={() => setTab('inventory')}
+          >
+            🛏️ Inventario
+          </button>
+          <button
             className={tab === 'knowledge' ? 'active' : ''}
             onClick={() => setTab('knowledge')}
           >
@@ -81,6 +88,7 @@ export default function DashboardPage() {
         <header className="main-header">
           <h1>
             {tab === 'integrations' && 'Integraciones'}
+            {tab === 'inventory' && 'Inventario de habitaciones'}
             {tab === 'knowledge' && 'Knowledge Base'}
             {tab === 'simulator' && 'Simulador de Chat'}
           </h1>
@@ -112,6 +120,7 @@ export default function DashboardPage() {
             />
           </div>
         )}
+        {tab === 'inventory' && <InventoryPanel />}
         {tab === 'knowledge' && <KnowledgePanel />}
         {tab === 'simulator' && <ChatSimulator />}
       </main>

@@ -10,6 +10,8 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { AuthModule } from './auth/auth.module';
 import { HotelsModule } from './hotels/hotels.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
+import { LocalInventoryModule } from './local-inventory/local-inventory.module';
+import { ReservationsModule } from './reservations/reservations.module';
 import { HealthModule } from './health/health.module';
 import { QUEUE_NAMES } from '@hotel-bot/shared';
 
@@ -26,6 +28,7 @@ import { QUEUE_NAMES } from '@hotel-bot/shared';
       { name: QUEUE_NAMES.WHATSAPP_OUTBOUND },
       { name: QUEUE_NAMES.PAYMENT_WEBHOOK },
       { name: QUEUE_NAMES.KNOWLEDGE_INDEX },
+      { name: QUEUE_NAMES.RESERVATION_HOLDS },
     ),
     PrismaModule,
     CryptoModule,
@@ -36,6 +39,8 @@ import { QUEUE_NAMES } from '@hotel-bot/shared';
     AuthModule,
     HotelsModule,
     KnowledgeModule,
+    LocalInventoryModule,
+    ReservationsModule,
     HealthModule,
   ],
 })

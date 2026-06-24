@@ -6,6 +6,7 @@ import {
   JOB_NAMES,
   QUEUE_NAMES,
   WHATSAPP_BUTTON_IDS,
+  type StandardRoomAvailability,
   type WhatsAppInboundMessage,
 } from '@hotel-bot/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -106,8 +107,24 @@ export class ConversationService {
         }
         return;
 
+      case 'showing_rooms':
+        await this.handleTextRoomSelection(hotelId, session, text);
+        return;
+
       case 'collecting_guest_info':
         await this.handleGuestInfo(hotelId, session, text);
+        return;
+
+      case 'awaiting_payment':
+        if (text.match(/pagar|pago|link|reintentar/i)) {
+          await this.resendPaymentLink(hotelId, session);
+        } else {
+          await this.whatsapp.sendText(
+            hotelId,
+            phone,
+            'Tu reserva está pendiente de pago. Escribe *pagar* para recibir el botón de pago de nuevo.',
+          );
+        }
         return;
 
       default:
@@ -124,18 +141,22 @@ export class ConversationService {
       where: { id: sessionId },
     });
 
-    const availability = await this.pms.getAvailability(hotelId, {
-      check_in: session.checkIn!,
-      check_out: session.checkOut!,
-      adults: session.adults ?? 2,
-      children: session.children ?? 0,
-    });
+    const availability = await this.fetchAvailability(hotelId, session);
 
     if (availability.fallback) {
       await this.whatsapp.sendText(
         hotelId,
         phone,
-        'En este momento no podemos consultar disponibilidad. Intenta de nuevo en unos minutos o contacta recepción.',
+        'En este momento no podemos consultar disponibilidad. Si eres el hotel, configura PMS *Inventario local* y agrega habitaciones en el panel.',
+      );
+      return;
+    }
+
+    if (availability.rooms.length === 0) {
+      await this.whatsapp.sendText(
+        hotelId,
+        phone,
+        'No hay habitaciones disponibles para esas fechas. ¿Quieres probar con otras fechas?',
       );
       return;
     }
@@ -145,7 +166,41 @@ export class ConversationService {
       session.checkIn!,
       session.checkOut!,
     );
-    await this.whatsapp.sendInteractive(hotelId, phone, listMsg);
+
+    if (listMsg.type === 'list') {
+      await this.whatsapp.sendInteractive(hotelId, phone, listMsg);
+    } else {
+      await this.whatsapp.sendText(hotelId, phone, listMsg.text.body);
+    }
+  }
+
+  private async handleTextRoomSelection(
+    hotelId: string,
+    session: { id: string; whatsappPhone: string },
+    text: string,
+  ) {
+    const fullSession = await this.getSession(session.id);
+    const availability = await this.fetchAvailability(hotelId, fullSession);
+    const normalized = text.trim().toLowerCase();
+
+    const room = availability.rooms.find(
+      (r) =>
+        r.room_type_id.toLowerCase() === normalized ||
+        r.name.toLowerCase() === normalized ||
+        r.name.toLowerCase().includes(normalized) ||
+        normalized.includes(r.name.toLowerCase()),
+    );
+
+    if (!room) {
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        'No encontré esa habitación. Selecciona de la lista o escribe el nombre exacto.',
+      );
+      return;
+    }
+
+    await this.selectRoom(hotelId, session, room);
   }
 
   private async handleRoomSelection(
@@ -154,11 +209,8 @@ export class ConversationService {
     listId: string,
   ) {
     const roomTypeId = listId.replace('room_', '');
-    const availability = await this.pms.getAvailability(hotelId, {
-      check_in: (await this.getSession(session.id)).checkIn!,
-      check_out: (await this.getSession(session.id)).checkOut!,
-      adults: (await this.getSession(session.id)).adults ?? 2,
-    });
+    const fullSession = await this.getSession(session.id);
+    const availability = await this.fetchAvailability(hotelId, fullSession);
 
     const room = availability.rooms.find((r) => r.room_type_id === roomTypeId);
     if (!room) {
@@ -166,13 +218,31 @@ export class ConversationService {
       return;
     }
 
+    await this.selectRoom(hotelId, session, room);
+  }
+
+  private async selectRoom(
+    hotelId: string,
+    session: { id: string; whatsappPhone: string },
+    room: StandardRoomAvailability,
+  ) {
     await this.updateSession(session.id, {
       state: 'room_selected',
-      selectedRoomTypeId: roomTypeId,
+      selectedRoomTypeId: room.room_type_id,
     });
 
     const detailMsg = this.renderer.renderRoomDetail(room);
     await this.whatsapp.sendInteractive(hotelId, session.whatsappPhone, detailMsg);
+
+    const extraPhotos = room.photos_urls.slice(1, 4);
+    for (let i = 0; i < extraPhotos.length; i++) {
+      await this.whatsapp.sendImage(
+        hotelId,
+        session.whatsappPhone,
+        extraPhotos[i],
+        i === 0 ? `📸 Más fotos — ${room.name}` : undefined,
+      );
+    }
   }
 
   private async handleButton(
@@ -223,20 +293,20 @@ export class ConversationService {
       10,
     );
 
-    const idempotencyKey = `wa-${hotelId}-${session.whatsappPhone}-${fullSession.selectedRoomTypeId}`;
+    const availability = await this.fetchAvailability(hotelId, fullSession);
+    const room = availability.rooms.find(
+      (r) => r.room_type_id === fullSession.selectedRoomTypeId,
+    );
+    const roomName = room?.name ?? 'Habitación';
+
+    const idempotencyKey = `wa-${hotelId}-${session.whatsappPhone}-${fullSession.selectedRoomTypeId}-${fullSession.checkIn}-${fullSession.checkOut}`;
 
     const existing = await this.prisma.reservation.findUnique({
       where: { idempotencyKey },
     });
     if (existing && ['hold', 'payment_pending', 'confirmed'].includes(existing.status)) {
       if (existing.paymentLink) {
-        const msg = this.renderer.renderPaymentLink(
-          existing.totalAmount!,
-          existing.currency!,
-          existing.paymentLink,
-          holdTtl,
-        );
-        await this.whatsapp.sendInteractive(hotelId, session.whatsappPhone, msg);
+        await this.sendPaymentSummary(hotelId, session.whatsappPhone, existing, holdTtl);
       }
       return;
     }
@@ -258,6 +328,7 @@ export class ConversationService {
         idempotencyKey,
         status: 'hold',
         roomTypeId: fullSession.selectedRoomTypeId,
+        roomName,
         checkIn: fullSession.checkIn,
         checkOut: fullSession.checkOut,
         adults: fullSession.adults,
@@ -283,7 +354,7 @@ export class ConversationService {
       guest_name: `${firstName} ${lastName}`,
     });
 
-    await this.prisma.reservation.update({
+    const updated = await this.prisma.reservation.update({
       where: { id: reservation.id },
       data: {
         status: 'payment_pending',
@@ -297,13 +368,101 @@ export class ConversationService {
       reservationId: reservation.id,
     });
 
+    await this.sendPaymentSummary(hotelId, session.whatsappPhone, updated, holdTtl);
+  }
+
+  private async resendPaymentLink(
+    hotelId: string,
+    session: { id: string; whatsappPhone: string },
+  ) {
+    const fullSession = await this.getSession(session.id);
+    if (!fullSession.reservationId) {
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        'No encontré una reserva pendiente. Escribe *reservar* para empezar de nuevo.',
+      );
+      return;
+    }
+
+    const reservation = await this.prisma.reservation.findUnique({
+      where: { id: fullSession.reservationId },
+    });
+
+    if (!reservation?.paymentLink) {
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        'No hay link de pago activo. Escribe *reservar* para iniciar una nueva reserva.',
+      );
+      return;
+    }
+
+    if (reservation.holdExpiresAt && reservation.holdExpiresAt < new Date()) {
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        '⏱ El tiempo de pago expiró y la habitación fue liberada. Escribe *reservar* para buscar disponibilidad de nuevo.',
+      );
+      await this.updateSession(session.id, { state: 'idle' });
+      return;
+    }
+
+    const holdTtl = parseInt(
+      process.env.ROOM_HOLD_TTL_MINUTES ?? String(DEFAULT_ROOM_HOLD_TTL_MINUTES),
+      10,
+    );
+    await this.sendPaymentSummary(hotelId, session.whatsappPhone, reservation, holdTtl);
+  }
+
+  private async sendPaymentSummary(
+    hotelId: string,
+    phone: string,
+    reservation: {
+      roomName: string | null;
+      checkIn: string | null;
+      checkOut: string | null;
+      adults: number | null;
+      children: number | null;
+      totalAmount: number | null;
+      currency: string | null;
+      paymentLink: string | null;
+    },
+    holdTtl: number,
+  ) {
+    if (!reservation.paymentLink) return;
+
+    const guests = (reservation.adults ?? 2) + (reservation.children ?? 0);
     const payMsg = this.renderer.renderPaymentLink(
-      hold.total_amount,
-      hold.currency,
-      payment.payment_url,
+      {
+        roomName: reservation.roomName ?? 'Habitación',
+        checkIn: reservation.checkIn ?? '',
+        checkOut: reservation.checkOut ?? '',
+        guests,
+        amount: reservation.totalAmount ?? 0,
+        currency: reservation.currency ?? 'COP',
+      },
+      reservation.paymentLink,
       holdTtl,
     );
-    await this.whatsapp.sendInteractive(hotelId, session.whatsappPhone, payMsg);
+    await this.whatsapp.sendInteractive(hotelId, phone, payMsg);
+  }
+
+  private async fetchAvailability(
+    hotelId: string,
+    session: {
+      checkIn: string | null;
+      checkOut: string | null;
+      adults: number | null;
+      children: number | null;
+    },
+  ) {
+    return this.pms.getAvailability(hotelId, {
+      check_in: session.checkIn!,
+      check_out: session.checkOut!,
+      adults: session.adults ?? 2,
+      children: session.children ?? 0,
+    });
   }
 
   private extractText(message: WhatsAppInboundMessage): string {
