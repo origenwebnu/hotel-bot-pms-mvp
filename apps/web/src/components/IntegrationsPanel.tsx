@@ -54,45 +54,61 @@ export function IntegrationsPanel({ integration, onUpdate }: Props) {
     <div className="panel">
       <section className="card">
         <h2>PMS — Property Management System</h2>
-        <p className="desc">Conecta Cloudbeds o Lobby PMS para sincronizar disponibilidad y reservas.</p>
+        <p className="desc">
+          Conecta Cloudbeds, Lobby PMS o usa inventario local para demos sin credenciales externas.
+        </p>
 
         <form onSubmit={handleSave} className="form">
-          <div className="field-row">
-            <label>
-              Proveedor PMS
-              <select
-                value={form.pms_provider}
-                onChange={(e) => setForm({ ...form, pms_provider: e.target.value })}
-              >
-                <option value="cloudbeds">Cloudbeds</option>
-                <option value="lobby">Lobby PMS</option>
-              </select>
-            </label>
-            <label>
-              Property ID
-              <input
-                type="text"
-                value={form.pms_property_id}
-                onChange={(e) => setForm({ ...form, pms_property_id: e.target.value })}
-                placeholder="ID de propiedad en el PMS"
-              />
-            </label>
-          </div>
           <label>
-            API Key
-            <input
-              type="password"
-              value={form.pms_api_key}
-              onChange={(e) => setForm({ ...form, pms_api_key: e.target.value })}
-              placeholder="Tu API key del PMS"
-            />
+            Proveedor PMS
+            <select
+              value={form.pms_provider}
+              onChange={(e) => setForm({ ...form, pms_provider: e.target.value })}
+            >
+              <option value="cloudbeds">Cloudbeds</option>
+              <option value="lobby">Lobby PMS</option>
+              <option value="local">Inventario local (demo / pruebas)</option>
+            </select>
           </label>
 
-          <div className="actions">
-            <button type="button" className="btn-secondary" onClick={handleValidate} disabled={validating}>
-              {validating ? 'Validando...' : 'Validar PMS'}
-            </button>
-          </div>
+          {form.pms_provider !== 'local' && (
+            <>
+              <label>
+                Property ID
+                <input
+                  type="text"
+                  value={form.pms_property_id}
+                  onChange={(e) => setForm({ ...form, pms_property_id: e.target.value })}
+                  placeholder="ID de propiedad en el PMS"
+                />
+              </label>
+              <label>
+                API Key
+                <input
+                  type="password"
+                  value={form.pms_api_key}
+                  onChange={(e) => setForm({ ...form, pms_api_key: e.target.value })}
+                  placeholder="Tu API key del PMS"
+                />
+              </label>
+              <div className="actions">
+                <button type="button" className="btn-secondary" onClick={handleValidate} disabled={validating}>
+                  {validating ? 'Validando...' : 'Validar PMS'}
+                </button>
+              </div>
+            </>
+          )}
+
+          {form.pms_provider === 'local' && (
+            <p className="desc">
+              Con inventario local no necesitas API keys. Agrega habitaciones en la pestaña{' '}
+              <strong>Inventario</strong> o usa &quot;Cargar demo&quot;.
+            </p>
+          )}
+
+          <button type="submit" className="btn-primary" disabled={loading}>
+            {loading ? 'Guardando...' : 'Guardar PMS'}
+          </button>
         </form>
       </section>
 

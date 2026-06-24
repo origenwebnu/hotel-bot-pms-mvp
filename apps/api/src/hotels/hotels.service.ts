@@ -75,7 +75,9 @@ export class HotelsService {
     let pmsConnected = false;
     let paymentConnected = false;
 
-    if (data.pms_provider && data.pms_api_key) {
+    if (data.pms_provider === 'local') {
+      pmsConnected = await this.pms.validatePmsCredentials(hotelId);
+    } else if (data.pms_provider && data.pms_api_key) {
       pmsConnected = await this.pms.validatePmsCredentials(hotelId);
     }
 

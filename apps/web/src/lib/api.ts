@@ -118,6 +118,47 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ message }),
     }),
+
+  listInventory: () => request<RoomType[]>('/hotels/me/inventory'),
+
+  createInventory: (data: {
+    name: string;
+    description?: string;
+    price_per_night: number;
+    total_units?: number;
+    max_occupancy?: number;
+    photo_urls?: string[];
+  }) =>
+    request<RoomType>('/hotels/me/inventory', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateInventory: (
+    id: string,
+    data: Partial<{
+      name: string;
+      description: string;
+      price_per_night: number;
+      total_units: number;
+      max_occupancy: number;
+      photo_urls: string[];
+      is_active: boolean;
+    }>,
+  ) =>
+    request<RoomType>(`/hotels/me/inventory/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteInventory: (id: string) =>
+    request<void>(`/hotels/me/inventory/${id}`, { method: 'DELETE' }),
+
+  seedDemoInventory: () =>
+    request<{ message: string; rooms_created?: number }>(
+      '/hotels/me/inventory/seed-demo',
+      { method: 'POST' },
+    ),
 };
 
 export interface Hotel {
@@ -154,4 +195,18 @@ export interface KnowledgeDoc {
   content: string;
   isIndexed: boolean;
   createdAt: string;
+}
+
+export interface RoomType {
+  id: string;
+  name: string;
+  description: string | null;
+  price_per_night: number;
+  currency: string;
+  max_occupancy: number;
+  total_units: number;
+  photo_urls: string[];
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
 }

@@ -49,10 +49,20 @@ export interface WhatsAppTextMessage {
   text: { body: string; preview_url?: boolean };
 }
 
+export interface WhatsAppCtaUrlMessage {
+  type: 'cta_url';
+  body: { text: string };
+  action: {
+    name: 'cta_url';
+    parameters: { display_text: string; url: string };
+  };
+}
+
 export type WhatsAppOutboundMessage =
   | WhatsAppTextMessage
   | WhatsAppListMessage
-  | WhatsAppButtonMessage;
+  | WhatsAppButtonMessage
+  | WhatsAppCtaUrlMessage;
 
 export interface ConversationContext {
   hotel_id: string;
