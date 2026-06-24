@@ -4,7 +4,7 @@ import {
   ServiceUnavailableException,
   BadGatewayException,
 } from '@nestjs/common';
-import nodemailer from 'nodemailer';
+import * as nodemailer from 'nodemailer';
 import type SMTPTransport from 'nodemailer/lib/smtp-transport';
 import type Transporter from 'nodemailer/lib/mailer';
 
@@ -66,13 +66,19 @@ export class EmailService {
     return this.transporter;
   }
 
+  private getFromAddress(): string {
+    const user = process.env.SMTP_USER?.trim() ?? 'noreply@bookichat.com';
+    const raw = process.env.SMTP_FROM?.trim();
+    if (raw && raw.includes('@')) return raw;
+    return `BookiChat <${user}>`;
+  }
+
   async sendRegistrationCode(
     email: string,
     code: string,
     hotelName: string,
   ): Promise<void> {
-    const smtpUser = process.env.SMTP_USER?.trim() ?? 'noreply@bookichat.com';
-    const from = process.env.SMTP_FROM?.trim() || `BookiChat <${smtpUser}>`;
+    const from = this.getFromAddress();
 
     const subject = 'Tu código de verificación — BookiChat';
     const text = [
