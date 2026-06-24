@@ -64,9 +64,8 @@ export class ConversationService {
           await this.advanceBookingFlow(hotelId, session.id, phone, text, intent);
           return;
         }
-        if (this.isGreetingOrReset(text) || this.isMenuRequest(text)) {
-          await this.resetSession(session.id);
-          await this.sendWelcomeMenu(hotelId, session.id, phone);
+        if (this.wantsSessionReset(text)) {
+          await this.returnToWelcomeMenu(hotelId, session.id, phone);
           return;
         }
         if (session.state === 'idle' && !this.hasSeenWelcome(session)) {
@@ -85,28 +84,36 @@ export class ConversationService {
         return;
 
       case 'collecting_dates':
-        await this.advanceBookingFlow(hotelId, session.id, phone, text, intent);
-        return;
-
       case 'collecting_guests':
-        await this.advanceBookingFlow(hotelId, session.id, phone, text, intent);
-        return;
-
-      case 'showing_rooms':
+        if (this.wantsSessionReset(text)) {
+          await this.returnToWelcomeMenu(hotelId, session.id, phone);
+          return;
+        }
         if (this.wantsNewBooking(text, intent)) {
           await this.startBookingFlow(hotelId, session.id, phone, text, intent);
           return;
         }
-        if (this.isGreetingOrReset(text)) {
-          await this.resetSession(session.id);
-          await this.sendWelcomeMenu(hotelId, session.id, phone);
+        await this.advanceBookingFlow(hotelId, session.id, phone, text, intent);
+        return;
+
+      case 'showing_rooms':
+        if (this.wantsSessionReset(text)) {
+          await this.returnToWelcomeMenu(hotelId, session.id, phone);
+          return;
+        }
+        if (this.wantsNewBooking(text, intent)) {
+          await this.startBookingFlow(hotelId, session.id, phone, text, intent);
           return;
         }
         await this.handleTextRoomSelection(hotelId, session, text);
         return;
 
       case 'room_selected':
-        if (this.wantsNewBooking(text, intent) || this.isGreetingOrReset(text) || this.isMenuRequest(text)) {
+        if (this.wantsSessionReset(text)) {
+          await this.returnToWelcomeMenu(hotelId, session.id, phone);
+          return;
+        }
+        if (this.wantsNewBooking(text, intent)) {
           await this.startBookingFlow(hotelId, session.id, phone, text, intent);
           return;
         }
@@ -118,7 +125,11 @@ export class ConversationService {
         return;
 
       case 'collecting_guest_info':
-        if (this.wantsNewBooking(text, intent) || this.isGreetingOrReset(text) || this.isMenuRequest(text)) {
+        if (this.wantsSessionReset(text)) {
+          await this.returnToWelcomeMenu(hotelId, session.id, phone);
+          return;
+        }
+        if (this.wantsNewBooking(text, intent)) {
           await this.startBookingFlow(hotelId, session.id, phone, text, intent);
           return;
         }
@@ -126,7 +137,11 @@ export class ConversationService {
         return;
 
       case 'awaiting_payment':
-        if (this.wantsNewBooking(text, intent) || this.isGreetingOrReset(text) || this.isMenuRequest(text)) {
+        if (this.wantsSessionReset(text)) {
+          await this.returnToWelcomeMenu(hotelId, session.id, phone);
+          return;
+        }
+        if (this.wantsNewBooking(text, intent)) {
           await this.startBookingFlow(hotelId, session.id, phone, text, intent);
           return;
         }
@@ -569,6 +584,19 @@ export class ConversationService {
     return /^(menu|menú)$/i.test(text.trim());
   }
 
+  private wantsSessionReset(text: string): boolean {
+    return this.isGreetingOrReset(text) || this.isMenuRequest(text);
+  }
+
+  private async returnToWelcomeMenu(
+    hotelId: string,
+    sessionId: string,
+    phone: string,
+  ) {
+    await this.resetSession(sessionId);
+    await this.sendWelcomeMenu(hotelId, sessionId, phone);
+  }
+
   private async sendWelcomeMenu(
     hotelId: string,
     sessionId: string,
@@ -810,7 +838,7 @@ export class ConversationService {
       await this.whatsapp.sendText(
         hotelId,
         phone,
-        'No pude entender las fechas. Prueba así: *del 28 al 29 de junio* o *2026-06-28 al 2026-06-29*',
+        'No pude entender las fechas. Prueba así: *del 28 al 29 de junio* o *2026-06-28 al 2026-06-29*\n\n_Escribe *menu*, *cancelar* o *inicio* para volver al menú principal._',
       );
       return;
     }
