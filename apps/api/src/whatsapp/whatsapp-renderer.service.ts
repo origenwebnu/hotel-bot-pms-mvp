@@ -90,29 +90,16 @@ export class WhatsAppRendererService {
   }
 
   renderPaymentLink(
-    summary: {
-      roomName: string;
-      checkIn: string;
-      checkOut: string;
-      guests: number;
-      amount: number;
-      currency: string;
-    },
     url: string,
     expiresMinutes: number,
   ): import('@hotel-bot/shared').WhatsAppCtaUrlMessage {
-    const nights = this.estimateNights(summary.checkIn, summary.checkOut);
-    const dateRange = formatDisplayDateRange(summary.checkIn, summary.checkOut, ' → ');
     return {
       type: 'cta_url',
       body: {
         text:
-          `📋 *Resumen de tu reserva*\n\n` +
-          `🏨 ${summary.roomName}\n` +
-          `📅 ${dateRange} (${nights} noche${nights > 1 ? 's' : ''})\n` +
-          `👥 ${summary.guests} huésped${summary.guests > 1 ? 'es' : ''}\n` +
-          `💰 *Total: ${summary.currency} ${summary.amount.toLocaleString()}*\n\n` +
-          `⏱ Tienes *${expiresMinutes} minutos* para pagar. Después se libera la habitación.`,
+          `✅ Recibo generado.\n\n` +
+          `Pulsa el botón para completar el pago.\n` +
+          `⏱ Tienes *${expiresMinutes} minutos* antes de que se libere la habitación.`,
       },
       action: {
         name: 'cta_url',
@@ -122,6 +109,53 @@ export class WhatsAppRendererService {
         },
       },
     };
+  }
+
+  renderReservationReceipt(data: {
+    hotelName: string;
+    reservationRef: string;
+    guestName: string;
+    guestEmail: string;
+    guestPhone?: string;
+    roomName: string;
+    checkIn: string;
+    checkOut: string;
+    guests: number;
+    amount: number;
+    currency: string;
+    holdMinutes?: number;
+  }): WhatsAppTextMessage {
+    const nights = this.estimateNights(data.checkIn, data.checkOut);
+    const checkInLabel = formatDisplayDate(data.checkIn);
+    const checkOutLabel = formatDisplayDate(data.checkOut);
+
+    let body =
+      `🧾 *RECIBO DE RESERVA*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🏨 *${data.hotelName}*\n` +
+      `🔖 Ref: *${data.reservationRef}*\n\n` +
+      `👤 *Cliente:* ${data.guestName}\n` +
+      `✉️ *Email:* ${data.guestEmail}\n`;
+
+    if (data.guestPhone) {
+      body += `📱 *Teléfono:* ${data.guestPhone}\n`;
+    }
+
+    body +=
+      `\n🏠 *Habitación:* ${data.roomName}\n` +
+      `📅 *Desde:* ${checkInLabel}\n` +
+      `📅 *Hasta:* ${checkOutLabel}\n` +
+      `🌙 *Noches:* ${nights}\n` +
+      `👥 *Huéspedes:* ${data.guests}\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `💰 *TOTAL A PAGAR:* ${data.currency} ${data.amount.toLocaleString('es-CO')}\n` +
+      `━━━━━━━━━━━━━━━━━━━━`;
+
+    if (data.holdMinutes) {
+      body += `\n\n⏱ Reserva temporal: *${data.holdMinutes} min* para pagar.`;
+    }
+
+    return { type: 'text', text: { body } };
   }
 
   private estimateNights(checkIn: string, checkOut: string): number {

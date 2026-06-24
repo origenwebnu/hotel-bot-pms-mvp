@@ -339,70 +339,84 @@ export class ConversationService {
       where: { idempotencyKey },
     });
     if (existing && ['hold', 'payment_pending', 'confirmed'].includes(existing.status)) {
-      if (existing.paymentLink) {
-        await this.sendPaymentSummary(hotelId, session.whatsappPhone, existing, holdTtl);
-      }
+      await this.sendPaymentSummary(hotelId, session.whatsappPhone, existing, holdTtl);
       return;
     }
 
-    const hold = await this.pms.holdRoom(hotelId, {
-      room_type_id: fullSession.selectedRoomTypeId!,
-      check_in: fullSession.checkIn!,
-      check_out: fullSession.checkOut!,
-      adults: fullSession.adults ?? 2,
-      children: fullSession.children ?? 0,
-      hold_ttl_minutes: holdTtl,
-      idempotency_key: idempotencyKey,
-    });
+    let reservation;
+    try {
+      const hold = await this.pms.holdRoom(hotelId, {
+        room_type_id: fullSession.selectedRoomTypeId!,
+        check_in: fullSession.checkIn!,
+        check_out: fullSession.checkOut!,
+        adults: fullSession.adults ?? 2,
+        children: fullSession.children ?? 0,
+        hold_ttl_minutes: holdTtl,
+        idempotency_key: idempotencyKey,
+      });
 
-    const reservation = await this.prisma.reservation.create({
-      data: {
+      reservation = await this.prisma.reservation.create({
+        data: {
+          hotelId,
+          whatsappSessionId: session.id,
+          idempotencyKey,
+          status: 'hold',
+          roomTypeId: fullSession.selectedRoomTypeId,
+          roomName,
+          checkIn: fullSession.checkIn,
+          checkOut: fullSession.checkOut,
+          adults: fullSession.adults,
+          children: fullSession.children,
+          totalAmount: hold.total_amount,
+          currency: hold.currency,
+          pmsReservationId: hold.pms_reservation_id,
+          holdExpiresAt: new Date(hold.expires_at),
+          guestFirstName: firstName,
+          guestLastName: lastName,
+          guestEmail: email,
+          guestPhone: session.whatsappPhone,
+        },
+      });
+
+      try {
+        const payment = await this.checkout.createPaymentLink(hotelId, {
+          amount: hold.total_amount,
+          currency: hold.currency,
+          reservation_id: reservation.id,
+          hold_id: hold.hold_id,
+          expires_at: hold.expires_at,
+          guest_email: email,
+          guest_name: `${firstName} ${lastName}`,
+        });
+
+        reservation = await this.prisma.reservation.update({
+          where: { id: reservation.id },
+          data: {
+            status: 'payment_pending',
+            paymentLink: payment.payment_url,
+            paymentId: payment.payment_id,
+          },
+        });
+      } catch (paymentError) {
+        this.logger.warn(
+          `Payment link failed for reservation ${reservation.id}: ${paymentError}`,
+        );
+      }
+
+      await this.updateSession(session.id, {
+        state: 'awaiting_payment',
+        reservationId: reservation.id,
+      });
+
+      await this.sendPaymentSummary(hotelId, session.whatsappPhone, reservation, holdTtl);
+    } catch (error) {
+      this.logger.error(`handleGuestInfo failed: ${error}`);
+      await this.whatsapp.sendText(
         hotelId,
-        whatsappSessionId: session.id,
-        idempotencyKey,
-        status: 'hold',
-        roomTypeId: fullSession.selectedRoomTypeId,
-        roomName,
-        checkIn: fullSession.checkIn,
-        checkOut: fullSession.checkOut,
-        adults: fullSession.adults,
-        children: fullSession.children,
-        totalAmount: hold.total_amount,
-        currency: hold.currency,
-        pmsReservationId: hold.pms_reservation_id,
-        holdExpiresAt: new Date(hold.expires_at),
-        guestFirstName: firstName,
-        guestLastName: lastName,
-        guestEmail: email,
-        guestPhone: session.whatsappPhone,
-      },
-    });
-
-    const payment = await this.checkout.createPaymentLink(hotelId, {
-      amount: hold.total_amount,
-      currency: hold.currency,
-      reservation_id: reservation.id,
-      hold_id: hold.hold_id,
-      expires_at: hold.expires_at,
-      guest_email: email,
-      guest_name: `${firstName} ${lastName}`,
-    });
-
-    const updated = await this.prisma.reservation.update({
-      where: { id: reservation.id },
-      data: {
-        status: 'payment_pending',
-        paymentLink: payment.payment_url,
-        paymentId: payment.payment_id,
-      },
-    });
-
-    await this.updateSession(session.id, {
-      state: 'awaiting_payment',
-      reservationId: reservation.id,
-    });
-
-    await this.sendPaymentSummary(hotelId, session.whatsappPhone, updated, holdTtl);
+        session.whatsappPhone,
+        'No pudimos completar la reserva. Verifica que el hotel tenga pagos configurados e intenta de nuevo, o escribe *menu*.',
+      );
+    }
   }
 
   private async resendPaymentLink(
@@ -423,11 +437,20 @@ export class ConversationService {
       where: { id: fullSession.reservationId },
     });
 
-    if (!reservation?.paymentLink) {
+    if (!reservation) {
       await this.whatsapp.sendText(
         hotelId,
         session.whatsappPhone,
-        'No hay link de pago activo. Escribe *reservar* para iniciar una nueva reserva.',
+        'No encontré una reserva pendiente. Escribe *reservar* para empezar de nuevo.',
+      );
+      return;
+    }
+
+    if (!reservation.paymentLink && !['hold', 'payment_pending'].includes(reservation.status)) {
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        'No hay reserva activa. Escribe *reservar* para iniciar una nueva reserva.',
       );
       return;
     }
@@ -453,6 +476,7 @@ export class ConversationService {
     hotelId: string,
     phone: string,
     reservation: {
+      id: string;
       roomName: string | null;
       checkIn: string | null;
       checkOut: string | null;
@@ -461,25 +485,62 @@ export class ConversationService {
       totalAmount: number | null;
       currency: string | null;
       paymentLink: string | null;
+      guestFirstName: string | null;
+      guestLastName: string | null;
+      guestEmail: string | null;
+      guestPhone: string | null;
     },
     holdTtl: number,
   ) {
-    if (!reservation.paymentLink) return;
+    const hotel = await this.prisma.hotel.findUniqueOrThrow({
+      where: { id: hotelId },
+      select: { name: true },
+    });
 
     const guests = (reservation.adults ?? 2) + (reservation.children ?? 0);
-    const payMsg = this.renderer.renderPaymentLink(
-      {
-        roomName: reservation.roomName ?? 'Habitación',
-        checkIn: reservation.checkIn ?? '',
-        checkOut: reservation.checkOut ?? '',
-        guests,
-        amount: reservation.totalAmount ?? 0,
-        currency: reservation.currency ?? 'COP',
-      },
-      reservation.paymentLink,
-      holdTtl,
-    );
-    await this.whatsapp.sendInteractive(hotelId, phone, payMsg);
+    const guestName = [reservation.guestFirstName, reservation.guestLastName]
+      .filter(Boolean)
+      .join(' ')
+      .trim() || 'Huésped';
+
+    const receipt = this.renderer.renderReservationReceipt({
+      hotelName: hotel.name,
+      reservationRef: reservation.id.slice(-8).toUpperCase(),
+      guestName,
+      guestEmail: reservation.guestEmail ?? '—',
+      guestPhone: reservation.guestPhone ?? undefined,
+      roomName: reservation.roomName ?? 'Habitación',
+      checkIn: reservation.checkIn ?? '',
+      checkOut: reservation.checkOut ?? '',
+      guests,
+      amount: reservation.totalAmount ?? 0,
+      currency: reservation.currency ?? 'COP',
+      holdMinutes: holdTtl,
+    });
+
+    await this.whatsapp.sendText(hotelId, phone, receipt.text.body);
+
+    if (reservation.paymentLink) {
+      const payMsg = this.renderer.renderPaymentLink(
+        reservation.paymentLink,
+        holdTtl,
+      );
+      try {
+        await this.whatsapp.sendInteractive(hotelId, phone, payMsg);
+      } catch {
+        await this.whatsapp.sendText(
+          hotelId,
+          phone,
+          `💳 Completa tu pago aquí:\n${reservation.paymentLink}`,
+        );
+      }
+    } else {
+      await this.whatsapp.sendText(
+        hotelId,
+        phone,
+        '⚠️ El hotel aún no tiene pasarela de pagos configurada. Tu reserva quedó registrada — el hotel te contactará para confirmar el pago.',
+      );
+    }
   }
 
   private async fetchAvailability(
