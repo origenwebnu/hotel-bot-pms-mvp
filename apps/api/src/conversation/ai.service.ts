@@ -63,9 +63,10 @@ REGLAS:
 - "2 personas", "para 2", "2 adultos", "una pareja" → guests.adults (pareja = 2)
 - Si hay fechas Y huéspedes en el mismo mensaje, extrae ambos
 - intent = "faq" solo para preguntas generales SIN intención de reservar/cotizar
+- Si el huésped dice que es caro, costoso, pide descuento, oferta, algo más barato o económico → price_sensitivity = true
 
 Responde SOLO JSON:
-{"intent":"book|faq|select_room|confirm|unknown","dates":{"check_in":"YYYY-MM-DD","check_out":"YYYY-MM-DD"},"guests":{"adults":N,"children":N},"room_id":""}`,
+{"intent":"book|faq|select_room|confirm|unknown","dates":{"check_in":"YYYY-MM-DD","check_out":"YYYY-MM-DD"},"guests":{"adults":N,"children":N},"room_id":"","price_sensitivity":true|false}`,
         },
         { role: 'user', content: message },
       ],
@@ -86,4 +87,5 @@ export type BookingIntent = {
   dates?: { check_in?: string; check_out?: string };
   guests?: { adults?: number; children?: number };
   room_id?: string;
+  price_sensitivity?: boolean;
 };

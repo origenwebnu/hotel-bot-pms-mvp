@@ -159,6 +159,43 @@ export const api = {
       '/hotels/me/inventory/seed-demo',
       { method: 'POST' },
     ),
+
+  listDiscountTiers: () => request<DiscountTier[]>('/hotels/me/discount-tiers'),
+
+  createDiscountTier: (data: {
+    min_total: number;
+    max_total?: number | null;
+    discount_percent: number;
+    sort_order?: number;
+  }) =>
+    request<DiscountTier>('/hotels/me/discount-tiers', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateDiscountTier: (
+    id: string,
+    data: Partial<{
+      min_total: number;
+      max_total: number | null;
+      discount_percent: number;
+      is_active: boolean;
+      sort_order: number;
+    }>,
+  ) =>
+    request<DiscountTier>(`/hotels/me/discount-tiers/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteDiscountTier: (id: string) =>
+    request<void>(`/hotels/me/discount-tiers/${id}`, { method: 'DELETE' }),
+
+  seedDefaultDiscountTiers: () =>
+    request<{ message: string; tiers_created?: number }>(
+      '/hotels/me/discount-tiers/seed-default',
+      { method: 'POST' },
+    ),
 };
 
 export interface Hotel {
@@ -206,6 +243,16 @@ export interface RoomType {
   max_occupancy: number;
   total_units: number;
   photo_urls: string[];
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface DiscountTier {
+  id: string;
+  min_total: number;
+  max_total: number | null;
+  discount_percent: number;
   is_active: boolean;
   sort_order: number;
   created_at: string;

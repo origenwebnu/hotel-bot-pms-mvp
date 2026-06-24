@@ -9,6 +9,7 @@ import { CoreIntegratorModule } from '../core-integrator/core-integrator.module'
 import { KnowledgeModule } from '../knowledge/knowledge.module';
 import { CheckoutModule } from '../checkout/checkout.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
+import { LocalInventoryModule } from '../local-inventory/local-inventory.module';
 
 @Module({
   imports: [
@@ -21,6 +22,7 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
     CheckoutModule,
     WhatsAppModule,
     AiModule,
+    LocalInventoryModule,
   ],
   controllers: [WhatsAppWebhookController],
   providers: [

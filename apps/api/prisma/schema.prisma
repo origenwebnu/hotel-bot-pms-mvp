@@ -28,6 +28,7 @@ model Hotel {
   conversations ConversationSession[]
   vectors       KnowledgeVector[]
   roomTypes     RoomType[]
+  discountTiers HotelDiscountTier[]
 
   @@map("hotels")
 }
@@ -51,6 +52,23 @@ model RoomType {
 
   @@index([hotelId])
   @@map("room_types")
+}
+
+model HotelDiscountTier {
+  id              String   @id @default(cuid())
+  hotelId         String   @map("hotel_id")
+  minTotal        Float    @map("min_total")
+  maxTotal        Float?   @map("max_total")
+  discountPercent Float    @map("discount_percent")
+  isActive        Boolean  @default(true) @map("is_active")
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId])
+  @@map("hotel_discount_tiers")
 }
 
 model AdminUser {
@@ -179,6 +197,9 @@ model Reservation {
   adults             Int?
   children           Int?
   totalAmount        Float?    @map("total_amount")
+  originalAmount     Float?    @map("original_amount")
+  discountPercent    Float?    @map("discount_percent")
+  discountTierId     String?   @map("discount_tier_id")
   currency           String?
   pmsReservationId   String?   @map("pms_reservation_id")
   holdExpiresAt      DateTime? @map("hold_expires_at")

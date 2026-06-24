@@ -81,6 +81,36 @@ export class WhatsAppRendererService {
     return `${trimmed.slice(0, 17)}…`;
   }
 
+  renderDiscountOffer(data: {
+    percent: number;
+    originalTotal: number;
+    discountedTotal: number;
+    currency: string;
+    expiresMinutes: number;
+    roomName?: string;
+  }): WhatsAppButtonMessage {
+    const roomLine = data.roomName ? `\n🏠 *${data.roomName}*` : '';
+
+    return {
+      type: 'button',
+      body: {
+        text:
+          `Comprendo 😊 Te ofrezco un *${data.percent}%* de descuento sobre el valor total de tu reserva.${roomLine}\n\n` +
+          `💰 *${data.currency} ${data.discountedTotal.toLocaleString('es-CO')}*` +
+          ` _(antes ${data.currency} ${data.originalTotal.toLocaleString('es-CO')})_\n\n` +
+          `⏱ Válido si reservas en los próximos *${data.expiresMinutes} minutos*.`,
+      },
+      action: {
+        buttons: [
+          {
+            type: 'reply',
+            reply: { id: WHATSAPP_BUTTON_IDS.RESERVE, title: 'Reservar' },
+          },
+        ],
+      },
+    };
+  }
+
   renderRoomDetail(room: StandardRoomAvailability): WhatsAppButtonMessage {
     const photoUrl = room.photos_urls[0];
     const description = room.description?.slice(0, 200) ?? 'Habitación confortable para tu estadía.';
@@ -141,6 +171,8 @@ export class WhatsAppRendererService {
     checkOut: string;
     guests: number;
     amount: number;
+    originalAmount?: number;
+    discountPercent?: number;
     currency: string;
     holdMinutes?: number;
   }): WhatsAppTextMessage {
@@ -166,7 +198,15 @@ export class WhatsAppRendererService {
       `📅 *Hasta:* ${checkOutLabel}\n` +
       `🌙 *Noches:* ${nights}\n` +
       `👥 *Huéspedes:* ${data.guests}\n\n` +
-      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n`;
+
+    if (data.originalAmount && data.discountPercent) {
+      body +=
+        `🏷 Descuento: *${data.discountPercent}%*\n` +
+        `Subtotal: ~${data.currency} ${data.originalAmount.toLocaleString('es-CO')}~\n`;
+    }
+
+    body +=
       `💰 *TOTAL A PAGAR:* ${data.currency} ${data.amount.toLocaleString('es-CO')}\n` +
       `━━━━━━━━━━━━━━━━━━━━`;
 

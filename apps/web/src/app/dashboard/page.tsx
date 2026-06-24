@@ -7,10 +7,11 @@ import { api, type Hotel, type IntegrationStatus } from '@/lib/api';
 import { IntegrationsPanel } from '@/components/IntegrationsPanel';
 import { WhatsAppPanel } from '@/components/WhatsAppPanel';
 import { KnowledgePanel } from '@/components/KnowledgePanel';
+import { DiscountTiersPanel } from '@/components/DiscountTiersPanel';
 import { InventoryPanel } from '@/components/InventoryPanel';
 import { ChatSimulator } from '@/components/ChatSimulator';
 
-type Tab = 'integrations' | 'inventory' | 'knowledge' | 'simulator';
+type Tab = 'integrations' | 'inventory' | 'discounts' | 'knowledge' | 'simulator';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -67,6 +68,12 @@ export default function DashboardPage() {
             🛏️ Inventario
           </button>
           <button
+            className={tab === 'discounts' ? 'active' : ''}
+            onClick={() => setTab('discounts')}
+          >
+            🏷️ Descuentos
+          </button>
+          <button
             className={tab === 'knowledge' ? 'active' : ''}
             onClick={() => setTab('knowledge')}
           >
@@ -89,6 +96,7 @@ export default function DashboardPage() {
           <h1>
             {tab === 'integrations' && 'Integraciones'}
             {tab === 'inventory' && 'Inventario de habitaciones'}
+            {tab === 'discounts' && 'Descuentos automáticos'}
             {tab === 'knowledge' && 'Knowledge Base'}
             {tab === 'simulator' && 'Simulador de Chat'}
           </h1>
@@ -121,6 +129,7 @@ export default function DashboardPage() {
           </div>
         )}
         {tab === 'inventory' && <InventoryPanel />}
+        {tab === 'discounts' && <DiscountTiersPanel />}
         {tab === 'knowledge' && <KnowledgePanel />}
         {tab === 'simulator' && <ChatSimulator />}
       </main>

@@ -5,3 +5,5 @@ export * from './types/payment';
 export * from './types/hotel';
 export * from './constants';
 export * from './utils/display-date';
+export * from './types/discount';
+export * from './utils/discount';

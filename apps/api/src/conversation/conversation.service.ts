@@ -3,10 +3,13 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import {
   DEFAULT_ROOM_HOLD_TTL_MINUTES,
+  DEFAULT_DISCOUNT_OFFER_MINUTES,
   JOB_NAMES,
   QUEUE_NAMES,
   WHATSAPP_BUTTON_IDS,
+  countNights,
   formatDisplayDateRange,
+  type SessionDiscountOffer,
   type StandardRoomAvailability,
   type WhatsAppInboundMessage,
 } from '@hotel-bot/shared';
@@ -17,6 +20,7 @@ import { AiService, type BookingIntent } from './ai.service';
 import { WhatsAppRendererService } from '../whatsapp/whatsapp-renderer.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { CheckoutService } from '../checkout/checkout.service';
+import { DiscountTierService } from '../local-inventory/discount-tier.service';
 
 @Injectable()
 export class ConversationService {
@@ -29,6 +33,7 @@ export class ConversationService {
     private readonly renderer: WhatsAppRendererService,
     private readonly whatsapp: WhatsAppService,
     private readonly checkout: CheckoutService,
+    private readonly discountTiers: DiscountTierService,
     @InjectQueue(QUEUE_NAMES.WHATSAPP_INBOUND) private readonly inboundQueue: Queue,
   ) {}
 
@@ -60,6 +65,9 @@ export class ConversationService {
     switch (session.state) {
       case 'idle':
       case 'faq':
+        if (this.isPriceSensitivityQuery(text, intent)) {
+          if (await this.tryOfferDiscount(hotelId, session.id, phone)) return;
+        }
         if (this.shouldStartBooking(text, intent)) {
           await this.advanceBookingFlow(hotelId, session.id, phone, text, intent);
           return;
@@ -101,6 +109,9 @@ export class ConversationService {
           await this.returnToWelcomeMenu(hotelId, session.id, phone);
           return;
         }
+        if (this.isPriceSensitivityQuery(text, intent)) {
+          if (await this.tryOfferDiscount(hotelId, session.id, phone)) return;
+        }
         if (this.wantsNewBooking(text, intent)) {
           await this.startBookingFlow(hotelId, session.id, phone, text, intent);
           return;
@@ -112,6 +123,9 @@ export class ConversationService {
         if (this.wantsSessionReset(text)) {
           await this.returnToWelcomeMenu(hotelId, session.id, phone);
           return;
+        }
+        if (this.isPriceSensitivityQuery(text, intent)) {
+          if (await this.tryOfferDiscount(hotelId, session.id, phone)) return;
         }
         if (this.wantsNewBooking(text, intent)) {
           await this.startBookingFlow(hotelId, session.id, phone, text, intent);
@@ -140,6 +154,9 @@ export class ConversationService {
         if (this.wantsSessionReset(text)) {
           await this.returnToWelcomeMenu(hotelId, session.id, phone);
           return;
+        }
+        if (this.isPriceSensitivityQuery(text, intent)) {
+          if (await this.tryOfferDiscount(hotelId, session.id, phone)) return;
         }
         if (this.wantsNewBooking(text, intent)) {
           await this.startBookingFlow(hotelId, session.id, phone, text, intent);
@@ -375,6 +392,23 @@ export class ConversationService {
         idempotency_key: idempotencyKey,
       });
 
+      const discountOffer = this.getActiveDiscountOffer(fullSession);
+      let finalAmount = hold.total_amount;
+      let originalAmount: number | undefined;
+      let discountPercent: number | undefined;
+      let discountTierId: string | undefined;
+
+      if (
+        discountOffer &&
+        discountOffer.roomTypeId === fullSession.selectedRoomTypeId &&
+        Math.abs(discountOffer.originalTotal - hold.total_amount) < 1
+      ) {
+        originalAmount = hold.total_amount;
+        finalAmount = discountOffer.discountedTotal;
+        discountPercent = discountOffer.percent;
+        discountTierId = discountOffer.tierId;
+      }
+
       reservation = await this.prisma.reservation.create({
         data: {
           hotelId,
@@ -387,7 +421,10 @@ export class ConversationService {
           checkOut: fullSession.checkOut,
           adults: fullSession.adults,
           children: fullSession.children,
-          totalAmount: hold.total_amount,
+          totalAmount: finalAmount,
+          originalAmount,
+          discountPercent,
+          discountTierId,
           currency: hold.currency,
           pmsReservationId: hold.pms_reservation_id,
           holdExpiresAt: new Date(hold.expires_at),
@@ -400,7 +437,7 @@ export class ConversationService {
 
       try {
         const payment = await this.checkout.createPaymentLink(hotelId, {
-          amount: hold.total_amount,
+          amount: finalAmount,
           currency: hold.currency,
           reservation_id: reservation.id,
           hold_id: hold.hold_id,
@@ -503,6 +540,8 @@ export class ConversationService {
       adults: number | null;
       children: number | null;
       totalAmount: number | null;
+      originalAmount?: number | null;
+      discountPercent?: number | null;
       currency: string | null;
       paymentLink: string | null;
       guestFirstName: string | null;
@@ -534,6 +573,8 @@ export class ConversationService {
       checkOut: reservation.checkOut ?? '',
       guests,
       amount: reservation.totalAmount ?? 0,
+      originalAmount: reservation.originalAmount ?? undefined,
+      discountPercent: reservation.discountPercent ?? undefined,
       currency: reservation.currency ?? 'COP',
       holdMinutes: holdTtl,
     });
@@ -683,6 +724,125 @@ export class ConversationService {
 
   private isPricingOrAvailabilityQuery(text: string): boolean {
     return /cuánto|cuanto|precio|tarifa|vale|costo|disponib/i.test(text);
+  }
+
+  private isPriceSensitivityQuery(text: string, intent: BookingIntent): boolean {
+    if (intent.price_sensitivity) return true;
+    return /caro|costos[oa]|presupuesto|barat[oa]|econ[oó]mic[oa]|descuent[oa]|oferta|rebaj|promoci[oó]n|m[aá]s\s+barat|no\s+puedo\s+pagar|fuera\s+de\s+(mi\s+)?presupuesto|reduce|baj(?:a|ar)\s+(?:el\s+)?precio|algo\s+m[aá]s\s+barat/i.test(
+      text,
+    );
+  }
+
+  private getActiveDiscountOffer(session: {
+    contextJson: unknown;
+  }): SessionDiscountOffer | null {
+    const ctx = session.contextJson as { discountOffer?: SessionDiscountOffer } | null;
+    const offer = ctx?.discountOffer;
+    if (!offer) return null;
+    if (new Date(offer.expiresAt) <= new Date()) return null;
+    return offer;
+  }
+
+  private async tryOfferDiscount(
+    hotelId: string,
+    sessionId: string,
+    phone: string,
+  ): Promise<boolean> {
+    const fullSession = await this.getSession(sessionId);
+
+    if (!fullSession.checkIn || !fullSession.checkOut) {
+      await this.whatsapp.sendText(
+        hotelId,
+        phone,
+        'Con gusto te ayudo con un descuento 😊 Primero dime tus *fechas* y *huéspedes* (ej: *2 personas del 28 al 30 de agosto*).',
+      );
+      return true;
+    }
+
+    const availability = await this.fetchAvailability(hotelId, fullSession);
+    if (availability.fallback || availability.rooms.length === 0) {
+      await this.whatsapp.sendText(
+        hotelId,
+        phone,
+        'No hay habitaciones disponibles para esas fechas en este momento. ¿Quieres probar con otras fechas?',
+      );
+      return true;
+    }
+
+    const nights = countNights(fullSession.checkIn, fullSession.checkOut);
+    const room = this.pickRoomForDiscount(fullSession, availability.rooms, nights);
+    const originalTotal = room.price * nights;
+
+    const tier = await this.discountTiers.findApplicableTier(hotelId, originalTotal);
+    if (!tier) {
+      await this.whatsapp.sendText(
+        hotelId,
+        phone,
+        'Entiendo tu preocupación. Por ahora no tenemos promociones activas para ese valor, pero puedo mostrarte otras fechas u opciones. Escribe *menu* para volver al inicio.',
+      );
+      return true;
+    }
+
+    const offerMinutes = parseInt(
+      process.env.DISCOUNT_OFFER_MINUTES ?? String(DEFAULT_DISCOUNT_OFFER_MINUTES),
+      10,
+    );
+    const discountedTotal = this.discountTiers.calculateDiscountedTotal(
+      originalTotal,
+      tier.discountPercent,
+    );
+    const expiresAt = new Date(Date.now() + offerMinutes * 60 * 1000).toISOString();
+
+    const discountOffer: SessionDiscountOffer = {
+      tierId: tier.id,
+      percent: tier.discountPercent,
+      expiresAt,
+      originalTotal,
+      discountedTotal,
+      roomTypeId: room.room_type_id,
+      currency: room.currency,
+    };
+
+    const previousContext =
+      (fullSession.contextJson as Record<string, unknown> | null) ?? {};
+
+    await this.prisma.conversationSession.update({
+      where: { id: sessionId },
+      data: {
+        state: 'room_selected',
+        selectedRoomTypeId: room.room_type_id,
+        contextJson: {
+          ...previousContext,
+          discountOffer,
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    const msg = this.renderer.renderDiscountOffer({
+      percent: tier.discountPercent,
+      originalTotal,
+      discountedTotal,
+      currency: room.currency,
+      expiresMinutes: offerMinutes,
+      roomName: room.name,
+    });
+    await this.whatsapp.sendInteractive(hotelId, phone, msg);
+    return true;
+  }
+
+  private pickRoomForDiscount(
+    session: { selectedRoomTypeId: string | null },
+    rooms: StandardRoomAvailability[],
+    nights: number,
+  ): StandardRoomAvailability {
+    const selected = rooms.find(
+      (room) => room.room_type_id === session.selectedRoomTypeId,
+    );
+    if (selected) return selected;
+
+    return rooms.reduce((cheapest, room) =>
+      room.price * nights < cheapest.price * nights ? room : cheapest,
+    );
   }
 
   private enrichIntent(text: string, intent: BookingIntent): BookingIntent {
