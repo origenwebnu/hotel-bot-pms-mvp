@@ -16,7 +16,7 @@ export class WhatsAppRendererService {
     rooms: StandardRoomAvailability[],
     checkIn: string,
     checkOut: string,
-  ): WhatsAppListMessage | WhatsAppTextMessage {
+  ): WhatsAppListMessage | WhatsAppButtonMessage | WhatsAppTextMessage {
     if (rooms.length === 0) {
       return {
         type: 'text',
@@ -26,21 +26,34 @@ export class WhatsAppRendererService {
       };
     }
 
-    if (rooms.length <= 2) {
-      const range = formatDisplayDateRange(checkIn, checkOut, ' → ');
+    const dateRange = formatDisplayDateRange(checkIn, checkOut, ' → ');
+
+    if (rooms.length <= 3) {
       const lines = rooms.map(
-        (r) =>
-          `• *${r.name}* — ${r.currency} ${r.price.toLocaleString()}/noche\n  ID: ${r.room_type_id}`,
+        (r) => `• *${r.name}* — ${r.currency} ${r.price.toLocaleString()}/noche`,
       );
+
       return {
-        type: 'text',
-        text: {
-          body: `Habitaciones disponibles (${range}):\n\n${lines.join('\n\n')}\n\nResponde con el nombre o ID de la habitación que prefieres.`,
+        type: 'button',
+        body: {
+          text:
+            `Habitaciones disponibles (${dateRange}):\n\n${lines.join('\n')}\n\n` +
+            `Pulsa el botón de la habitación que prefieres:`,
+        },
+        footer: { text: 'Precios por noche, impuestos pueden aplicar' },
+        action: {
+          buttons: rooms.map((r) => ({
+            type: 'reply' as const,
+            reply: {
+              id: `room_${r.room_type_id}`,
+              title: this.truncateButtonTitle(r.name),
+            },
+          })),
         },
       };
     }
 
-    const dateRange = formatDisplayDateRange(checkIn, checkOut);
+    const listDateRange = formatDisplayDateRange(checkIn, checkOut);
 
     const rows = rooms.slice(0, MAX_LIST_MESSAGE_ROWS).map((r) => ({
       id: `room_${r.room_type_id}`,
@@ -52,7 +65,7 @@ export class WhatsAppRendererService {
       type: 'list',
       header: { type: 'text', text: 'Habitaciones disponibles' },
       body: {
-        text: `Encontramos ${rooms.length} opciones para ${dateRange}. Selecciona una:`,
+        text: `Encontramos ${rooms.length} opciones para ${listDateRange}. Selecciona una:`,
       },
       footer: { text: 'Precios por noche, impuestos pueden aplicar' },
       action: {
@@ -60,6 +73,12 @@ export class WhatsAppRendererService {
         sections: [{ title: 'Disponibles', rows }],
       },
     };
+  }
+
+  private truncateButtonTitle(name: string): string {
+    const trimmed = name.trim();
+    if (trimmed.length <= 20) return trimmed;
+    return `${trimmed.slice(0, 17)}…`;
   }
 
   renderRoomDetail(room: StandardRoomAvailability): WhatsAppButtonMessage {

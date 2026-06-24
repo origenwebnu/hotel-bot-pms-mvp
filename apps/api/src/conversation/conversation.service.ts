@@ -181,10 +181,10 @@ export class ConversationService {
       session.checkOut!,
     );
 
-    if (listMsg.type === 'list') {
-      await this.whatsapp.sendInteractive(hotelId, phone, listMsg);
-    } else {
+    if (listMsg.type === 'text') {
       await this.whatsapp.sendText(hotelId, phone, listMsg.text.body);
+    } else {
+      await this.whatsapp.sendInteractive(hotelId, phone, listMsg);
     }
   }
 
@@ -281,6 +281,11 @@ export class ConversationService {
 
     if (buttonId === WHATSAPP_BUTTON_IDS.MENU_RATES) {
       await this.sendRatesOverview(hotelId, session.whatsappPhone);
+      return;
+    }
+
+    if (buttonId.startsWith('room_')) {
+      await this.handleRoomSelection(hotelId, session, buttonId);
       return;
     }
 
