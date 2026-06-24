@@ -973,14 +973,16 @@ export class ConversationService {
   private resolveGuestCount(
     text: string,
     intent: BookingIntent,
-    session: { adults: number | null },
+    session: { adults: number | null; state?: string },
   ): number | undefined {
-    const fromText = this.parseGuestsFallback(text);
+    const allowBareNumber = session.state === 'collecting_guests';
+    const fromText = this.parseGuestsFallback(text, { allowBareNumber });
     if (fromText != null) return fromText;
 
     if (
       intent.guests?.adults != null &&
-      /personas|adultos|hu[eé]spedes|pareja|pax|\bpara\s+\d+/i.test(text)
+      ((allowBareNumber && /^\s*\d+\s*$/.test(text.trim())) ||
+        /personas|adultos|hu[eé]spedes|pareja|pax|\bpara\s+\d+/i.test(text))
     ) {
       return intent.guests.adults;
     }
@@ -1038,8 +1040,20 @@ export class ConversationService {
     return {};
   }
 
-  private parseGuestsFallback(text: string): number | undefined {
+  private parseGuestsFallback(
+    text: string,
+    options?: { allowBareNumber?: boolean },
+  ): number | undefined {
     if (/pareja/i.test(text)) return 2;
+
+    const trimmed = text.trim();
+    if (options?.allowBareNumber) {
+      const bare = trimmed.match(/^(\d+)$/);
+      if (bare) {
+        const n = parseInt(bare[1], 10);
+        if (n > 0 && n < 20) return n;
+      }
+    }
 
     const patterns = [
       /(\d+)\s*(?:personas?|adultos?|hu[eé]spedes?|pax)/i,

@@ -63,7 +63,7 @@ REGLAS:
 - "2 personas", "para 2", "2 adultos", "una pareja" → guests.adults (pareja = 2)
 - Si hay fechas Y huéspedes en el mismo mensaje, extrae ambos
 - intent = "faq" solo para preguntas generales SIN intención de reservar/cotizar
-- NUNCA inventes guests.adults. Solo inclúyelo si el mensaje menciona explícitamente personas, adultos, huéspedes o pareja.
+- NUNCA inventes guests.adults. Solo inclúyelo si el mensaje menciona explícitamente personas, adultos, huéspedes, pareja, o es solo un número (ej: "2").
 - Si el huésped pide descuento, oferta, algo más barato o dice que es caro → price_sensitivity = true (aunque también quiera reservar)
 
 Responde SOLO JSON:
