@@ -5,6 +5,7 @@ import {
   BadGatewayException,
 } from '@nestjs/common';
 import nodemailer from 'nodemailer';
+import type SMTPTransport from 'nodemailer/lib/smtp-transport';
 import type Transporter from 'nodemailer/lib/mailer';
 
 @Injectable()
@@ -20,16 +21,36 @@ export class EmailService {
     );
   }
 
+  private buildTransportOptions(): SMTPTransport.Options {
+    const host = process.env.SMTP_HOST?.trim() ?? 'smtp.gmail.com';
+    const user = process.env.SMTP_USER?.trim() ?? '';
+    const pass = process.env.SMTP_PASS?.trim() ?? '';
+    const port = Number(process.env.SMTP_PORT ?? 587);
+    const secure = process.env.SMTP_SECURE === 'true' || port === 465;
+
+    if (host === 'smtp.gmail.com') {
+      return {
+        host: 'smtp.gmail.com',
+        port,
+        secure,
+        requireTLS: !secure,
+        auth: { user, pass },
+        tls: { minVersion: 'TLSv1.2' },
+      };
+    }
+
+    return { host, port, secure, auth: { user, pass } };
+  }
+
   private getTransporter(): Transporter {
     if (this.transporter) return this.transporter;
 
-    const host = process.env.SMTP_HOST?.trim();
     const user = process.env.SMTP_USER?.trim();
     const pass = process.env.SMTP_PASS?.trim();
 
-    if (!host || !user || !pass) {
+    if (!user || !pass) {
       const missing = [
-        !host && 'SMTP_HOST',
+        !process.env.SMTP_HOST?.trim() && 'SMTP_HOST',
         !user && 'SMTP_USER',
         !pass && 'SMTP_PASS',
       ].filter(Boolean);
@@ -41,16 +62,7 @@ export class EmailService {
       );
     }
 
-    const port = Number(process.env.SMTP_PORT ?? 587);
-    const secure = process.env.SMTP_SECURE === 'true' || port === 465;
-
-    this.transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      auth: { user, pass },
-    });
-
+    this.transporter = nodemailer.createTransport(this.buildTransportOptions());
     return this.transporter;
   }
 
@@ -59,9 +71,8 @@ export class EmailService {
     code: string,
     hotelName: string,
   ): Promise<void> {
-    const from =
-      process.env.SMTP_FROM?.trim() ||
-      `BookiChat <${process.env.SMTP_USER?.trim() ?? 'noreply@bookichat.com'}>`;
+    const smtpUser = process.env.SMTP_USER?.trim() ?? 'noreply@bookichat.com';
+    const from = process.env.SMTP_FROM?.trim() || `BookiChat <${smtpUser}>`;
 
     const subject = 'Tu código de verificación — BookiChat';
     const text = [
@@ -92,17 +103,33 @@ export class EmailService {
       await transporter.sendMail({ from, to: email, subject, text, html });
       this.logger.log(`Código de registro enviado a ${email}`);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`Error SMTP al enviar a ${email}: ${msg}`);
-
-      if (err instanceof ServiceUnavailableException) {
-        throw err;
-      }
-
-      throw new BadGatewayException(
-        'No se pudo enviar el email. Verifica la configuración SMTP del servidor.',
-      );
+      this.logSmtpError(err);
+      throw new BadGatewayException(this.toUserMessage(err));
     }
+  }
+
+  private logSmtpError(err: unknown): void {
+    const e = err as { code?: string; response?: string; message?: string };
+    this.logger.error(
+      `Error SMTP [${e.code ?? 'UNKNOWN'}]: ${e.response ?? e.message ?? err}`,
+    );
+  }
+
+  private toUserMessage(err: unknown): string {
+    const e = err as { code?: string; response?: string; message?: string };
+    const code = e.code ?? '';
+    const response = (e.response ?? e.message ?? '').toLowerCase();
+
+    if (code === 'EAUTH' || response.includes('username and password not accepted')) {
+      return 'Credenciales SMTP incorrectas. Regenera la contraseña de aplicación en Google e actualiza SMTP_PASS en el servidor.';
+    }
+    if (code === 'ETIMEDOUT' || code === 'ECONNECTION' || code === 'ESOCKET') {
+      return 'No se pudo conectar al servidor de Gmail desde el droplet. Revisa firewall o prueba puerto 465.';
+    }
+    if (response.includes('daily user sending limit')) {
+      return 'Gmail bloqueó envíos por límite diario. Intenta mañana o usa otro proveedor SMTP.';
+    }
+    return 'No se pudo enviar el email. Ejecuta en el servidor: bash infra/digitalocean/test-smtp.sh';
   }
 
   private escapeHtml(value: string): string {
