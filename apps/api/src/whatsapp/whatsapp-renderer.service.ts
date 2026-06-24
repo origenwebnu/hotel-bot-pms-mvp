@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import {
   MAX_LIST_MESSAGE_ROWS,
   WHATSAPP_BUTTON_IDS,
+  formatDisplayDate,
+  formatDisplayDateRange,
   type StandardRoomAvailability,
   type WhatsAppListMessage,
   type WhatsAppButtonMessage,
@@ -25,6 +27,7 @@ export class WhatsAppRendererService {
     }
 
     if (rooms.length <= 2) {
+      const range = formatDisplayDateRange(checkIn, checkOut, ' → ');
       const lines = rooms.map(
         (r) =>
           `• *${r.name}* — ${r.currency} ${r.price.toLocaleString()}/noche\n  ID: ${r.room_type_id}`,
@@ -32,10 +35,12 @@ export class WhatsAppRendererService {
       return {
         type: 'text',
         text: {
-          body: `Habitaciones disponibles (${checkIn} → ${checkOut}):\n\n${lines.join('\n\n')}\n\nResponde con el nombre o ID de la habitación que prefieres.`,
+          body: `Habitaciones disponibles (${range}):\n\n${lines.join('\n\n')}\n\nResponde con el nombre o ID de la habitación que prefieres.`,
         },
       };
     }
+
+    const dateRange = formatDisplayDateRange(checkIn, checkOut);
 
     const rows = rooms.slice(0, MAX_LIST_MESSAGE_ROWS).map((r) => ({
       id: `room_${r.room_type_id}`,
@@ -47,7 +52,7 @@ export class WhatsAppRendererService {
       type: 'list',
       header: { type: 'text', text: 'Habitaciones disponibles' },
       body: {
-        text: `Encontramos ${rooms.length} opciones para ${checkIn} al ${checkOut}. Selecciona una:`,
+        text: `Encontramos ${rooms.length} opciones para ${dateRange}. Selecciona una:`,
       },
       footer: { text: 'Precios por noche, impuestos pueden aplicar' },
       action: {
@@ -97,13 +102,14 @@ export class WhatsAppRendererService {
     expiresMinutes: number,
   ): import('@hotel-bot/shared').WhatsAppCtaUrlMessage {
     const nights = this.estimateNights(summary.checkIn, summary.checkOut);
+    const dateRange = formatDisplayDateRange(summary.checkIn, summary.checkOut, ' → ');
     return {
       type: 'cta_url',
       body: {
         text:
           `📋 *Resumen de tu reserva*\n\n` +
           `🏨 ${summary.roomName}\n` +
-          `📅 ${summary.checkIn} → ${summary.checkOut} (${nights} noche${nights > 1 ? 's' : ''})\n` +
+          `📅 ${dateRange} (${nights} noche${nights > 1 ? 's' : ''})\n` +
           `👥 ${summary.guests} huésped${summary.guests > 1 ? 'es' : ''}\n` +
           `💰 *Total: ${summary.currency} ${summary.amount.toLocaleString()}*\n\n` +
           `⏱ Tienes *${expiresMinutes} minutos* para pagar. Después se libera la habitación.`,

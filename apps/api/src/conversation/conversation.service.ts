@@ -6,6 +6,7 @@ import {
   JOB_NAMES,
   QUEUE_NAMES,
   WHATSAPP_BUTTON_IDS,
+  formatDisplayDateRange,
   type StandardRoomAvailability,
   type WhatsAppInboundMessage,
 } from '@hotel-bot/shared';
@@ -736,7 +737,7 @@ export class ConversationService {
         await this.whatsapp.sendText(
           hotelId,
           phone,
-          `Estas son las opciones del *${checkIn}* al *${checkOut}* para *${adults}* huésped${adults > 1 ? 'es' : ''}:`,
+          `Estas son las opciones del *${formatDisplayDateRange(checkIn, checkOut)}* para *${adults}* huésped${adults > 1 ? 'es' : ''}:`,
         );
       }
 
@@ -771,7 +772,7 @@ export class ConversationService {
       await this.whatsapp.sendText(
         hotelId,
         phone,
-        `Perfecto, del *${checkIn}* al *${checkOut}*. ¿Cuántos huéspedes? (ej: 2 adultos)`,
+        `Perfecto, del *${formatDisplayDateRange(checkIn, checkOut)}*. ¿Cuántos huéspedes? (ej: 2 adultos)`,
       );
       return;
     }
