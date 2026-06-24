@@ -1,4 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  ServiceUnavailableException,
+  BadGatewayException,
+} from '@nestjs/common';
 import nodemailer from 'nodemailer';
 import type Transporter from 'nodemailer/lib/mailer';
 
@@ -7,7 +12,15 @@ export class EmailService {
   private readonly logger = new Logger(EmailService.name);
   private transporter: Transporter | null = null;
 
-  private getTransporter(): Transporter | null {
+  isConfigured(): boolean {
+    return Boolean(
+      process.env.SMTP_HOST?.trim() &&
+        process.env.SMTP_USER?.trim() &&
+        process.env.SMTP_PASS?.trim(),
+    );
+  }
+
+  private getTransporter(): Transporter {
     if (this.transporter) return this.transporter;
 
     const host = process.env.SMTP_HOST?.trim();
@@ -15,7 +28,17 @@ export class EmailService {
     const pass = process.env.SMTP_PASS?.trim();
 
     if (!host || !user || !pass) {
-      return null;
+      const missing = [
+        !host && 'SMTP_HOST',
+        !user && 'SMTP_USER',
+        !pass && 'SMTP_PASS',
+      ].filter(Boolean);
+
+      this.logger.error(`SMTP incompleto — faltan: ${missing.join(', ')}`);
+
+      throw new ServiceUnavailableException(
+        'El envío de email no está configurado en el servidor. Contacta soporte BookiChat.',
+      );
     }
 
     const port = Number(process.env.SMTP_PORT ?? 587);
@@ -31,9 +54,15 @@ export class EmailService {
     return this.transporter;
   }
 
-  async sendRegistrationCode(email: string, code: string, hotelName: string): Promise<void> {
+  async sendRegistrationCode(
+    email: string,
+    code: string,
+    hotelName: string,
+  ): Promise<void> {
     const from =
-      process.env.SMTP_FROM?.trim() || 'BookiChat <noreply@bookichat.com>';
+      process.env.SMTP_FROM?.trim() ||
+      `BookiChat <${process.env.SMTP_USER?.trim() ?? 'noreply@bookichat.com'}>`;
+
     const subject = 'Tu código de verificación — BookiChat';
     const text = [
       `Hola,`,
@@ -58,22 +87,22 @@ export class EmailService {
         <p style="color:#999;font-size:12px">Si no solicitaste este registro, ignora este email.</p>
       </div>`;
 
-    const transporter = this.getTransporter();
+    try {
+      const transporter = this.getTransporter();
+      await transporter.sendMail({ from, to: email, subject, text, html });
+      this.logger.log(`Código de registro enviado a ${email}`);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`Error SMTP al enviar a ${email}: ${msg}`);
 
-    if (!transporter) {
-      this.logger.warn(
-        `[DEV] SMTP no configurado — código para ${email}: ${code}`,
-      );
-      if (process.env.NODE_ENV === 'production') {
-        throw new Error(
-          'Servicio de email no configurado. Contacta soporte BookiChat.',
-        );
+      if (err instanceof ServiceUnavailableException) {
+        throw err;
       }
-      return;
-    }
 
-    await transporter.sendMail({ from, to: email, subject, text, html });
-    this.logger.log(`Código de registro enviado a ${email}`);
+      throw new BadGatewayException(
+        'No se pudo enviar el email. Verifica la configuración SMTP del servidor.',
+      );
+    }
   }
 
   private escapeHtml(value: string): string {

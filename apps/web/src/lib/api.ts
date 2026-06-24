@@ -1,5 +1,14 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '/api';
 
+function parseErrorMessage(body: unknown, fallback: string): string {
+  if (!body || typeof body !== 'object') return fallback;
+  const record = body as { message?: string | string[]; error?: string };
+  if (Array.isArray(record.message)) return record.message.join('. ');
+  if (typeof record.message === 'string' && record.message) return record.message;
+  if (typeof record.error === 'string' && record.error) return record.error;
+  return fallback;
+}
+
 async function request<T>(
   path: string,
   options: RequestInit = {},
@@ -17,8 +26,8 @@ async function request<T>(
   });
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ message: res.statusText }));
-    throw new Error(err.message ?? `Error ${res.status}`);
+    const err = await res.json().catch(() => ({}));
+    throw new Error(parseErrorMessage(err, res.statusText || `Error ${res.status}`));
   }
 
   return res.json();
