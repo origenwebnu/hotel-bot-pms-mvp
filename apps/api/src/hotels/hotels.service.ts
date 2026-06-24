@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../crypto/crypto.service';
 import { CoreIntegratorService } from '../core-integrator/core-integrator.service';
+import { WhatsAppCredentialsService } from '../whatsapp/whatsapp-credentials.service';
 
 @Injectable()
 export class HotelsService {
@@ -9,6 +10,7 @@ export class HotelsService {
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     private readonly pms: CoreIntegratorService,
+    private readonly whatsappCredentials: WhatsAppCredentialsService,
   ) {}
 
   async getHotel(hotelId: string) {
@@ -92,9 +94,14 @@ export class HotelsService {
   }
 
   async getIntegrationStatus(hotelId: string) {
-    const integration = await this.prisma.hotelIntegration.findUnique({
-      where: { hotelId },
-    });
+    const [integration, hotel] = await Promise.all([
+      this.prisma.hotelIntegration.findUnique({ where: { hotelId } }),
+      this.prisma.hotel.findUnique({
+        where: { id: hotelId },
+        select: { whatsappPhoneNumberId: true },
+      }),
+    ]);
+
     if (!integration) throw new NotFoundException('Integration not found');
 
     return {
@@ -102,7 +109,111 @@ export class HotelsService {
       pms_connected: integration.pmsConnected,
       payment_provider: integration.paymentProvider,
       payment_connected: integration.paymentConnected,
+      whatsapp_connected: integration.whatsappConnected,
+      whatsapp_phone_number_id: hotel?.whatsappPhoneNumberId ?? null,
+      whatsapp_has_token: await this.whatsappCredentials.hasOwnToken(hotelId),
       last_validated_at: integration.lastValidatedAt,
     };
+  }
+
+  async getWhatsAppConfig(hotelId: string) {
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: { whatsappPhoneNumberId: true },
+    });
+    if (!hotel) throw new NotFoundException('Hotel not found');
+
+    const integration = await this.prisma.hotelIntegration.findUnique({
+      where: { hotelId },
+    });
+
+    const appUrl = process.env.APP_URL ?? 'https://app.bookichat.com';
+
+    return {
+      phone_number_id: hotel.whatsappPhoneNumberId,
+      connected: integration?.whatsappConnected ?? false,
+      has_token: await this.whatsappCredentials.hasOwnToken(hotelId),
+      webhook_url: `${appUrl.replace(/\/$/, '')}/api/webhooks/whatsapp`,
+      verify_token_hint: process.env.WHATSAPP_VERIFY_TOKEN
+        ? 'Configurado en la plataforma (contacta soporte si necesitas cambiarlo)'
+        : null,
+      setup_steps: [
+        'En Meta Business → WhatsApp, copia el Phone Number ID de tu número.',
+        'Genera un Access Token permanente (Usuario del sistema → Generar identificador).',
+        'El webhook lo configura BookiChat una sola vez; todos los hoteles usan la misma URL.',
+        'Guarda aquí tu Phone Number ID y token, luego pulsa Validar.',
+      ],
+    };
+  }
+
+  async updateWhatsApp(
+    hotelId: string,
+    data: { phone_number_id?: string; access_token?: string },
+  ) {
+    if (data.phone_number_id !== undefined) {
+      await this.prisma.hotel.update({
+        where: { id: hotelId },
+        data: { whatsappPhoneNumberId: data.phone_number_id.trim() || null },
+      });
+    }
+
+    if (data.access_token?.trim()) {
+      await this.prisma.encryptedCredential.upsert({
+        where: {
+          hotelId_credentialType: {
+            hotelId,
+            credentialType: 'whatsapp_access_token',
+          },
+        },
+        create: {
+          hotelId,
+          credentialType: 'whatsapp_access_token',
+          encryptedValue: this.crypto.encrypt(data.access_token.trim()),
+        },
+        update: {
+          encryptedValue: this.crypto.encrypt(data.access_token.trim()),
+        },
+      });
+    }
+
+    await this.ensureIntegration(hotelId);
+
+    return this.getWhatsAppConfig(hotelId);
+  }
+
+  async validateWhatsApp(hotelId: string): Promise<boolean> {
+    const { phoneNumberId, accessToken } =
+      await this.whatsappCredentials.resolve(hotelId);
+
+    if (!phoneNumberId || !accessToken) {
+      await this.setWhatsAppConnected(hotelId, false);
+      return false;
+    }
+
+    const apiVersion = process.env.WHATSAPP_API_VERSION ?? 'v21.0';
+    const response = await fetch(
+      `https://graph.facebook.com/${apiVersion}/${phoneNumberId}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+
+    const valid = response.ok;
+    await this.setWhatsAppConnected(hotelId, valid);
+    return valid;
+  }
+
+  private async ensureIntegration(hotelId: string) {
+    await this.prisma.hotelIntegration.upsert({
+      where: { hotelId },
+      create: { hotelId },
+      update: {},
+    });
+  }
+
+  private async setWhatsAppConnected(hotelId: string, connected: boolean) {
+    await this.ensureIntegration(hotelId);
+    await this.prisma.hotelIntegration.update({
+      where: { hotelId },
+      data: { whatsappConnected: connected, lastValidatedAt: new Date() },
+    });
   }
 }
