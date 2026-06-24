@@ -28,13 +28,38 @@ export const api = {
   register: (data: {
     email: string;
     password: string;
+    passwordConfirm: string;
     name: string;
     hotelName: string;
   }) =>
-    request<{ access_token: string; hotel_id: string }>('/auth/register', {
+    request<{ message: string; email: string; expires_in_seconds: number }>(
+      '/auth/register/send-code',
+      { method: 'POST', body: JSON.stringify(data) },
+    ),
+
+  sendRegistrationCode: (data: {
+    email: string;
+    password: string;
+    passwordConfirm: string;
+    name: string;
+    hotelName: string;
+  }) =>
+    request<{ message: string; email: string; expires_in_seconds: number }>(
+      '/auth/register/send-code',
+      { method: 'POST', body: JSON.stringify(data) },
+    ),
+
+  verifyRegistration: (data: { email: string; code: string }) =>
+    request<{ access_token: string; hotel_id: string }>('/auth/register/verify', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  resendRegistrationCode: (email: string) =>
+    request<{ message: string; expires_in_seconds: number }>(
+      '/auth/register/resend-code',
+      { method: 'POST', body: JSON.stringify({ email }) },
+    ),
 
   login: (data: { email: string; password: string }) =>
     request<{ access_token: string; hotel_id: string }>('/auth/login', {

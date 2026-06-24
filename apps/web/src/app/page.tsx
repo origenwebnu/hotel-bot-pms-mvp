@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { AuthLayout } from '@/components/AuthLayout';
+import { PasswordInput } from '@/components/PasswordInput';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -51,17 +52,15 @@ export default function LoginPage() {
             placeholder="admin@hotel.com"
           />
         </label>
-        <label>
-          Contraseña
-          <input
-            type="password"
-            required
-            autoComplete="current-password"
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-            placeholder="••••••••"
-          />
-        </label>
+        <PasswordInput
+          label="Contraseña"
+          name="password"
+          required
+          autoComplete="current-password"
+          value={form.password}
+          onChange={(e) => setForm({ ...form, password: e.target.value })}
+          placeholder="••••••••"
+        />
 
         {error && <div className="error-banner">{error}</div>}
 

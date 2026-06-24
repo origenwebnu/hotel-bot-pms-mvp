@@ -46,6 +46,19 @@ model AdminUser {
   @@map("admin_users")
 }
 
+model RegistrationVerification {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  codeHash     String   @map("code_hash")
+  name         String
+  hotelName    String   @map("hotel_name")
+  passwordHash String   @map("password_hash")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("registration_verifications")
+}
+
 model HotelIntegration {
   id               String    @id @default(cuid())
   hotelId          String    @unique @map("hotel_id")
