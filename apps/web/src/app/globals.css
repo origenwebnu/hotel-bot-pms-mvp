@@ -92,3 +92,70 @@ input, select, textarea {
   border-radius: 8px;
   font-size: 0.875rem;
 }
+.info-banner {
+  background: rgba(37, 211, 102, 0.12);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  padding: 0.75rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+}
+.password-field {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.password-field input {
+  width: 100%;
+  padding-right: 2.75rem;
+}
+.password-field .toggle-btn {
+  position: absolute;
+  right: 0.5rem;
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  line-height: 1;
+  padding: 0.25rem;
+  opacity: 0.7;
+}
+.password-field .toggle-btn:hover {
+  opacity: 1;
+}
+.auth-form .code-input {
+  font-size: 1.5rem;
+  letter-spacing: 0.35em;
+  text-align: center;
+  font-weight: 600;
+}
+.auth-form .btn-secondary {
+  padding: 0.75rem;
+  background: var(--surface-hover);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-weight: 500;
+}
+.auth-form .btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.timer-text {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+.timer-text .expired {
+  color: var(--error);
+}
+.link-btn {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.link-btn:hover {
+  text-decoration: underline;
+}
