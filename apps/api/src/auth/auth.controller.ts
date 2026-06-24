@@ -1,6 +1,7 @@
-import { Controller, Post, Body } from '@nestjs/common';
+import { Controller, Post, Body, Get, UseGuards, Req } from '@nestjs/common';
 import { IsEmail, IsString, MinLength, Matches } from 'class-validator';
 import { AuthService } from './auth.service';
+import { JwtAuthGuard } from './jwt-auth.guard';
 
 class SendRegistrationCodeDto {
   @IsEmail({}, { message: 'Email inválido' })
@@ -67,5 +68,14 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.auth.login(dto.email, dto.password);
+  }
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  me(
+    @Req()
+    req: { user: { userId: string; role: string } },
+  ) {
+    return this.auth.getProfile(req.user.userId, req.user.role);
   }
 }

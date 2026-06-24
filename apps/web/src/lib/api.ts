@@ -1,36 +1,12 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '/api';
+import { request } from './api-core';
 
-function parseErrorMessage(body: unknown, fallback: string): string {
-  if (!body || typeof body !== 'object') return fallback;
-  const record = body as { message?: string | string[]; error?: string };
-  if (Array.isArray(record.message)) return record.message.join('. ');
-  if (typeof record.message === 'string' && record.message) return record.message;
-  if (typeof record.error === 'string' && record.error) return record.error;
-  return fallback;
-}
+export { saveAuthSession, clearAuthSession, getPostLoginPath } from './api-core';
 
-async function request<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
-  const token =
-    typeof window !== 'undefined' ? localStorage.getItem('token') : null;
-
-  const res = await fetch(`${API_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(parseErrorMessage(err, res.statusText || `Error ${res.status}`));
-  }
-
-  return res.json();
+export interface AuthResponse {
+  access_token: string;
+  role: string;
+  hotel_id: string | null;
+  name?: string;
 }
 
 export const api = {
@@ -59,7 +35,7 @@ export const api = {
     ),
 
   verifyRegistration: (data: { email: string; code: string }) =>
-    request<{ access_token: string; hotel_id: string }>('/auth/register/verify', {
+    request<AuthResponse>('/auth/register/verify', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -71,10 +47,20 @@ export const api = {
     ),
 
   login: (data: { email: string; password: string }) =>
-    request<{ access_token: string; hotel_id: string }>('/auth/login', {
+    request<AuthResponse>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  getProfile: () =>
+    request<{
+      id: string;
+      email: string;
+      name: string;
+      role: string;
+      hotel_id: string | null;
+      hotel_name?: string;
+    }>('/auth/me'),
 
   getHotel: () => request<Hotel>('/hotels/me'),
 

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, type Hotel, type IntegrationStatus } from '@/lib/api';
+import { api, type Hotel, type IntegrationStatus, clearAuthSession } from '@/lib/api';
 import { IntegrationsPanel } from '@/components/IntegrationsPanel';
 import { WhatsAppPanel } from '@/components/WhatsAppPanel';
 import { KnowledgePanel } from '@/components/KnowledgePanel';
@@ -19,8 +19,13 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
     if (!token) {
       router.push('/');
+      return;
+    }
+    if (role === 'super_admin') {
+      router.push('/super-admin');
       return;
     }
 
@@ -33,8 +38,7 @@ export default function DashboardPage() {
   }, [router]);
 
   function logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('hotel_id');
+    clearAuthSession();
     router.push('/');
   }
 

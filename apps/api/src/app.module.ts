@@ -10,6 +10,7 @@ import { WhatsAppModule } from './whatsapp/whatsapp.module';
 import { AuthModule } from './auth/auth.module';
 import { HotelsModule } from './hotels/hotels.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
+import { SuperAdminModule } from './super-admin/super-admin.module';
 import { HealthModule } from './health/health.module';
 import { QUEUE_NAMES } from '@hotel-bot/shared';
 
@@ -36,6 +37,7 @@ import { QUEUE_NAMES } from '@hotel-bot/shared';
     AuthModule,
     HotelsModule,
     KnowledgeModule,
+    SuperAdminModule,
     HealthModule,
   ],
 })

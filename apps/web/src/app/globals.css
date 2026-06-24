@@ -159,3 +159,299 @@ input, select, textarea {
 .link-btn:hover {
   text-decoration: underline;
 }
+
+/* Dashboard & Super Admin layout */
+.dashboard {
+  display: flex;
+  min-height: 100vh;
+}
+.dashboard .sidebar {
+  width: 260px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+.dashboard .sidebar-brand {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.dashboard .sidebar-brand span:first-child {
+  font-size: 1.75rem;
+}
+.dashboard .sidebar-brand strong {
+  display: block;
+  font-size: 1rem;
+}
+.dashboard .sidebar-brand small {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.dashboard nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  flex: 1;
+}
+.dashboard nav button {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+}
+.dashboard nav button.active,
+.dashboard nav button:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.dashboard .logout-btn {
+  padding: 0.75rem;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-muted);
+}
+.dashboard .main {
+  flex: 1;
+  padding: 2rem;
+  overflow-y: auto;
+}
+.dashboard .main-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+.dashboard h1 {
+  font-size: 1.75rem;
+}
+.dashboard .loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  color: var(--text-muted);
+}
+
+/* Super admin panels */
+.admin-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+}
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.stat-label {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+.stat-value {
+  font-size: 2rem;
+  line-height: 1.1;
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+}
+.panel h2 {
+  font-size: 1.1rem;
+  margin-bottom: 1rem;
+}
+.panel-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+.form-panel label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 1rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.form-panel input,
+.form-panel select {
+  padding: 0.75rem 1rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+}
+.muted {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  margin-bottom: 1rem;
+}
+.admin-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+.admin-table th,
+.admin-table td {
+  text-align: left;
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.admin-table th {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.admin-table td strong {
+  display: block;
+}
+.admin-table td small {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.pill {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.pill.ok {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--success);
+}
+.pill.off {
+  background: rgba(239, 68, 68, 0.12);
+  color: var(--error);
+}
+.badge {
+  padding: 0.35rem 0.75rem;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+.badge.ok {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--success);
+}
+.mini-badges {
+  display: flex;
+  gap: 0.35rem;
+}
+.mini-badges span {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  background: var(--surface-hover);
+  color: var(--text-muted);
+}
+.mini-badges span.on {
+  background: rgba(34, 197, 94, 0.15);
+  color: var(--success);
+}
+.btn-sm {
+  padding: 0.35rem 0.75rem;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 0.8rem;
+}
+.btn-primary {
+  padding: 0.75rem 1.25rem;
+  background: var(--accent);
+  color: #000;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+}
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+.btn-secondary {
+  padding: 0.75rem 1.25rem;
+  background: var(--surface-hover);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1rem;
+}
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.modal h3 {
+  margin-bottom: 0.5rem;
+}
+.modal label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+.modal input,
+.modal select {
+  padding: 0.75rem;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+}
+.modal-actions {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+.checkbox-label {
+  flex-direction: row !important;
+  align-items: center;
+  gap: 0.5rem !important;
+}
+.integration-row {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
