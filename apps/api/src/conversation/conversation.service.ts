@@ -108,14 +108,47 @@ export class ConversationService {
         return;
 
       case 'showing_rooms':
+        if (this.wantsNewBooking(text, intent)) {
+          await this.startBookingFlow(hotelId, session.id, phone);
+          return;
+        }
+        if (this.isGreetingOrReset(text)) {
+          await this.resetSession(session.id);
+          await this.whatsapp.sendText(
+            hotelId,
+            phone,
+            '¡Hola! 👋 Escribe *reservar* para buscar habitaciones disponibles.',
+          );
+          return;
+        }
         await this.handleTextRoomSelection(hotelId, session, text);
         return;
 
+      case 'room_selected':
+        if (this.wantsNewBooking(text, intent) || this.isGreetingOrReset(text)) {
+          await this.startBookingFlow(hotelId, session.id, phone);
+          return;
+        }
+        await this.whatsapp.sendText(
+          hotelId,
+          phone,
+          'Usa el botón *Reservar* en el mensaje de la habitación, o escribe *reservar* para empezar de nuevo.',
+        );
+        return;
+
       case 'collecting_guest_info':
+        if (this.wantsNewBooking(text, intent) || this.isGreetingOrReset(text)) {
+          await this.startBookingFlow(hotelId, session.id, phone);
+          return;
+        }
         await this.handleGuestInfo(hotelId, session, text);
         return;
 
       case 'awaiting_payment':
+        if (this.wantsNewBooking(text, intent) || this.isGreetingOrReset(text)) {
+          await this.startBookingFlow(hotelId, session.id, phone);
+          return;
+        }
         if (text.match(/pagar|pago|link|reintentar/i)) {
           await this.resendPaymentLink(hotelId, session);
         } else {
@@ -195,7 +228,7 @@ export class ConversationService {
       await this.whatsapp.sendText(
         hotelId,
         session.whatsappPhone,
-        'No encontré esa habitación. Selecciona de la lista o escribe el nombre exacto.',
+        'No encontré esa habitación. Escribe el nombre exacto (ej: *Suite Junior*) o *reservar* para empezar de nuevo.',
       );
       return;
     }
@@ -463,6 +496,52 @@ export class ConversationService {
       adults: session.adults ?? 2,
       children: session.children ?? 0,
     });
+  }
+
+  private wantsNewBooking(
+    text: string,
+    intent: { intent?: string },
+  ): boolean {
+    return (
+      intent.intent === 'book' ||
+      /reserv|habitaci|disponib|book/i.test(text)
+    );
+  }
+
+  private isGreetingOrReset(text: string): boolean {
+    const t = text.trim().toLowerCase();
+    return /^(hola|buenas|hey|menu|menú|inicio|cancelar|reiniciar|empezar|volver|salir)/i.test(
+      t,
+    );
+  }
+
+  private async resetSession(id: string) {
+    await this.prisma.conversationSession.update({
+      where: { id },
+      data: {
+        state: 'idle',
+        checkIn: null,
+        checkOut: null,
+        adults: null,
+        children: null,
+        selectedRoomTypeId: null,
+        reservationId: null,
+      },
+    });
+  }
+
+  private async startBookingFlow(
+    hotelId: string,
+    sessionId: string,
+    phone: string,
+  ) {
+    await this.resetSession(sessionId);
+    await this.updateSession(sessionId, { state: 'collecting_dates' });
+    await this.whatsapp.sendText(
+      hotelId,
+      phone,
+      '¡Con gusto te ayudo a reservar! 📅 ¿Para qué fechas necesitas la habitación? (ej: del 15 al 18 de julio)',
+    );
   }
 
   private extractText(message: WhatsAppInboundMessage): string {
