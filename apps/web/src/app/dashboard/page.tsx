@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api, type Hotel, type IntegrationStatus } from '@/lib/api';
 import { IntegrationsPanel } from '@/components/IntegrationsPanel';
+import { WhatsAppPanel } from '@/components/WhatsAppPanel';
 import { KnowledgePanel } from '@/components/KnowledgePanel';
 import { ChatSimulator } from '@/components/ChatSimulator';
 
@@ -84,6 +85,9 @@ export default function DashboardPage() {
             {tab === 'simulator' && 'Simulador de Chat'}
           </h1>
           <div className="status-badges">
+            <span className={`badge ${integration?.whatsapp_connected ? 'ok' : 'warn'}`}>
+              WhatsApp {integration?.whatsapp_connected ? '✓' : '○'}
+            </span>
             <span className={`badge ${integration?.pms_connected ? 'ok' : 'warn'}`}>
               PMS {integration?.pms_connected ? '✓' : '○'}
             </span>
@@ -94,10 +98,19 @@ export default function DashboardPage() {
         </header>
 
         {tab === 'integrations' && (
-          <IntegrationsPanel
-            integration={integration}
-            onUpdate={setIntegration}
-          />
+          <div className="integrations-stack">
+            <WhatsAppPanel
+              onConnectionChange={(connected) =>
+                setIntegration((prev) =>
+                  prev ? { ...prev, whatsapp_connected: connected } : prev,
+                )
+              }
+            />
+            <IntegrationsPanel
+              integration={integration}
+              onUpdate={setIntegration}
+            />
+          </div>
         )}
         {tab === 'knowledge' && <KnowledgePanel />}
         {tab === 'simulator' && <ChatSimulator />}
@@ -200,6 +213,11 @@ export default function DashboardPage() {
           justify-content: center;
           min-height: 100vh;
           color: var(--text-muted);
+        }
+        .integrations-stack {
+          display: flex;
+          flex-direction: column;
+          gap: 1.5rem;
         }
       `}</style>
     </div>

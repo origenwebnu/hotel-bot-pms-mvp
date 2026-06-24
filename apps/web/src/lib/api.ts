@@ -55,6 +55,19 @@ export const api = {
   validatePms: () =>
     request<{ valid: boolean }>('/hotels/me/integration/validate-pms'),
 
+  getWhatsApp: () => request<WhatsAppConfig>('/hotels/me/whatsapp'),
+
+  updateWhatsApp: (data: { phone_number_id?: string; access_token?: string }) =>
+    request<WhatsAppConfig>('/hotels/me/whatsapp', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  validateWhatsApp: () =>
+    request<{ valid: boolean }>('/hotels/me/whatsapp/validate', {
+      method: 'POST',
+    }),
+
   listKnowledge: () => request<KnowledgeDoc[]>('/hotels/me/knowledge'),
 
   createKnowledge: (data: { title: string; content: string }) =>
@@ -86,7 +99,19 @@ export interface IntegrationStatus {
   pms_connected: boolean;
   payment_provider: string | null;
   payment_connected: boolean;
+  whatsapp_connected: boolean;
+  whatsapp_phone_number_id: string | null;
+  whatsapp_has_token: boolean;
   last_validated_at: string | null;
+}
+
+export interface WhatsAppConfig {
+  phone_number_id: string | null;
+  connected: boolean;
+  has_token: boolean;
+  webhook_url: string;
+  verify_token_hint: string | null;
+  setup_steps: string[];
 }
 
 export interface KnowledgeDoc {
