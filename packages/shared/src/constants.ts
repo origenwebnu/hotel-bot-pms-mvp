@@ -12,6 +12,8 @@ export const WHATSAPP_BUTTON_IDS = {
   MENU_BOOK: 'btn_menu_book',
   MENU_FAQ: 'btn_menu_faq',
   MENU_RATES: 'btn_menu_rates',
+  PAY_RETRY: 'btn_pay_retry',
+  PAY_CHANGE: 'btn_pay_change',
 } as const;
 
 export const QUEUE_NAMES = {

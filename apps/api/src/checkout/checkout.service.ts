@@ -309,26 +309,12 @@ export class CheckoutService {
   }
 
   async processPaymentWebhook(payload: PaymentWebhookPayload) {
-    const reservationId = payload.metadata.reservation_id;
-    if (!reservationId) {
-      this.logger.warn('Webhook missing reservation_id in metadata');
-      return;
-    }
-
-    const reservation = await this.prisma.reservation.findUnique({
-      where: { id: reservationId },
-      include: {
-        hotel: {
-          select: {
-            name: true,
-            reservationRecommendations: true,
-          },
-        },
-      },
-    });
-
+    const reservation = await this.resolveReservationForWebhook(payload);
     if (!reservation) {
-      throw new NotFoundException('Reservation not found');
+      this.logger.warn(
+        `Webhook could not match reservation (tx=${payload.payment_id}, link=${payload.metadata.payment_link_id ?? 'n/a'})`,
+      );
+      return;
     }
 
     await this.prisma.paymentEvent.upsert({
@@ -360,11 +346,60 @@ export class CheckoutService {
       data: { paymentStatus: payload.status },
     });
 
+    const terminalStatuses = ['approved', 'declined', 'error', 'expired'] as const;
+    if (!terminalStatuses.includes(payload.status as (typeof terminalStatuses)[number])) {
+      return;
+    }
+
     if (payload.status === 'approved') {
       await this.confirmReservation(reservation, payload);
-    } else {
+      return;
+    }
+
+    if (payload.status === 'declined' || payload.status === 'error') {
+      await this.prisma.conversationSession.updateMany({
+        where: { id: reservation.whatsappSessionId },
+        data: { state: 'awaiting_payment', reservationId: reservation.id },
+      });
       await this.notifyPaymentOutcome(reservation, payload);
     }
+  }
+
+  private async resolveReservationForWebhook(payload: PaymentWebhookPayload) {
+    const include = {
+      hotel: {
+        select: {
+          name: true,
+          reservationRecommendations: true,
+        },
+      },
+    } as const;
+
+    const reservationId = payload.metadata.reservation_id;
+    if (reservationId) {
+      const byId = await this.prisma.reservation.findUnique({
+        where: { id: reservationId },
+        include,
+      });
+      if (byId) return byId;
+    }
+
+    const paymentLinkId = payload.metadata.payment_link_id;
+    if (paymentLinkId) {
+      const byPaymentId = await this.prisma.reservation.findFirst({
+        where: { paymentId: paymentLinkId },
+        include,
+      });
+      if (byPaymentId) return byPaymentId;
+
+      const byLinkUrl = await this.prisma.reservation.findFirst({
+        where: { paymentLink: { contains: `/l/${paymentLinkId}` } },
+        include,
+      });
+      if (byLinkUrl) return byLinkUrl;
+    }
+
+    return null;
   }
 
   private async confirmReservation(
@@ -429,11 +464,23 @@ export class CheckoutService {
     payload: PaymentWebhookPayload,
     extras?: { confirmationCode?: string; note?: string },
   ) {
-    if (!reservation.guestPhone || !reservation.paymentAccessToken) return;
+    if (!reservation.guestPhone) {
+      this.logger.warn(`No guest phone for reservation ${reservation.id}`);
+      return;
+    }
+
+    let accessToken = reservation.paymentAccessToken;
+    if (!accessToken) {
+      accessToken = this.generatePaymentAccessToken();
+      await this.prisma.reservation.update({
+        where: { id: reservation.id },
+        data: { paymentAccessToken: accessToken },
+      });
+    }
 
     const paymentPageUrl = buildPaymentPageUrl(
       reservation.id,
-      reservation.paymentAccessToken,
+      accessToken,
     );
     const guests = (reservation.adults ?? 0) + (reservation.children ?? 0);
     const guestName =
@@ -480,20 +527,29 @@ export class CheckoutService {
     }
 
     if (payload.status === 'declined' || payload.status === 'error') {
-      const retry = this.renderer.renderPaymentRetryPrompt(paymentPageUrl);
+      const retry = this.renderer.renderPaymentDeclinedActions({
+        guestName: reservation.guestFirstName ?? 'Huésped',
+        paymentPageUrl,
+      });
       try {
         await this.whatsapp.sendInteractive(
           reservation.hotelId,
           reservation.guestPhone,
           retry,
         );
-      } catch {
+      } catch (error) {
+        this.logger.warn(`Interactive declined message failed: ${error}`);
         await this.whatsapp.sendText(
           reservation.hotelId,
           reservation.guestPhone,
-          `Puedes intentar de nuevo aquí:\n${paymentPageUrl}`,
+          `❌ Tu pago no pudo completarse.\n\nTu habitación sigue reservada por ahora. Escribe *pagar* para intentar de nuevo o *menu* para cambiar la reserva.\n\n${paymentPageUrl}`,
         );
       }
+
+      await this.prisma.paymentEvent.updateMany({
+        where: { reservationId: reservation.id, externalId: payload.payment_id },
+        data: { processed: true },
+      });
     }
   }
 

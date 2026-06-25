@@ -1,4 +1,4 @@
-import { Controller, Post, Req, Headers, RawBodyRequest } from '@nestjs/common';
+import { Controller, Post, Req, Headers, RawBodyRequest, Logger } from '@nestjs/common';
 import { Request } from 'express';
 import { CheckoutService } from './checkout.service';
 import { WompiProvider } from './providers/wompi.provider';
@@ -6,6 +6,8 @@ import { StripeProvider } from './providers/stripe.provider';
 
 @Controller('webhooks')
 export class CheckoutController {
+  private readonly logger = new Logger(CheckoutController.name);
+
   constructor(
     private readonly checkout: CheckoutService,
     private readonly wompi: WompiProvider,
@@ -17,8 +19,12 @@ export class CheckoutController {
     @Req() req: RawBodyRequest<Request>,
     @Headers('x-event-checksum') checksum?: string,
   ) {
-    const payload = this.wompi.parseWebhook(req.body, checksum);
-    await this.checkout.enqueueWebhook(payload);
+    try {
+      const payload = this.wompi.parseWebhook(req.body, checksum);
+      await this.checkout.enqueueWebhook(payload);
+    } catch (error) {
+      this.logger.error(`Wompi webhook enqueue failed: ${error}`);
+    }
     return { received: true };
   }
 

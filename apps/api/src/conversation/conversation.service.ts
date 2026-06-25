@@ -352,6 +352,19 @@ export class ConversationService {
     if (buttonId === WHATSAPP_BUTTON_IDS.BACK_TO_ROOMS) {
       await this.updateSession(session.id, { state: 'showing_rooms' });
       await this.showAvailableRooms(hotelId, session.id, session.whatsappPhone);
+      return;
+    }
+
+    if (buttonId === WHATSAPP_BUTTON_IDS.PAY_RETRY) {
+      await this.updateSession(session.id, { state: 'awaiting_payment' });
+      await this.resendPaymentLink(hotelId, session);
+      return;
+    }
+
+    if (buttonId === WHATSAPP_BUTTON_IDS.PAY_CHANGE) {
+      await this.resetSession(session.id);
+      await this.startBookingFlow(hotelId, session.id, session.whatsappPhone);
+      return;
     }
   }
 
@@ -481,7 +494,27 @@ export class ConversationService {
     session: { id: string; whatsappPhone: string },
   ) {
     const fullSession = await this.getSession(session.id);
-    if (!fullSession.reservationId) {
+    let reservationId = fullSession.reservationId;
+
+    if (!reservationId) {
+      const pending = await this.prisma.reservation.findFirst({
+        where: {
+          hotelId,
+          guestPhone: session.whatsappPhone,
+          status: { in: ['hold', 'payment_pending'] },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+      reservationId = pending?.id ?? null;
+      if (reservationId) {
+        await this.updateSession(session.id, {
+          state: 'awaiting_payment',
+          reservationId,
+        });
+      }
+    }
+
+    if (!reservationId) {
       await this.whatsapp.sendText(
         hotelId,
         session.whatsappPhone,
@@ -491,7 +524,7 @@ export class ConversationService {
     }
 
     const reservation = await this.prisma.reservation.findUnique({
-      where: { id: fullSession.reservationId },
+      where: { id: reservationId },
     });
 
     if (!reservation) {

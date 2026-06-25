@@ -302,6 +302,40 @@ export class WhatsAppRendererService {
     return { type: 'text', text: { body } };
   }
 
+  renderPaymentDeclinedActions(data: {
+    guestName: string;
+    paymentPageUrl: string;
+  }): import('@hotel-bot/shared').WhatsAppButtonMessage {
+    return {
+      type: 'button',
+      body: {
+        text:
+          `Hola ${data.guestName}, no te preocupes 🙌\n\n` +
+          `Tu pago *no pudo completarse* (fue rechazado o cancelado). ` +
+          `La habitación sigue reservada *temporalmente* mientras tanto.\n\n` +
+          `¿Qué te gustaría hacer?`,
+      },
+      action: {
+        buttons: [
+          {
+            type: 'reply',
+            reply: {
+              id: WHATSAPP_BUTTON_IDS.PAY_RETRY,
+              title: 'Volver a pagar',
+            },
+          },
+          {
+            type: 'reply',
+            reply: {
+              id: WHATSAPP_BUTTON_IDS.PAY_CHANGE,
+              title: 'Cambiar reserva',
+            },
+          },
+        ],
+      },
+    };
+  }
+
   renderPaymentRetryPrompt(
     paymentPageUrl: string,
   ): import('@hotel-bot/shared').WhatsAppCtaUrlMessage {

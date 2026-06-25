@@ -87,7 +87,8 @@ export class WompiProvider {
     const transaction = event.data?.transaction;
     const status = this.mapStatus(transaction?.status);
     const txMetadata = (transaction?.metadata as Record<string, string>) ?? {};
-    const reference = transaction?.reference ?? transaction?.payment_link_id ?? '';
+    const paymentLinkId = extractPaymentLinkId(transaction);
+    const reference = transaction?.reference ?? '';
 
     let reservationId = txMetadata.reservation_id;
     if (!reservationId && reference.startsWith('res-')) {
@@ -96,12 +97,13 @@ export class WompiProvider {
 
     return {
       provider: 'wompi',
-      payment_id: transaction?.id ?? event.event?.id ?? 'unknown',
+      payment_id: transaction?.id ?? 'unknown',
       status,
       amount: (transaction?.amount_in_cents ?? 0) / 100,
       currency: transaction?.currency ?? 'COP',
       metadata: {
         ...txMetadata,
+        ...(paymentLinkId ? { payment_link_id: paymentLinkId } : {}),
         ...(reservationId ? { reservation_id: reservationId } : {}),
       },
       raw: body,
@@ -121,6 +123,23 @@ export class WompiProvider {
         return 'pending';
     }
   }
+}
+
+function extractPaymentLinkId(transaction?: {
+  payment_link_id?: string | null;
+  reference?: string;
+}): string | undefined {
+  if (!transaction) return undefined;
+  if (transaction.payment_link_id) {
+    return transaction.payment_link_id;
+  }
+  if (transaction.reference) {
+    const [first] = transaction.reference.split('_');
+    if (first && /^[A-Za-z0-9]{4,12}$/.test(first)) {
+      return first;
+    }
+  }
+  return undefined;
 }
 
 function buildWompiCheckoutUrl(linkId: string): string {
@@ -147,7 +166,7 @@ function resolveWompiApiBase(privateKey?: string): string {
 }
 
 interface WompiEvent {
-  event?: { id: string };
+  event?: string;
   data?: {
     transaction?: {
       id: string;
@@ -155,7 +174,7 @@ interface WompiEvent {
       amount_in_cents: number;
       currency: string;
       reference?: string;
-      payment_link_id?: string;
+      payment_link_id?: string | null;
       metadata?: Record<string, string>;
     };
   };
