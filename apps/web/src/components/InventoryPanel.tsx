@@ -3,19 +3,34 @@
 import { useEffect, useState } from 'react';
 import { api, type RoomType } from '@/lib/api';
 
+const emptyForm = {
+  name: '',
+  description: '',
+  price_per_night: '',
+  total_units: '1',
+  max_occupancy: '2',
+  photo_urls: '',
+};
+
+function roomToForm(room: RoomType) {
+  return {
+    name: room.name,
+    description: room.description ?? '',
+    price_per_night: String(room.price_per_night),
+    total_units: String(room.total_units),
+    max_occupancy: String(room.max_occupancy),
+    photo_urls: room.photo_urls.join('\n'),
+  };
+}
+
 export function InventoryPanel() {
   const [rooms, setRooms] = useState<RoomType[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    name: '',
-    description: '',
-    price_per_night: '',
-    total_units: '1',
-    max_occupancy: '2',
-    photo_urls: '',
-  });
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     loadRooms();
@@ -43,34 +58,59 @@ export function InventoryPanel() {
     }
   }
 
-  async function handleCreate(e: React.FormEvent) {
+  function cancelForm() {
+    setForm(emptyForm);
+    setShowCreateForm(false);
+    setEditingId(null);
+  }
+
+  function startCreate() {
+    cancelForm();
+    setShowCreateForm(true);
+  }
+
+  function startEdit(room: RoomType) {
+    setShowCreateForm(false);
+    setEditingId(room.id);
+    setForm(roomToForm(room));
+    setMessage('');
+  }
+
+  function parsePhotoUrls(value: string) {
+    return value
+      .split('\n')
+      .map((u) => u.trim())
+      .filter(Boolean);
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMessage('');
+    setSaving(true);
+
+    const payload = {
+      name: form.name,
+      description: form.description,
+      price_per_night: Number(form.price_per_night),
+      total_units: Number(form.total_units),
+      max_occupancy: Number(form.max_occupancy),
+      photo_urls: parsePhotoUrls(form.photo_urls),
+    };
+
     try {
-      await api.createInventory({
-        name: form.name,
-        description: form.description,
-        price_per_night: Number(form.price_per_night),
-        total_units: Number(form.total_units),
-        max_occupancy: Number(form.max_occupancy),
-        photo_urls: form.photo_urls
-          .split('\n')
-          .map((u) => u.trim())
-          .filter(Boolean),
-      });
-      setForm({
-        name: '',
-        description: '',
-        price_per_night: '',
-        total_units: '1',
-        max_occupancy: '2',
-        photo_urls: '',
-      });
-      setShowForm(false);
+      if (editingId) {
+        await api.updateInventory(editingId, payload);
+        setMessage('Habitación actualizada.');
+      } else {
+        await api.createInventory(payload);
+        setMessage('Habitación creada.');
+      }
+      cancelForm();
       await loadRooms();
-      setMessage('Habitación creada.');
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Error al crear');
+      setMessage(err instanceof Error ? err.message : 'Error al guardar');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -82,8 +122,11 @@ export function InventoryPanel() {
   async function removeRoom(id: string) {
     if (!confirm('¿Eliminar esta habitación?')) return;
     await api.deleteInventory(id);
+    if (editingId === id) cancelForm();
     await loadRooms();
   }
+
+  const showForm = showCreateForm || editingId !== null;
 
   if (loading) return <div className="panel">Cargando inventario...</div>;
 
@@ -102,8 +145,8 @@ export function InventoryPanel() {
             <button type="button" className="btn-secondary" onClick={seedDemo}>
               Cargar demo (3 habitaciones)
             </button>
-            <button type="button" className="btn-primary" onClick={() => setShowForm(!showForm)}>
-              {showForm ? 'Cancelar' : '+ Nueva habitación'}
+            <button type="button" className="btn-primary" onClick={() => (showCreateForm ? cancelForm() : startCreate())}>
+              {showCreateForm ? 'Cancelar' : '+ Nueva habitación'}
             </button>
           </div>
         </div>
@@ -116,8 +159,8 @@ export function InventoryPanel() {
       </div>
 
       {showForm && (
-        <form className="panel form-panel" onSubmit={handleCreate}>
-          <h3>Nueva habitación</h3>
+        <form className="panel form-panel" onSubmit={handleSubmit}>
+          <h3>{editingId ? 'Editar habitación' : 'Nueva habitación'}</h3>
           <label>
             Nombre
             <input required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -169,9 +212,14 @@ export function InventoryPanel() {
               onChange={(e) => setForm({ ...form, photo_urls: e.target.value })}
             />
           </label>
-          <button type="submit" className="btn-primary">
-            Guardar habitación
-          </button>
+          <div className="form-actions">
+            <button type="submit" className="btn-primary" disabled={saving}>
+              {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Guardar habitación'}
+            </button>
+            <button type="button" className="btn-secondary" onClick={cancelForm}>
+              Cancelar
+            </button>
+          </div>
         </form>
       )}
 
@@ -181,7 +229,7 @@ export function InventoryPanel() {
         ) : (
           <div className="room-grid">
             {rooms.map((room) => (
-              <article key={room.id} className="room-card">
+              <article key={room.id} className={`room-card ${editingId === room.id ? 'editing' : ''}`}>
                 {room.photo_urls[0] && (
                   <img src={room.photo_urls[0]} alt={room.name} className="room-thumb" />
                 )}
@@ -198,6 +246,9 @@ export function InventoryPanel() {
                     <span className={`pill ${room.is_active ? 'ok' : 'off'}`}>
                       {room.is_active ? 'Activa' : 'Inactiva'}
                     </span>
+                    <button type="button" className="btn-sm" onClick={() => startEdit(room)}>
+                      Editar
+                    </button>
                     <button type="button" className="btn-sm" onClick={() => toggleActive(room)}>
                       {room.is_active ? 'Desactivar' : 'Activar'}
                     </button>
@@ -229,6 +280,10 @@ export function InventoryPanel() {
           overflow: hidden;
           background: var(--bg);
         }
+        .room-card.editing {
+          border-color: var(--accent);
+          box-shadow: 0 0 0 1px var(--accent);
+        }
         .room-thumb {
           width: 100%;
           height: 160px;
@@ -246,6 +301,11 @@ export function InventoryPanel() {
           align-items: center;
           flex-wrap: wrap;
           margin-top: 0.5rem;
+        }
+        .form-actions {
+          display: flex;
+          gap: 0.75rem;
+          flex-wrap: wrap;
         }
         textarea {
           padding: 0.75rem;
