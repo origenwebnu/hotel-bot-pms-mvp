@@ -1,4 +1,9 @@
 import { request } from './api-core';
+import type {
+  ReservationHistoryResponse,
+  ReservationOutcome,
+  ReservationStats,
+} from './api';
 
 export const superAdminApi = {
   getStats: () =>
@@ -103,6 +108,41 @@ export const superAdminApi = {
       method: 'PATCH',
       body: JSON.stringify({ reset_trial: true }),
     }),
+
+  getHotelReservationStats: (
+    hotelId: string,
+    params?: { from?: string; to?: string },
+  ) => {
+    const query = new URLSearchParams();
+    if (params?.from) query.set('from', params.from);
+    if (params?.to) query.set('to', params.to);
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return request<ReservationStats>(
+      `/super-admin/hotels/${hotelId}/reservations/stats${suffix}`,
+    );
+  },
+
+  listHotelReservations: (
+    hotelId: string,
+    params?: {
+      outcome?: ReservationOutcome;
+      from?: string;
+      to?: string;
+      page?: number;
+      limit?: number;
+    },
+  ) => {
+    const query = new URLSearchParams();
+    if (params?.outcome) query.set('outcome', params.outcome);
+    if (params?.from) query.set('from', params.from);
+    if (params?.to) query.set('to', params.to);
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.limit) query.set('limit', String(params.limit));
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return request<ReservationHistoryResponse>(
+      `/super-admin/hotels/${hotelId}/reservations${suffix}`,
+    );
+  },
 };
 
 export interface PlatformStats {

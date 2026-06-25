@@ -6,12 +6,18 @@ import {
   ReservationHoldService,
 } from './reservation-hold.service';
 import { CoreIntegratorModule } from '../core-integrator/core-integrator.module';
+import { ReservationsService } from './reservations.service';
+import { ReservationsController } from './reservations.controller';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
   imports: [
     BullModule.registerQueue({ name: QUEUE_NAMES.RESERVATION_HOLDS }),
     CoreIntegratorModule,
+    AuthModule,
   ],
-  providers: [ReservationHoldService, ReservationHoldProcessor],
+  controllers: [ReservationsController],
+  providers: [ReservationHoldService, ReservationHoldProcessor, ReservationsService],
+  exports: [ReservationsService],
 })
 export class ReservationsModule {}

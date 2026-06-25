@@ -11,8 +11,9 @@ import {
   type SubscriptionPlan,
 } from '@/lib/super-admin-api';
 import { clearAuthSession } from '@/lib/api-core';
+import { SuperAdminReservationsPanel } from '@/components/SuperAdminReservationsPanel';
 
-type Tab = 'overview' | 'hotels' | 'plans' | 'users' | 'admins' | 'settings';
+type Tab = 'overview' | 'hotels' | 'plans' | 'reservations' | 'users' | 'admins' | 'settings';
 
 export default function SuperAdminPage() {
   const router = useRouter();
@@ -50,6 +51,8 @@ export default function SuperAdminPage() {
         setHotels(await superAdminApi.listHotels());
       } else if (activeTab === 'plans') {
         setPlans(await superAdminApi.listPlans());
+      } else if (activeTab === 'reservations') {
+        setHotels(await superAdminApi.listHotels());
       } else if (activeTab === 'users') {
         setUsers(await superAdminApi.listUsers());
       } else if (activeTab === 'admins') {
@@ -105,6 +108,12 @@ export default function SuperAdminPage() {
             💳 Planes
           </button>
           <button
+            className={tab === 'reservations' ? 'active' : ''}
+            onClick={() => setTab('reservations')}
+          >
+            📋 Reservas
+          </button>
+          <button
             className={tab === 'users' ? 'active' : ''}
             onClick={() => setTab('users')}
           >
@@ -137,6 +146,7 @@ export default function SuperAdminPage() {
             {tab === 'overview' && 'Resumen de la plataforma'}
             {tab === 'hotels' && 'Gestión de hoteles'}
             {tab === 'plans' && 'Planes de suscripción'}
+            {tab === 'reservations' && 'Historial de reservas'}
             {tab === 'users' && 'Usuarios de hoteles'}
             {tab === 'admins' && 'Super administradores'}
             {tab === 'settings' && 'Parametrización global'}
@@ -156,6 +166,7 @@ export default function SuperAdminPage() {
         {tab === 'plans' && (
           <PlansPanel plans={plans} onRefresh={() => loadData('plans')} />
         )}
+        {tab === 'reservations' && <SuperAdminReservationsPanel hotels={hotels} />}
         {tab === 'users' && (
           <UsersPanel users={users} onRefresh={() => loadData('users')} />
         )}

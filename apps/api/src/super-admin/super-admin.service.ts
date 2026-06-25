@@ -8,6 +8,8 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionPlanService } from '../subscription/subscription-plan.service';
+import { ReservationsService } from '../reservations/reservations.service';
+import type { ReservationOutcome } from '../reservations/reservation-outcome';
 
 const DEFAULT_SETTINGS = [
   { key: 'platform_name', value: 'BookiChat' },
@@ -27,6 +29,7 @@ export class SuperAdminService {
     private readonly prisma: PrismaService,
     private readonly subscription: SubscriptionService,
     private readonly subscriptionPlans: SubscriptionPlanService,
+    private readonly reservations: ReservationsService,
   ) {}
 
   async getStats() {
@@ -460,5 +463,25 @@ export class SuperAdminService {
 
   resetHotelTrial(hotelId: string) {
     return this.subscription.resetTrialForHotel(hotelId);
+  }
+
+  listHotelReservations(
+    hotelId: string,
+    filters: {
+      outcome?: ReservationOutcome;
+      from?: string;
+      to?: string;
+      page?: number;
+      limit?: number;
+    },
+  ) {
+    return this.reservations.listForHotel(hotelId, filters);
+  }
+
+  getHotelReservationStats(
+    hotelId: string,
+    filters: { from?: string; to?: string },
+  ) {
+    return this.reservations.getStatsForHotel(hotelId, filters);
   }
 }
