@@ -64,6 +64,8 @@ export const api = {
 
   getHotel: () => request<Hotel>('/hotels/me'),
 
+  getSubscription: () => request<HotelSubscription>('/hotels/me/subscription'),
+
   getIntegration: () => request<IntegrationStatus>('/hotels/me/integration'),
 
   getPaymentConfig: () => request<PaymentConfig>('/hotels/me/payment-config'),
@@ -202,6 +204,22 @@ export interface Hotel {
   slug: string;
   currency: string;
   integration?: IntegrationStatus;
+}
+
+export interface HotelSubscription {
+  status: 'trial' | 'active' | 'quota_reached' | 'trial_expired' | 'suspended';
+  mode: 'trial' | 'plan';
+  used: number;
+  limit: number;
+  remaining: number;
+  trial_ends_at: string | null;
+  trial_days_left: number | null;
+  plan_id: string | null;
+  plan_name: string | null;
+  plan_price_monthly: number | null;
+  plan_currency: string | null;
+  period_month: string | null;
+  can_create_reservations: boolean;
 }
 
 export interface IntegrationStatus {

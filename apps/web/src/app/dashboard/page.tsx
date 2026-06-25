@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api, type Hotel, type IntegrationStatus, clearAuthSession } from '@/lib/api';
+import { api, type Hotel, type IntegrationStatus, type HotelSubscription, clearAuthSession } from '@/lib/api';
 import { IntegrationsPanel } from '@/components/IntegrationsPanel';
 import { WhatsAppPanel } from '@/components/WhatsAppPanel';
 import { KnowledgePanel } from '@/components/KnowledgePanel';
@@ -18,6 +18,7 @@ export default function DashboardPage() {
   const [tab, setTab] = useState<Tab>('integrations');
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [integration, setIntegration] = useState<IntegrationStatus | null>(null);
+  const [subscription, setSubscription] = useState<HotelSubscription | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -31,10 +32,11 @@ export default function DashboardPage() {
       return;
     }
 
-    Promise.all([api.getHotel(), api.getIntegration()])
-      .then(([h, i]) => {
+    Promise.all([api.getHotel(), api.getIntegration(), api.getSubscription()])
+      .then(([h, i, s]) => {
         setHotel(h);
         setIntegration(i);
+        setSubscription(s);
       })
       .catch(() => router.push('/'));
   }, [router]);
@@ -116,6 +118,8 @@ export default function DashboardPage() {
             </span>
           </div>
         </header>
+
+        {subscription && <SubscriptionBanner subscription={subscription} />}
 
         {tab === 'integrations' && (
           <div className="integrations-stack">
@@ -241,7 +245,98 @@ export default function DashboardPage() {
           flex-direction: column;
           gap: 1.5rem;
         }
+        .subscription-banner {
+          margin-bottom: 1.5rem;
+          padding: 1rem 1.25rem;
+          border-radius: 10px;
+          border: 1px solid var(--border);
+          background: var(--surface);
+        }
+        .subscription-banner.warn {
+          border-color: rgba(245, 158, 11, 0.4);
+          background: rgba(245, 158, 11, 0.08);
+        }
+        .subscription-banner.danger {
+          border-color: rgba(239, 68, 68, 0.4);
+          background: rgba(239, 68, 68, 0.08);
+        }
+        .subscription-banner.ok {
+          border-color: rgba(34, 197, 94, 0.35);
+          background: rgba(34, 197, 94, 0.08);
+        }
+        .subscription-banner strong {
+          display: block;
+          margin-bottom: 0.35rem;
+        }
+        .subscription-banner small {
+          color: var(--text-muted);
+        }
       `}</style>
     </div>
   );
+}
+
+function SubscriptionBanner({ subscription }: { subscription: HotelSubscription }) {
+  const formatCop = (amount: number) =>
+    new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency: 'COP',
+      maximumFractionDigits: 0,
+    }).format(amount);
+
+  if (subscription.status === 'trial') {
+    return (
+      <div className="subscription-banner ok">
+        <strong>Periodo de prueba activo</strong>
+        <small>
+          {subscription.used}/{subscription.limit} reservas usadas
+          {subscription.trial_days_left != null &&
+            ` · ${subscription.trial_days_left} día(s) restantes`}
+        </small>
+      </div>
+    );
+  }
+
+  if (subscription.status === 'active' && subscription.plan_name) {
+    return (
+      <div className="subscription-banner ok">
+        <strong>
+          Plan {subscription.plan_name}
+          {subscription.plan_price_monthly != null &&
+            ` — ${formatCop(subscription.plan_price_monthly)}/mes`}
+        </strong>
+        <small>
+          {subscription.used}/{subscription.limit} reservas este mes
+          {subscription.period_month && ` (${subscription.period_month})`}
+        </small>
+      </div>
+    );
+  }
+
+  if (subscription.status === 'quota_reached') {
+    return (
+      <div className="subscription-banner danger">
+        <strong>Límite mensual alcanzado</strong>
+        <small>
+          Consumiste las {subscription.limit} reservas de tu plan este mes. Contacta a
+          BookiChat para actualizar a un plan superior. Las nuevas reservas por WhatsApp
+          están pausadas.
+        </small>
+      </div>
+    );
+  }
+
+  if (subscription.status === 'trial_expired') {
+    return (
+      <div className="subscription-banner danger">
+        <strong>Periodo de prueba finalizado</strong>
+        <small>
+          Elige un plan para seguir recibiendo reservas por WhatsApp. Contacta a soporte
+          BookiChat para activar tu plan (pagos en línea próximamente).
+        </small>
+      </div>
+    );
+  }
+
+  return null;
 }

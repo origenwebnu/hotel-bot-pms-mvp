@@ -138,6 +138,128 @@ export class EmailService {
     return 'No se pudo enviar el email. Ejecuta en el servidor: bash infra/digitalocean/test-smtp.sh';
   }
 
+  private dashboardUrl(): string {
+    return (process.env.APP_URL ?? 'https://app.bookichat.com').replace(/\/$/, '');
+  }
+
+  async sendTrialQuotaReached(
+    email: string,
+    hotelName: string,
+    reservationLimit: number,
+  ): Promise<void> {
+    const dashboard = this.dashboardUrl();
+    const subject = 'Periodo de prueba agotado — BookiChat';
+    const text = [
+      `Hola,`,
+      ``,
+      `El hotel "${hotelName}" alcanzó el límite de ${reservationLimit} reservas efectivas de su periodo de prueba en BookiChat.`,
+      ``,
+      `Para seguir recibiendo reservas por WhatsApp, ingresa a tu panel y elige un plan:`,
+      `${dashboard}`,
+      ``,
+      `— Equipo BookiChat`,
+    ].join('\n');
+
+    const html = `
+      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#1a2332">
+        <h2 style="color:#25d366">BookiChat</h2>
+        <p>El hotel <strong>${this.escapeHtml(hotelName)}</strong> consumió las <strong>${reservationLimit}</strong> reservas de prueba.</p>
+        <p>Para continuar operando, elige un plan en tu panel:</p>
+        <p><a href="${dashboard}" style="display:inline-block;background:#25d366;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Ir al panel</a></p>
+      </div>`;
+
+    await this.sendOptional(email, subject, text, html, 'trial quota');
+  }
+
+  async sendTrialExpired(
+    email: string,
+    hotelName: string,
+    reason: 'time' | 'quota',
+  ): Promise<void> {
+    const dashboard = this.dashboardUrl();
+    const reasonText =
+      reason === 'time'
+        ? 'Los 15 días de prueba finalizaron.'
+        : 'Se alcanzó el límite de reservas de prueba.';
+    const subject = 'Tu periodo de prueba terminó — BookiChat';
+    const text = [
+      `Hola,`,
+      ``,
+      `${reasonText}`,
+      `El hotel "${hotelName}" debe elegir un plan para seguir recibiendo reservas.`,
+      ``,
+      `Ingresa a: ${dashboard}`,
+      ``,
+      `— Equipo BookiChat`,
+    ].join('\n');
+
+    const html = `
+      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#1a2332">
+        <h2 style="color:#25d366">BookiChat</h2>
+        <p>${this.escapeHtml(reasonText)}</p>
+        <p>El hotel <strong>${this.escapeHtml(hotelName)}</strong> necesita un plan activo para continuar.</p>
+        <p><a href="${dashboard}" style="display:inline-block;background:#25d366;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Elegir plan</a></p>
+      </div>`;
+
+    await this.sendOptional(email, subject, text, html, 'trial expired');
+  }
+
+  async sendMonthlyQuotaReached(
+    email: string,
+    hotelName: string,
+    planName: string,
+    limit: number,
+  ): Promise<void> {
+    const dashboard = this.dashboardUrl();
+    const subject = 'Límite mensual de reservas alcanzado — BookiChat';
+    const text = [
+      `Hola,`,
+      ``,
+      `El hotel "${hotelName}" alcanzó las ${limit} reservas incluidas en su plan "${planName}" este mes.`,
+      ``,
+      `Las nuevas reservas por WhatsApp están pausadas hasta que actualices a un plan superior.`,
+      `Ingresa a: ${dashboard}`,
+      ``,
+      `— Equipo BookiChat`,
+    ].join('\n');
+
+    const html = `
+      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#1a2332">
+        <h2 style="color:#25d366">BookiChat</h2>
+        <p>El hotel <strong>${this.escapeHtml(hotelName)}</strong> consumió las <strong>${limit}</strong> reservas de su plan <strong>${this.escapeHtml(planName)}</strong> este mes.</p>
+        <p>Actualiza a un plan superior para seguir recibiendo reservas:</p>
+        <p><a href="${dashboard}" style="display:inline-block;background:#25d366;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Actualizar plan</a></p>
+      </div>`;
+
+    await this.sendOptional(email, subject, text, html, 'monthly quota');
+  }
+
+  private async sendOptional(
+    to: string,
+    subject: string,
+    text: string,
+    html: string,
+    label: string,
+  ): Promise<void> {
+    if (!this.isConfigured()) {
+      this.logger.warn(`SMTP no configurado — email omitido (${label}) para ${to}`);
+      return;
+    }
+    try {
+      const transporter = this.getTransporter();
+      await transporter.sendMail({
+        from: this.getFromAddress(),
+        to,
+        subject,
+        text,
+        html,
+      });
+      this.logger.log(`Email ${label} enviado a ${to}`);
+    } catch (err) {
+      this.logSmtpError(err);
+    }
+  }
+
   private escapeHtml(value: string): string {
     return value
       .replace(/&/g, '&amp;')
