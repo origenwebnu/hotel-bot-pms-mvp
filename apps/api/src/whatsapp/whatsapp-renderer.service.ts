@@ -302,6 +302,56 @@ export class WhatsAppRendererService {
     return { type: 'text', text: { body } };
   }
 
+  renderResumeBookingOffer(data: {
+    roomName: string;
+    checkIn: string;
+    checkOut: string;
+    guests: number;
+    amount: number;
+    currency: string;
+    paymentStatus?: string | null;
+    holdExpired: boolean;
+  }): import('@hotel-bot/shared').WhatsAppButtonMessage {
+    const nights = this.estimateNights(data.checkIn, data.checkOut);
+    const statusNote = data.holdExpired
+      ? '⏱ El tiempo de pago anterior expiró, pero puedo *retomar* la misma reserva si aún hay disponibilidad.'
+      : data.paymentStatus === 'declined' || data.paymentStatus === 'error'
+        ? '💳 Tu último intento de pago no se completó.'
+        : '💳 Tienes una reserva pendiente de pago.';
+
+    return {
+      type: 'button',
+      body: {
+        text:
+          `Hola de nuevo 👋 Encontré tu reserva reciente:\n\n` +
+          `🏠 *${data.roomName}*\n` +
+          `📅 ${formatDisplayDate(data.checkIn)} → ${formatDisplayDate(data.checkOut)} (${nights} noche${nights > 1 ? 's' : ''})\n` +
+          `👥 ${data.guests} huésped${data.guests > 1 ? 'es' : ''}\n` +
+          `💰 ${data.currency} ${data.amount.toLocaleString('es-CO')}\n\n` +
+          `${statusNote}\n\n` +
+          `¿Qué prefieres hacer?`,
+      },
+      action: {
+        buttons: [
+          {
+            type: 'reply',
+            reply: {
+              id: WHATSAPP_BUTTON_IDS.RESUME_BOOKING,
+              title: 'Retomar reserva',
+            },
+          },
+          {
+            type: 'reply',
+            reply: {
+              id: WHATSAPP_BUTTON_IDS.NEW_BOOKING,
+              title: 'Reserva nueva',
+            },
+          },
+        ],
+      },
+    };
+  }
+
   renderPaymentDeclinedActions(data: {
     guestName: string;
     paymentPageUrl: string;

@@ -3,6 +3,7 @@ export const TOTAL_RESPONSE_TIMEOUT_MS = 3500;
 export const KNOWLEDGE_INDEX_TIMEOUT_MS = 30000;
 export const DEFAULT_ROOM_HOLD_TTL_MINUTES = 30;
 export const DEFAULT_DISCOUNT_OFFER_MINUTES = 60;
+export const DEFAULT_RESERVATION_RESUME_HOURS = 24;
 export const MAX_LIST_MESSAGE_ROWS = 10;
 
 export const WHATSAPP_BUTTON_IDS = {
@@ -14,6 +15,8 @@ export const WHATSAPP_BUTTON_IDS = {
   MENU_RATES: 'btn_menu_rates',
   PAY_RETRY: 'btn_pay_retry',
   PAY_CHANGE: 'btn_pay_change',
+  RESUME_BOOKING: 'btn_resume_booking',
+  NEW_BOOKING: 'btn_new_booking',
 } as const;
 
 export const QUEUE_NAMES = {

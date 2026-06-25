@@ -4,6 +4,7 @@ import { Queue } from 'bullmq';
 import {
   DEFAULT_ROOM_HOLD_TTL_MINUTES,
   DEFAULT_DISCOUNT_OFFER_MINUTES,
+  DEFAULT_RESERVATION_RESUME_HOURS,
   JOB_NAMES,
   QUEUE_NAMES,
   WHATSAPP_BUTTON_IDS,
@@ -68,6 +69,9 @@ export class ConversationService {
         if (this.isPriceSensitivityQuery(text, intent)) {
           if (await this.tryOfferDiscount(hotelId, session.id, phone, text, intent)) return;
         }
+        if (this.wantsNewBooking(text, intent) && !this.isPriceSensitivityQuery(text, intent)) {
+          if (await this.maybeOfferResumeBooking(hotelId, session.id, phone)) return;
+        }
         if (this.shouldStartBooking(text, intent) && !this.isPriceSensitivityQuery(text, intent)) {
           if (await this.advanceBookingFlow(hotelId, session.id, phone, text, intent)) {
             return;
@@ -119,7 +123,8 @@ export class ConversationService {
           if (await this.tryOfferDiscount(hotelId, session.id, phone, text, intent)) return;
         }
         if (this.wantsNewBooking(text, intent)) {
-          await this.startBookingFlow(hotelId, session.id, phone, text, intent);
+          if (await this.maybeOfferResumeBooking(hotelId, session.id, phone)) return;
+          await this.startFreshBooking(hotelId, session.id, phone, text, intent);
           return;
         }
         await this.handleTextRoomSelection(hotelId, session, text);
@@ -134,7 +139,8 @@ export class ConversationService {
           if (await this.tryOfferDiscount(hotelId, session.id, phone, text, intent)) return;
         }
         if (this.wantsNewBooking(text, intent)) {
-          await this.startBookingFlow(hotelId, session.id, phone, text, intent);
+          if (await this.maybeOfferResumeBooking(hotelId, session.id, phone)) return;
+          await this.startFreshBooking(hotelId, session.id, phone, text, intent);
           return;
         }
         await this.whatsapp.sendText(
@@ -150,10 +156,33 @@ export class ConversationService {
           return;
         }
         if (this.wantsNewBooking(text, intent)) {
-          await this.startBookingFlow(hotelId, session.id, phone, text, intent);
+          if (await this.maybeOfferResumeBooking(hotelId, session.id, phone)) return;
+          await this.startFreshBooking(hotelId, session.id, phone, text, intent);
           return;
         }
         await this.handleGuestInfo(hotelId, session, text);
+        return;
+
+        return;
+
+      case 'resume_offer_pending':
+        if (this.wantsSessionReset(text)) {
+          await this.returnToWelcomeMenu(hotelId, session.id, phone);
+          return;
+        }
+        if (/retom|continu|misma|volver a pagar|pagar/i.test(text)) {
+          await this.resumeRecentReservation(hotelId, session.id, phone);
+          return;
+        }
+        if (/nueva|otra|cambiar|desde cero|empezar/i.test(text)) {
+          await this.startFreshBooking(hotelId, session.id, phone, text, intent);
+          return;
+        }
+        await this.whatsapp.sendText(
+          hotelId,
+          phone,
+          'Usa los botones *Retomar reserva* o *Reserva nueva*, o escribe *menu* para volver al inicio.',
+        );
         return;
 
       case 'awaiting_payment':
@@ -165,7 +194,8 @@ export class ConversationService {
           if (await this.tryOfferDiscount(hotelId, session.id, phone, text, intent)) return;
         }
         if (this.wantsNewBooking(text, intent)) {
-          await this.startBookingFlow(hotelId, session.id, phone, text, intent);
+          if (await this.maybeOfferResumeBooking(hotelId, session.id, phone)) return;
+          await this.startFreshBooking(hotelId, session.id, phone, text, intent);
           return;
         }
         if (text.match(/pagar|pago|link|reintentar/i)) {
@@ -362,8 +392,17 @@ export class ConversationService {
     }
 
     if (buttonId === WHATSAPP_BUTTON_IDS.PAY_CHANGE) {
-      await this.resetSession(session.id);
-      await this.startBookingFlow(hotelId, session.id, session.whatsappPhone);
+      await this.startFreshBooking(hotelId, session.id, session.whatsappPhone);
+      return;
+    }
+
+    if (buttonId === WHATSAPP_BUTTON_IDS.RESUME_BOOKING) {
+      await this.resumeRecentReservation(hotelId, session.id, session.whatsappPhone);
+      return;
+    }
+
+    if (buttonId === WHATSAPP_BUTTON_IDS.NEW_BOOKING) {
+      await this.startFreshBooking(hotelId, session.id, session.whatsappPhone);
       return;
     }
   }
@@ -546,12 +585,7 @@ export class ConversationService {
     }
 
     if (reservation.holdExpiresAt && reservation.holdExpiresAt < new Date()) {
-      await this.whatsapp.sendText(
-        hotelId,
-        session.whatsappPhone,
-        '⏱ El tiempo de pago expiró y la habitación fue liberada. Escribe *reservar* para buscar disponibilidad de nuevo.',
-      );
-      await this.updateSession(session.id, { state: 'idle' });
+      await this.refreshReservationHold(hotelId, session, reservation);
       return;
     }
 
@@ -1216,6 +1250,216 @@ export class ConversationService {
     );
   }
 
+  private getResumeWindowHours(): number {
+    return parseInt(
+      process.env.RESERVATION_RESUME_HOURS ?? String(DEFAULT_RESERVATION_RESUME_HOURS),
+      10,
+    );
+  }
+
+  private async findRecentIncompleteReservation(hotelId: string, phone: string) {
+    const since = new Date(Date.now() - this.getResumeWindowHours() * 60 * 60 * 1000);
+    return this.prisma.reservation.findFirst({
+      where: {
+        hotelId,
+        guestPhone: phone,
+        createdAt: { gte: since },
+        status: { in: ['hold', 'payment_pending'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  private isHoldExpired(reservation: { holdExpiresAt: Date | null }): boolean {
+    return !reservation.holdExpiresAt || reservation.holdExpiresAt < new Date();
+  }
+
+  private async maybeOfferResumeBooking(
+    hotelId: string,
+    sessionId: string,
+    phone: string,
+  ): Promise<boolean> {
+    const reservation = await this.findRecentIncompleteReservation(hotelId, phone);
+    if (!reservation?.checkIn || !reservation.checkOut || !reservation.roomTypeId) {
+      return false;
+    }
+
+    const guests = (reservation.adults ?? 0) + (reservation.children ?? 0);
+    const msg = this.renderer.renderResumeBookingOffer({
+      roomName: reservation.roomName ?? 'Habitación',
+      checkIn: reservation.checkIn,
+      checkOut: reservation.checkOut,
+      guests: guests || 2,
+      amount: reservation.totalAmount ?? 0,
+      currency: reservation.currency ?? 'COP',
+      paymentStatus: reservation.paymentStatus,
+      holdExpired: this.isHoldExpired(reservation),
+    });
+
+    await this.updateSession(sessionId, {
+      state: 'resume_offer_pending',
+      checkIn: reservation.checkIn,
+      checkOut: reservation.checkOut,
+      adults: reservation.adults ?? undefined,
+      children: reservation.children ?? undefined,
+      selectedRoomTypeId: reservation.roomTypeId,
+      reservationId: reservation.id,
+    });
+
+    await this.whatsapp.sendInteractive(hotelId, phone, msg);
+    return true;
+  }
+
+  private async resumeRecentReservation(
+    hotelId: string,
+    sessionId: string,
+    phone: string,
+  ) {
+    const session = await this.getSession(sessionId);
+    let reservation = session.reservationId
+      ? await this.prisma.reservation.findUnique({ where: { id: session.reservationId } })
+      : null;
+
+    if (!reservation) {
+      reservation = await this.findRecentIncompleteReservation(hotelId, phone);
+    }
+
+    if (!reservation?.roomTypeId || !reservation.checkIn || !reservation.checkOut) {
+      await this.whatsapp.sendText(
+        hotelId,
+        phone,
+        'No encontré una reserva reciente para retomar. Escribe *reservar* para empezar de nuevo.',
+      );
+      return;
+    }
+
+    await this.updateSession(sessionId, {
+      state: 'awaiting_payment',
+      checkIn: reservation.checkIn,
+      checkOut: reservation.checkOut,
+      adults: reservation.adults ?? undefined,
+      children: reservation.children ?? undefined,
+      selectedRoomTypeId: reservation.roomTypeId,
+      reservationId: reservation.id,
+    });
+
+    if (this.isHoldExpired(reservation)) {
+      await this.refreshReservationHold(
+        hotelId,
+        { id: sessionId, whatsappPhone: phone },
+        reservation,
+      );
+      return;
+    }
+
+    const holdTtl = parseInt(
+      process.env.ROOM_HOLD_TTL_MINUTES ?? String(DEFAULT_ROOM_HOLD_TTL_MINUTES),
+      10,
+    );
+    await this.sendPaymentSummary(hotelId, phone, reservation, holdTtl);
+  }
+
+  private async refreshReservationHold(
+    hotelId: string,
+    session: { id: string; whatsappPhone: string },
+    reservation: {
+      id: string;
+      idempotencyKey: string;
+      roomTypeId: string | null;
+      roomName: string | null;
+      checkIn: string | null;
+      checkOut: string | null;
+      adults: number | null;
+      children: number | null;
+    },
+  ) {
+    if (!reservation.roomTypeId || !reservation.checkIn || !reservation.checkOut) {
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        'No pude retomar la reserva (faltan datos). Escribe *reservar* para empezar de nuevo.',
+      );
+      return;
+    }
+
+    const holdTtl = parseInt(
+      process.env.ROOM_HOLD_TTL_MINUTES ?? String(DEFAULT_ROOM_HOLD_TTL_MINUTES),
+      10,
+    );
+
+    try {
+      const hold = await this.pms.holdRoom(hotelId, {
+        room_type_id: reservation.roomTypeId,
+        check_in: reservation.checkIn,
+        check_out: reservation.checkOut,
+        adults: reservation.adults ?? 2,
+        children: reservation.children ?? 0,
+        hold_ttl_minutes: holdTtl,
+        idempotency_key: reservation.idempotencyKey,
+      });
+
+      const updated = await this.prisma.reservation.update({
+        where: { id: reservation.id },
+        data: {
+          status: 'hold',
+          holdExpiresAt: new Date(hold.expires_at),
+          totalAmount: hold.total_amount,
+          currency: hold.currency,
+          pmsReservationId: hold.pms_reservation_id,
+          paymentLink: null,
+          paymentId: null,
+          paymentStatus: null,
+        },
+      });
+
+      await this.updateSession(session.id, {
+        state: 'awaiting_payment',
+        reservationId: updated.id,
+        checkIn: updated.checkIn ?? undefined,
+        checkOut: updated.checkOut ?? undefined,
+        adults: updated.adults ?? undefined,
+        children: updated.children ?? undefined,
+        selectedRoomTypeId: updated.roomTypeId ?? undefined,
+      });
+
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        `✅ Retomamos tu reserva de *${updated.roomName ?? 'habitación'}* del *${formatDisplayDateRange(updated.checkIn!, updated.checkOut!)}*. Tienes *${holdTtl} min* para completar el pago.`,
+      );
+
+      await this.sendPaymentSummary(hotelId, session.whatsappPhone, updated, holdTtl);
+    } catch (error) {
+      this.logger.error(`refreshReservationHold failed: ${error}`);
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        'Esa habitación ya no está disponible para esas fechas. Pulsa *Reserva nueva* o escribe *reservar* para buscar otras opciones.',
+      );
+      await this.updateSession(session.id, { state: 'resume_offer_pending' });
+    }
+  }
+
+  private async startFreshBooking(
+    hotelId: string,
+    sessionId: string,
+    phone: string,
+    text?: string,
+    rawIntent?: BookingIntent,
+  ) {
+    await this.resetSession(sessionId);
+    if (text && rawIntent) {
+      await this.advanceBookingFlow(hotelId, sessionId, phone, text, rawIntent);
+      return;
+    }
+    await this.updateSession(sessionId, { state: 'collecting_dates' });
+    await this.whatsapp.sendText(
+      hotelId,
+      phone,
+      '¡Empecemos una reserva nueva! 📅 Indica *fechas* y *huéspedes* (ej: *2 personas del 28 al 29 de junio*).',
+    );
+  }
+
   private async resetSession(id: string) {
     await this.prisma.conversationSession.update({
       where: { id },
@@ -1239,17 +1483,10 @@ export class ConversationService {
     text?: string,
     rawIntent?: BookingIntent,
   ) {
-    await this.resetSession(sessionId);
-    if (text && rawIntent) {
-      await this.advanceBookingFlow(hotelId, sessionId, phone, text, rawIntent);
+    if (await this.maybeOfferResumeBooking(hotelId, sessionId, phone)) {
       return;
     }
-    await this.updateSession(sessionId, { state: 'collecting_dates' });
-    await this.whatsapp.sendText(
-      hotelId,
-      phone,
-      '¡Con gusto te ayudo! 📅 Puedes decir fechas y huéspedes en un solo mensaje (ej: *2 personas del 28 al 29 de junio*).',
-    );
+    await this.startFreshBooking(hotelId, sessionId, phone, text, rawIntent);
   }
 
   private extractText(message: WhatsAppInboundMessage): string {
