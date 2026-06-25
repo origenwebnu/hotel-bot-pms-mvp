@@ -79,6 +79,11 @@ export class ConversationService {
       return this.handleButton(hotelId, session, btnId);
     }
 
+    if (this.wantsSessionReset(text)) {
+      await this.returnToWelcomeMenu(hotelId, session.id, phone);
+      return;
+    }
+
     const intent = await this.ai.extractBookingIntent(text);
 
     switch (session.state) {
@@ -228,10 +233,18 @@ export class ConversationService {
         return;
 
       default:
+        if (this.wantsSessionReset(text)) {
+          await this.returnToWelcomeMenu(hotelId, session.id, phone);
+          return;
+        }
         {
           const context = `Estado: ${session.state}`;
           const reply = await this.ai.generateResponse(hotelId, text, context);
-          await this.whatsapp.sendText(hotelId, phone, reply);
+          await this.whatsapp.sendText(
+            hotelId,
+            phone,
+            `${reply}\n\n_Escribe *menu* para volver al inicio._`,
+          );
         }
     }
   }
@@ -859,12 +872,58 @@ export class ConversationService {
     return ctx?.welcomed === true;
   }
 
+  private normalizeCommandText(text: string): string {
+    return text
+      .trim()
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   private isMenuRequest(text: string): boolean {
-    return /^(menu|menú)$/i.test(text.trim());
+    const normalized = this.normalizeCommandText(text);
+    return normalized === 'menu';
   }
 
   private wantsSessionReset(text: string): boolean {
-    return this.isGreetingOrReset(text) || this.isMenuRequest(text);
+    const normalized = this.normalizeCommandText(text);
+    if (!normalized) return false;
+
+    const exact = new Set([
+      'menu',
+      'inicio',
+      'cancelar',
+      'reiniciar',
+      'empezar',
+      'volver',
+      'salir',
+      'hola',
+      'buenas',
+      'hey',
+      'reiniciar chat',
+      'volver al menu',
+      'volver al inicio',
+      'empezar de nuevo',
+      'cancelar todo',
+      'menu principal',
+    ]);
+    if (exact.has(normalized)) return true;
+
+    const firstWord = normalized.split(' ')[0] ?? '';
+    if (
+      ['menu', 'inicio', 'cancelar', 'reiniciar', 'hola', 'buenas', 'volver', 'salir', 'empezar'].includes(
+        firstWord,
+      )
+    ) {
+      return true;
+    }
+
+    return /\b(volver al menu|volver al inicio|empezar de nuevo|menu principal|reiniciar chat)\b/.test(
+      normalized,
+    );
   }
 
   private async returnToWelcomeMenu(
@@ -887,7 +946,22 @@ export class ConversationService {
     });
 
     const msg = this.renderer.renderWelcomeMenu(hotel.name);
-    await this.whatsapp.sendInteractive(hotelId, phone, msg);
+    try {
+      await this.whatsapp.sendInteractive(hotelId, phone, msg);
+    } catch (err) {
+      this.logger.warn(
+        `Welcome menu interactive failed: ${err instanceof Error ? err.message : err}`,
+      );
+      await this.whatsapp.sendText(
+        hotelId,
+        phone,
+        `Hola, bienvenido a *${hotel.name}* 👋\n\n` +
+          `¿Qué te gustaría hacer?\n` +
+          `• Escribe *reservar* para reservar habitación\n` +
+          `• Escribe *tarifas* para conocer precios\n` +
+          `• Escribe *dudas* para resolver preguntas`,
+      );
+    }
 
     await this.prisma.conversationSession.update({
       where: { id: sessionId },
@@ -1396,13 +1470,6 @@ export class ConversationService {
       '¡Con gusto te ayudo! 📅 Indica *fechas* y *huéspedes* (ej: *2 personas del 28 al 29 de junio*).',
     );
     return true;
-  }
-
-  private isGreetingOrReset(text: string): boolean {
-    const t = text.trim().toLowerCase();
-    return /^(hola|buenas|hey|menu|menú|inicio|cancelar|reiniciar|empezar|volver|salir)/i.test(
-      t,
-    );
   }
 
   private getResumeWindowHours(): number {
