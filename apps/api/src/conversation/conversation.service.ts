@@ -608,7 +608,9 @@ export class ConversationService {
         hotelId,
         phone,
         paymentResult.userMessage ??
-          '⚠️ No pudimos generar el link de pago. Revisa Wompi en Integraciones del panel e intenta escribiendo *pagar*.',
+          (paymentResult.paymentReady
+            ? '⚠️ El pago quedó pendiente de configurar. Escribe *pagar* para reintentar.'
+            : '⚠️ No pudimos generar el link de pago. Revisa Wompi en Integraciones del panel e intenta escribiendo *pagar*.'),
       );
     }
   }

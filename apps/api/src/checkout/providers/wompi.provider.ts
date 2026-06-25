@@ -20,7 +20,31 @@ export class WompiProvider {
     const reference = `res-${request.reservation_id}`;
     const amountInCents = Math.round(request.amount * 100);
 
+    if (amountInCents < 1000) {
+      throw new Error(
+        `Wompi payment link failed: monto mínimo 1000 centavos (actual: ${amountInCents})`,
+      );
+    }
+
     const apiBase = resolveWompiApiBase(credentials.private_key);
+    const redirectUrl =
+      metadata.redirect_url ??
+      `${process.env.APP_URL?.replace(/\/$/, '')}/payment/result/${request.reservation_id}?token=${encodeURIComponent(metadata.payment_access_token ?? '')}`;
+
+    const body: Record<string, unknown> = {
+      name: `Reserva ${reference}`,
+      description: `Pago reserva hotel - ${reference}`,
+      single_use: true,
+      collect_shipping: false,
+      amount_in_cents: amountInCents,
+      currency: request.currency ?? 'COP',
+      redirect_url: redirectUrl,
+      sku: request.reservation_id.slice(0, 36),
+    };
+
+    if (request.expires_at) {
+      body.expires_at = formatWompiExpiresAt(request.expires_at);
+    }
 
     const response = await fetch(`${apiBase}/payment_links`, {
       method: 'POST',
@@ -28,21 +52,7 @@ export class WompiProvider {
         Authorization: `Bearer ${credentials.private_key}`,
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({
-        name: `Reserva ${reference}`,
-        description: `Pago reserva hotel - ${reference}`,
-        single_use: true,
-        collect_shipping: false,
-        amount_in_cents: amountInCents,
-        currency: request.currency,
-        reference,
-        expires_at: request.expires_at,
-        customer_email: request.guest_email,
-        redirect_url:
-          metadata.redirect_url ??
-          `${process.env.APP_URL?.replace(/\/$/, '')}/payment/result/${request.reservation_id}?token=${encodeURIComponent(metadata.payment_access_token ?? '')}`,
-        metadata,
-      }),
+      body: JSON.stringify(body),
     });
 
     if (!response.ok) {
@@ -53,12 +63,20 @@ export class WompiProvider {
     }
 
     const data = (await response.json()) as {
-      data: { id: string; payment_link_url: string };
+      data: { id: string; payment_link_url?: string };
     };
 
+    const linkId = data.data?.id;
+    if (!linkId) {
+      throw new Error('Wompi payment link failed: respuesta sin id de link');
+    }
+
+    const paymentUrl =
+      data.data.payment_link_url ?? buildWompiCheckoutUrl(linkId);
+
     return {
-      payment_id: data.data.id,
-      payment_url: data.data.payment_link_url,
+      payment_id: linkId,
+      payment_url: paymentUrl,
       expires_at: request.expires_at,
       provider: 'wompi',
     };
@@ -68,6 +86,13 @@ export class WompiProvider {
     const event = body as WompiEvent;
     const transaction = event.data?.transaction;
     const status = this.mapStatus(transaction?.status);
+    const txMetadata = (transaction?.metadata as Record<string, string>) ?? {};
+    const reference = transaction?.reference ?? transaction?.payment_link_id ?? '';
+
+    let reservationId = txMetadata.reservation_id;
+    if (!reservationId && reference.startsWith('res-')) {
+      reservationId = reference.slice(4);
+    }
 
     return {
       provider: 'wompi',
@@ -75,7 +100,10 @@ export class WompiProvider {
       status,
       amount: (transaction?.amount_in_cents ?? 0) / 100,
       currency: transaction?.currency ?? 'COP',
-      metadata: (transaction?.metadata as Record<string, string>) ?? {},
+      metadata: {
+        ...txMetadata,
+        ...(reservationId ? { reservation_id: reservationId } : {}),
+      },
       raw: body,
     };
   }
@@ -93,6 +121,18 @@ export class WompiProvider {
         return 'pending';
     }
   }
+}
+
+function buildWompiCheckoutUrl(linkId: string): string {
+  return `https://checkout.wompi.co/l/${linkId}`;
+}
+
+function formatWompiExpiresAt(isoDate: string): string {
+  const date = new Date(isoDate);
+  if (Number.isNaN(date.getTime())) {
+    return isoDate;
+  }
+  return date.toISOString().slice(0, 19);
 }
 
 function resolveWompiApiBase(privateKey?: string): string {
@@ -114,6 +154,8 @@ interface WompiEvent {
       status: string;
       amount_in_cents: number;
       currency: string;
+      reference?: string;
+      payment_link_id?: string;
       metadata?: Record<string, string>;
     };
   };

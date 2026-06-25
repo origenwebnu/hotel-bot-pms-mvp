@@ -188,8 +188,17 @@ export class CheckoutService {
       });
     }
 
-    if (reservation.paymentLink) {
+    const hasValidPaymentLink = reservation.paymentLink?.includes('checkout.wompi.co/l/');
+
+    if (hasValidPaymentLink && reservation.paymentAccessToken) {
       return { reservation, paymentReady: true };
+    }
+
+    if (reservation.paymentLink && !hasValidPaymentLink) {
+      reservation = await this.prisma.reservation.update({
+        where: { id: reservationId },
+        data: { paymentLink: null, paymentId: null },
+      });
     }
 
     if (!reservation.totalAmount || !reservation.guestEmail) {
@@ -203,9 +212,11 @@ export class CheckoutService {
 
     try {
       const holdId = reservation.pmsReservationId ?? `local-${reservation.id}`;
-      const expiresAt =
-        reservation.holdExpiresAt?.toISOString() ??
-        new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      const holdExpiry =
+        reservation.holdExpiresAt && reservation.holdExpiresAt > new Date()
+          ? reservation.holdExpiresAt
+          : new Date(Date.now() + 60 * 60 * 1000);
+      const expiresAt = holdExpiry.toISOString();
 
       const payment = await this.createPaymentLink(hotelId, {
         amount: reservation.totalAmount,
@@ -229,6 +240,10 @@ export class CheckoutService {
           paymentId: payment.payment_id,
         },
       });
+
+      if (!reservation.paymentLink) {
+        throw new Error('Wompi no devolvió URL de pago');
+      }
 
       return { reservation, paymentReady: true };
     } catch (error) {
