@@ -196,6 +196,31 @@ export const api = {
       '/hotels/me/discount-tiers/seed-default',
       { method: 'POST' },
     ),
+
+  getReservationStats: (params?: { from?: string; to?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.from) query.set('from', params.from);
+    if (params?.to) query.set('to', params.to);
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return request<ReservationStats>(`/hotels/me/reservations/stats${suffix}`);
+  },
+
+  listReservations: (params?: {
+    outcome?: ReservationOutcome;
+    from?: string;
+    to?: string;
+    page?: number;
+    limit?: number;
+  }) => {
+    const query = new URLSearchParams();
+    if (params?.outcome) query.set('outcome', params.outcome);
+    if (params?.from) query.set('from', params.from);
+    if (params?.to) query.set('to', params.to);
+    if (params?.page) query.set('page', String(params.page));
+    if (params?.limit) query.set('limit', String(params.limit));
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+    return request<ReservationHistoryResponse>(`/hotels/me/reservations${suffix}`);
+  },
 };
 
 export interface Hotel {
@@ -286,4 +311,53 @@ export interface DiscountTier {
   is_active: boolean;
   sort_order: number;
   created_at: string;
+}
+
+export type ReservationOutcome = 'approved' | 'rejected' | 'pending';
+
+export interface ReservationStats {
+  reservations: {
+    total: number;
+    approved: number;
+    rejected: number;
+    pending: number;
+  };
+  conversations: { total: number };
+  period: { from: string | null; to: string | null };
+}
+
+export interface ReservationHistoryItem {
+  id: string;
+  hotel_id: string;
+  whatsapp_session_id: string;
+  status: string;
+  outcome: ReservationOutcome;
+  room_type_id: string | null;
+  room_name: string | null;
+  check_in: string | null;
+  check_out: string | null;
+  adults: number | null;
+  children: number | null;
+  total_amount: number | null;
+  currency: string | null;
+  payment_status: string | null;
+  guest: {
+    first_name: string | null;
+    last_name: string | null;
+    email: string | null;
+    whatsapp: string | null;
+    full_name: string | null;
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ReservationHistoryResponse {
+  items: ReservationHistoryItem[];
+  pagination: {
+    page: number;
+    limit: number;
+    total: number;
+    total_pages: number;
+  };
 }

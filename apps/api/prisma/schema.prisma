@@ -184,6 +184,7 @@ model ConversationSession {
   hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 
   @@unique([hotelId, whatsappPhone])
+  @@index([hotelId, lastMessageAt(sort: Desc)])
   @@map("conversation_sessions")
 }
 
@@ -219,6 +220,7 @@ model Reservation {
 
   hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 
+  @@index([hotelId, createdAt(sort: Desc)])
   @@map("reservations")
 }
 

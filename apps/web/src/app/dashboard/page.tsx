@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
 import { api, type Hotel, type IntegrationStatus, type HotelSubscription, clearAuthSession } from '@/lib/api';
 import { IntegrationsPanel } from '@/components/IntegrationsPanel';
 import { WhatsAppPanel } from '@/components/WhatsAppPanel';
@@ -10,12 +9,14 @@ import { KnowledgePanel } from '@/components/KnowledgePanel';
 import { DiscountTiersPanel } from '@/components/DiscountTiersPanel';
 import { InventoryPanel } from '@/components/InventoryPanel';
 import { ChatSimulator } from '@/components/ChatSimulator';
+import { DashboardOverviewPanel } from '@/components/DashboardOverviewPanel';
+import { ReservationsHistoryPanel } from '@/components/ReservationsHistoryPanel';
 
-type Tab = 'integrations' | 'inventory' | 'discounts' | 'knowledge' | 'simulator';
+type Tab = 'overview' | 'reservations' | 'integrations' | 'inventory' | 'discounts' | 'knowledge' | 'simulator';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>('integrations');
+  const [tab, setTab] = useState<Tab>('overview');
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [integration, setIntegration] = useState<IntegrationStatus | null>(null);
   const [subscription, setSubscription] = useState<HotelSubscription | null>(null);
@@ -46,6 +47,22 @@ export default function DashboardPage() {
     router.push('/');
   }
 
+  const loadStats = useCallback(
+    (range: { from: string; to: string }) =>
+      api.getReservationStats({ from: range.from, to: range.to }),
+    [],
+  );
+
+  const loadReservations = useCallback(
+    (params: {
+      outcome?: 'approved' | 'rejected' | 'pending';
+      from?: string;
+      to?: string;
+      page?: number;
+    }) => api.listReservations(params),
+    [],
+  );
+
   if (!hotel) {
     return <div className="loading">Cargando panel...</div>;
   }
@@ -61,6 +78,18 @@ export default function DashboardPage() {
           </div>
         </div>
         <nav>
+          <button
+            className={tab === 'overview' ? 'active' : ''}
+            onClick={() => setTab('overview')}
+          >
+            📊 Resumen
+          </button>
+          <button
+            className={tab === 'reservations' ? 'active' : ''}
+            onClick={() => setTab('reservations')}
+          >
+            📋 Reservas
+          </button>
           <button
             className={tab === 'integrations' ? 'active' : ''}
             onClick={() => setTab('integrations')}
@@ -100,6 +129,8 @@ export default function DashboardPage() {
       <main className="main">
         <header className="main-header">
           <h1>
+            {tab === 'overview' && 'Resumen del hotel'}
+            {tab === 'reservations' && 'Historial de reservas'}
             {tab === 'integrations' && 'Integraciones'}
             {tab === 'inventory' && 'Inventario de habitaciones'}
             {tab === 'discounts' && 'Descuentos automáticos'}
@@ -119,8 +150,17 @@ export default function DashboardPage() {
           </div>
         </header>
 
-        {subscription && <SubscriptionBanner subscription={subscription} />}
+        {subscription && tab !== 'overview' && <SubscriptionBanner subscription={subscription} />}
 
+        {tab === 'overview' && (
+          <>
+            {subscription && <SubscriptionBanner subscription={subscription} />}
+            <DashboardOverviewPanel loadStats={loadStats} />
+          </>
+        )}
+        {tab === 'reservations' && (
+          <ReservationsHistoryPanel loadReservations={loadReservations} />
+        )}
         {tab === 'integrations' && (
           <div className="integrations-stack">
             <WhatsAppPanel

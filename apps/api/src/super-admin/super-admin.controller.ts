@@ -6,6 +6,7 @@ import {
   Put,
   Param,
   Body,
+  Query,
   UseGuards,
   Req,
 } from '@nestjs/common';
@@ -153,5 +154,32 @@ export class SuperAdminController {
       return this.superAdmin.resetHotelTrial(id);
     }
     return this.superAdmin.assignHotelPlan(id, body.plan_id ?? null);
+  }
+
+  @Get('hotels/:id/reservations')
+  listHotelReservations(
+    @Param('id') id: string,
+    @Query('outcome') outcome?: 'approved' | 'rejected' | 'pending',
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.superAdmin.listHotelReservations(id, {
+      outcome,
+      from,
+      to,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+  }
+
+  @Get('hotels/:id/reservations/stats')
+  getHotelReservationStats(
+    @Param('id') id: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.superAdmin.getHotelReservationStats(id, { from, to });
   }
 }

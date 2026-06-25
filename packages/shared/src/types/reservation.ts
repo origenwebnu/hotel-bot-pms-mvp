@@ -5,7 +5,10 @@ export type ReservationStatus =
   | 'payment_pending'
   | 'confirmed'
   | 'cancelled'
-  | 'expired';
+  | 'expired'
+  | 'rejected';
+
+export type ReservationOutcome = 'approved' | 'rejected' | 'pending';
 
 export interface Reservation {
   id: string;

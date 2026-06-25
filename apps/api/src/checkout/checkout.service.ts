@@ -343,7 +343,12 @@ export class CheckoutService {
 
     await this.prisma.reservation.update({
       where: { id: reservation.id },
-      data: { paymentStatus: payload.status },
+      data: {
+        paymentStatus: payload.status,
+        ...(payload.status === 'declined' || payload.status === 'error'
+          ? { status: 'rejected' }
+          : {}),
+      },
     });
 
     const terminalStatuses = ['approved', 'declined', 'error', 'expired'] as const;
