@@ -147,7 +147,7 @@ export class WhatsAppRendererService {
       body: {
         text:
           `✅ Recibo generado.\n\n` +
-          `Pulsa el botón para completar el pago.\n` +
+          `Pulsa el botón para abrir el formulario de pago seguro.\n` +
           `⏱ Tienes *${expiresMinutes} minutos* antes de que se libere la habitación.`,
       },
       action: {
@@ -224,6 +224,120 @@ export class WhatsAppRendererService {
       1,
       Math.round((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)),
     );
+  }
+
+  renderPaymentStatusReceipt(data: {
+    hotelName: string;
+    reservationRef: string;
+    paymentRef: string;
+    guestName: string;
+    guestEmail: string;
+    roomName: string;
+    checkIn: string;
+    checkOut: string;
+    guests: number;
+    amount: number;
+    originalAmount?: number;
+    discountPercent?: number;
+    currency: string;
+    paymentStatus: 'pending' | 'approved' | 'declined' | 'expired' | 'error';
+  }): WhatsAppTextMessage {
+    const nights = this.estimateNights(data.checkIn, data.checkOut);
+    const statusLabel = this.paymentStatusLabel(data.paymentStatus);
+
+    let body =
+      `🧾 *RECIBO DE PAGO*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `Estado: *${statusLabel}*\n` +
+      `🏨 *${data.hotelName}*\n` +
+      `🔖 Reserva: *${data.reservationRef}*\n` +
+      `💳 Transacción: *${data.paymentRef}*\n\n` +
+      `👤 *Cliente:* ${data.guestName}\n` +
+      `✉️ *Email:* ${data.guestEmail}\n` +
+      `\n🏠 *Habitación:* ${data.roomName}\n` +
+      `📅 *Desde:* ${formatDisplayDate(data.checkIn)}\n` +
+      `📅 *Hasta:* ${formatDisplayDate(data.checkOut)}\n` +
+      `🌙 *Noches:* ${nights}\n` +
+      `👥 *Huéspedes:* ${data.guests}\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n`;
+
+    if (data.originalAmount && data.discountPercent) {
+      body +=
+        `🏷 Descuento: *${data.discountPercent}%*\n` +
+        `Subtotal: ~${data.currency} ${data.originalAmount.toLocaleString('es-CO')}~\n`;
+    }
+
+    body +=
+      `💰 *TOTAL:* ${data.currency} ${data.amount.toLocaleString('es-CO')}\n` +
+      `━━━━━━━━━━━━━━━━━━━━`;
+
+    return { type: 'text', text: { body } };
+  }
+
+  renderPaymentApprovedFollowUp(data: {
+    guestName: string;
+    confirmationCode?: string;
+    recommendations?: string | null;
+    note?: string;
+  }): WhatsAppTextMessage {
+    let body =
+      `🎉 *¡Gracias, ${data.guestName}!*\n\n` +
+      `Tu pago fue *aprobado* y tu reserva está confirmada.`;
+
+    if (data.confirmationCode) {
+      body += `\n\n🔖 *Código de confirmación:* ${data.confirmationCode}`;
+    }
+
+    if (data.note) {
+      body += `\n\n_${data.note}_`;
+    }
+
+    if (data.recommendations?.trim()) {
+      body +=
+        `\n\n📋 *Recomendaciones para tu estadía:*\n${data.recommendations.trim()}`;
+    }
+
+    body += `\n\nTe esperamos. Si necesitas algo más, escríbenos por aquí.`;
+
+    return { type: 'text', text: { body } };
+  }
+
+  renderPaymentRetryPrompt(
+    paymentPageUrl: string,
+  ): import('@hotel-bot/shared').WhatsAppCtaUrlMessage {
+    return {
+      type: 'cta_url',
+      body: {
+        text:
+          `❌ *El pago no pudo completarse.*\n\n` +
+          `Tu habitación sigue reservada temporalmente. Puedes intentar de nuevo con otro método de pago.\n\n` +
+          `Pulsa el botón para volver al formulario de pago.`,
+      },
+      action: {
+        name: 'cta_url',
+        parameters: {
+          display_text: 'Volver a pagar',
+          url: paymentPageUrl,
+        },
+      },
+    };
+  }
+
+  private paymentStatusLabel(
+    status: 'pending' | 'approved' | 'declined' | 'expired' | 'error',
+  ): string {
+    switch (status) {
+      case 'approved':
+        return '✅ Aprobado';
+      case 'declined':
+        return '❌ Rechazado';
+      case 'error':
+        return '⚠️ Error';
+      case 'expired':
+        return '⏱ Expirado';
+      default:
+        return '⏳ Pendiente';
+    }
   }
 
   renderConfirmation(guestName: string, confirmationCode?: string): WhatsAppTextMessage {

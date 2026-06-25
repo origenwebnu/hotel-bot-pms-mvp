@@ -57,6 +57,11 @@ export class HotelsController {
     return { valid };
   }
 
+  @Get('me/payment-config')
+  getPaymentConfig(@Request() req: { user: { hotelId: string } }) {
+    return this.hotels.getPaymentConfig(req.user.hotelId);
+  }
+
   @Get('me/whatsapp')
   getWhatsApp(@Request() req: { user: { hotelId: string } }) {
     return this.hotels.getWhatsAppConfig(req.user.hotelId);

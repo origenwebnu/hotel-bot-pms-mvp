@@ -1,9 +1,12 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
+import { randomBytes } from 'crypto';
 import {
   JOB_NAMES,
   QUEUE_NAMES,
+  buildPaymentPageUrl,
+  buildPaymentResultUrl,
   type PaymentLinkRequest,
   type PaymentLinkResult,
   type PaymentProvider,
@@ -32,6 +35,18 @@ export class CheckoutService {
     @InjectQueue(QUEUE_NAMES.PAYMENT_WEBHOOK) private readonly paymentQueue: Queue,
   ) {}
 
+  generatePaymentAccessToken(): string {
+    return randomBytes(24).toString('hex');
+  }
+
+  buildPaymentPageUrl(reservationId: string, token: string): string {
+    return buildPaymentPageUrl(
+      reservationId,
+      token,
+      process.env.APP_URL ?? 'https://app.bookichat.com',
+    );
+  }
+
   async createPaymentLink(
     hotelId: string,
     request: PaymentLinkRequest,
@@ -39,10 +54,13 @@ export class CheckoutService {
     const provider = await this.getPaymentProvider(hotelId);
     const credentials = await this.getPaymentCredentials(hotelId);
 
+    const accessToken = request.metadata?.payment_access_token ?? '';
     const metadata = {
       reservation_id: request.reservation_id,
       hold_id: request.hold_id,
       hotel_id: hotelId,
+      payment_access_token: accessToken,
+      redirect_url: buildPaymentResultUrl(request.reservation_id, accessToken),
       ...request.metadata,
     };
 
@@ -73,7 +91,14 @@ export class CheckoutService {
 
     const reservation = await this.prisma.reservation.findUnique({
       where: { id: reservationId },
-      include: { hotel: true },
+      include: {
+        hotel: {
+          select: {
+            name: true,
+            reservationRecommendations: true,
+          },
+        },
+      },
     });
 
     if (!reservation) {
@@ -104,70 +129,146 @@ export class CheckoutService {
       },
     });
 
+    await this.prisma.reservation.update({
+      where: { id: reservation.id },
+      data: { paymentStatus: payload.status },
+    });
+
     if (payload.status === 'approved') {
-      await this.confirmReservation(reservation);
-    } else if (payload.status === 'declined' || payload.status === 'error') {
-      await this.notifyPaymentFailed(reservation);
+      await this.confirmReservation(reservation, payload);
+    } else {
+      await this.notifyPaymentOutcome(reservation, payload);
     }
   }
 
   private async confirmReservation(
-    reservation: {
-      id: string;
-      hotelId: string;
-      pmsReservationId: string | null;
-      guestFirstName: string | null;
-      guestLastName: string | null;
-      guestEmail: string | null;
-      guestPhone: string | null;
-    },
+    reservation: ReservationWithHotel,
+    payload: PaymentWebhookPayload,
   ) {
-    if (!reservation.pmsReservationId) return;
+    if (reservation.pmsReservationId) {
+      try {
+        const result = await this.pms.confirmReservation(reservation.hotelId, {
+          hold_id: reservation.id,
+          pms_reservation_id: reservation.pmsReservationId,
+          guest: {
+            first_name: reservation.guestFirstName ?? '',
+            last_name: reservation.guestLastName ?? '',
+            email: reservation.guestEmail ?? '',
+            phone: reservation.guestPhone ?? '',
+          },
+        });
 
-    const result = await this.pms.confirmReservation(reservation.hotelId, {
-      hold_id: reservation.id,
-      pms_reservation_id: reservation.pmsReservationId,
-      guest: {
-        first_name: reservation.guestFirstName ?? '',
-        last_name: reservation.guestLastName ?? '',
-        email: reservation.guestEmail ?? '',
-        phone: reservation.guestPhone ?? '',
-      },
-    });
+        await this.prisma.reservation.update({
+          where: { id: reservation.id },
+          data: { status: 'confirmed' },
+        });
 
-    await this.prisma.reservation.update({
-      where: { id: reservation.id },
-      data: { status: 'confirmed' },
-    });
+        await this.prisma.conversationSession.updateMany({
+          where: { id: reservation.whatsappSessionId },
+          data: { state: 'confirmed' },
+        });
 
-    if (reservation.guestPhone) {
-      const msg = this.renderer.renderConfirmation(
-        reservation.guestFirstName ?? 'Huésped',
-        result.confirmation_code,
-      );
-      await this.whatsapp.sendInteractive(
-        reservation.hotelId,
-        reservation.guestPhone,
-        msg,
-      );
+        await this.sendWhatsAppPaymentReceipt(reservation, payload, {
+          confirmationCode: result.confirmation_code,
+        });
+      } catch (error) {
+        this.logger.error(`PMS confirm failed for ${reservation.id}: ${error}`);
+        await this.sendWhatsAppPaymentReceipt(reservation, payload, {
+          note: 'Pago recibido. El hotel confirmará tu reserva en breve.',
+        });
+      }
+    } else {
+      await this.prisma.reservation.update({
+        where: { id: reservation.id },
+        data: { status: 'confirmed' },
+      });
+      await this.sendWhatsAppPaymentReceipt(reservation, payload);
     }
 
     await this.prisma.paymentEvent.updateMany({
-      where: { reservationId: reservation.id },
+      where: { reservationId: reservation.id, externalId: payload.payment_id },
       data: { processed: true },
     });
   }
 
-  private async notifyPaymentFailed(
-    reservation: { hotelId: string; guestPhone: string | null },
+  private async notifyPaymentOutcome(
+    reservation: ReservationWithHotel,
+    payload: PaymentWebhookPayload,
   ) {
-    if (!reservation.guestPhone) return;
-    const msg = this.renderer.renderPaymentFailed();
-    await this.whatsapp.sendInteractive(
+    await this.sendWhatsAppPaymentReceipt(reservation, payload);
+  }
+
+  private async sendWhatsAppPaymentReceipt(
+    reservation: ReservationWithHotel,
+    payload: PaymentWebhookPayload,
+    extras?: { confirmationCode?: string; note?: string },
+  ) {
+    if (!reservation.guestPhone || !reservation.paymentAccessToken) return;
+
+    const paymentPageUrl = buildPaymentPageUrl(
+      reservation.id,
+      reservation.paymentAccessToken,
+    );
+    const guests = (reservation.adults ?? 0) + (reservation.children ?? 0);
+    const guestName =
+      [reservation.guestFirstName, reservation.guestLastName]
+        .filter(Boolean)
+        .join(' ') || 'Huésped';
+
+    const receipt = this.renderer.renderPaymentStatusReceipt({
+      hotelName: reservation.hotel.name,
+      reservationRef: reservation.id.slice(-8).toUpperCase(),
+      paymentRef: payload.payment_id.slice(-12).toUpperCase(),
+      guestName,
+      guestEmail: reservation.guestEmail ?? '—',
+      roomName: reservation.roomName ?? 'Habitación',
+      checkIn: reservation.checkIn ?? '',
+      checkOut: reservation.checkOut ?? '',
+      guests,
+      amount: reservation.totalAmount ?? payload.amount,
+      originalAmount: reservation.originalAmount ?? undefined,
+      discountPercent: reservation.discountPercent ?? undefined,
+      currency: reservation.currency ?? payload.currency,
+      paymentStatus: payload.status,
+    });
+
+    await this.whatsapp.sendText(
       reservation.hotelId,
       reservation.guestPhone,
-      msg,
+      receipt.text.body,
     );
+
+    if (payload.status === 'approved') {
+      const thanks = this.renderer.renderPaymentApprovedFollowUp({
+        guestName: reservation.guestFirstName ?? 'Huésped',
+        confirmationCode: extras?.confirmationCode,
+        recommendations: reservation.hotel.reservationRecommendations,
+        note: extras?.note,
+      });
+      await this.whatsapp.sendText(
+        reservation.hotelId,
+        reservation.guestPhone,
+        thanks.text.body,
+      );
+      return;
+    }
+
+    if (payload.status === 'declined' || payload.status === 'error') {
+      const retry = this.renderer.renderPaymentRetryPrompt(paymentPageUrl);
+      try {
+        await this.whatsapp.sendInteractive(
+          reservation.hotelId,
+          reservation.guestPhone,
+          retry,
+        );
+      } catch {
+        await this.whatsapp.sendText(
+          reservation.hotelId,
+          reservation.guestPhone,
+          `Puedes intentar de nuevo aquí:\n${paymentPageUrl}`,
+        );
+      }
+    }
   }
 
   private async getPaymentProvider(hotelId: string): Promise<PaymentProvider> {
@@ -206,3 +307,28 @@ export class CheckoutService {
     };
   }
 }
+
+type ReservationWithHotel = {
+  id: string;
+  hotelId: string;
+  whatsappSessionId: string;
+  pmsReservationId: string | null;
+  guestFirstName: string | null;
+  guestLastName: string | null;
+  guestEmail: string | null;
+  guestPhone: string | null;
+  roomName: string | null;
+  checkIn: string | null;
+  checkOut: string | null;
+  adults: number | null;
+  children: number | null;
+  totalAmount: number | null;
+  originalAmount: number | null;
+  discountPercent: number | null;
+  currency: string | null;
+  paymentAccessToken: string | null;
+  hotel: {
+    name: string;
+    reservationRecommendations: string | null;
+  };
+};

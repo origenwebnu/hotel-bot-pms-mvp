@@ -15,6 +15,7 @@ model Hotel {
   slug                  String   @unique
   timezone              String   @default("America/Bogota")
   currency              String   @default("COP")
+  reservationRecommendations String? @map("reservation_recommendations") @db.Text
   whatsappPhoneNumberId String?  @map("whatsapp_phone_number_id")
   isActive              Boolean  @default(true) @map("is_active")
   createdAt             DateTime @default(now()) @map("created_at")
@@ -205,6 +206,8 @@ model Reservation {
   holdExpiresAt      DateTime? @map("hold_expires_at")
   paymentLink        String?   @map("payment_link")
   paymentId          String?   @map("payment_id")
+  paymentAccessToken String?   @unique @map("payment_access_token")
+  paymentStatus      String?   @map("payment_status")
   guestFirstName     String?   @map("guest_first_name")
   guestLastName      String?   @map("guest_last_name")
   guestEmail         String?   @map("guest_email")

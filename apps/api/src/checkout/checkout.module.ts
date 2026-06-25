@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { QUEUE_NAMES } from '@hotel-bot/shared';
 import { CheckoutService } from './checkout.service';
 import { CheckoutController } from './checkout.controller';
+import { PublicPaymentController } from './public-payment.controller';
 import { PaymentProcessor } from './payment.processor';
 import { WompiProvider } from './providers/wompi.provider';
 import { StripeProvider } from './providers/stripe.provider';
@@ -15,7 +16,7 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
     CoreIntegratorModule,
     WhatsAppModule,
   ],
-  controllers: [CheckoutController],
+  controllers: [CheckoutController, PublicPaymentController],
   providers: [
     CheckoutService,
     PaymentProcessor,

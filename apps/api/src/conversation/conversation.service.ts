@@ -427,6 +427,8 @@ export class ConversationService {
         discountTierId = discountOffer.tierId;
       }
 
+      const paymentAccessToken = this.checkout.generatePaymentAccessToken();
+
       reservation = await this.prisma.reservation.create({
         data: {
           hotelId,
@@ -450,6 +452,7 @@ export class ConversationService {
           guestLastName: lastName,
           guestEmail: email,
           guestPhone: session.whatsappPhone,
+          paymentAccessToken,
         },
       });
 
@@ -462,6 +465,7 @@ export class ConversationService {
           expires_at: hold.expires_at,
           guest_email: email,
           guest_name: `${firstName} ${lastName}`,
+          metadata: { payment_access_token: paymentAccessToken },
         });
 
         reservation = await this.prisma.reservation.update({
@@ -562,6 +566,7 @@ export class ConversationService {
       discountPercent?: number | null;
       currency: string | null;
       paymentLink: string | null;
+      paymentAccessToken?: string | null;
       guestFirstName: string | null;
       guestLastName: string | null;
       guestEmail: string | null;
@@ -599,18 +604,19 @@ export class ConversationService {
 
     await this.whatsapp.sendText(hotelId, phone, receipt.text.body);
 
-    if (reservation.paymentLink) {
-      const payMsg = this.renderer.renderPaymentLink(
-        reservation.paymentLink,
-        holdTtl,
+    if (reservation.paymentLink && reservation.paymentAccessToken) {
+      const paymentPageUrl = this.checkout.buildPaymentPageUrl(
+        reservation.id,
+        reservation.paymentAccessToken,
       );
+      const payMsg = this.renderer.renderPaymentLink(paymentPageUrl, holdTtl);
       try {
         await this.whatsapp.sendInteractive(hotelId, phone, payMsg);
       } catch {
         await this.whatsapp.sendText(
           hotelId,
           phone,
-          `💳 Completa tu pago aquí:\n${reservation.paymentLink}`,
+          `💳 Completa tu pago aquí:\n${paymentPageUrl}`,
         );
       }
     } else {

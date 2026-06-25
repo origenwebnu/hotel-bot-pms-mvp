@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { api, type IntegrationStatus } from '@/lib/api';
+import { useEffect, useState } from 'react';
+import { api, type IntegrationStatus, type PaymentConfig } from '@/lib/api';
 
 interface Props {
   integration: IntegrationStatus | null;
@@ -17,10 +17,25 @@ export function IntegrationsPanel({ integration, onUpdate }: Props) {
     payment_public_key: '',
     payment_private_key: '',
     payment_webhook_secret: '',
+    reservation_recommendations: '',
   });
+  const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
   const [loading, setLoading] = useState(false);
   const [validating, setValidating] = useState(false);
   const [message, setMessage] = useState('');
+
+  useEffect(() => {
+    api.getPaymentConfig().then(setPaymentConfig).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (paymentConfig?.reservation_recommendations) {
+      setForm((prev) => ({
+        ...prev,
+        reservation_recommendations: paymentConfig.reservation_recommendations,
+      }));
+    }
+  }, [paymentConfig]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -30,6 +45,8 @@ export function IntegrationsPanel({ integration, onUpdate }: Props) {
       const updated = await api.updateIntegration(form);
       onUpdate(updated);
       setMessage('Integración guardada correctamente.');
+      const cfg = await api.getPaymentConfig();
+      setPaymentConfig(cfg);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Error al guardar');
     } finally {
@@ -105,16 +122,28 @@ export function IntegrationsPanel({ integration, onUpdate }: Props) {
               <strong>Inventario</strong> o usa &quot;Cargar demo&quot;.
             </p>
           )}
-
-          <button type="submit" className="btn-primary" disabled={loading}>
-            {loading ? 'Guardando...' : 'Guardar PMS'}
-          </button>
         </form>
       </section>
 
       <section className="card">
         <h2>Pasarela de Pagos</h2>
         <p className="desc">Configura Wompi (Colombia) o Stripe para procesar pagos de reservas.</p>
+
+        {paymentConfig && (
+          <div className="webhook-box">
+            <strong>URL de eventos (Wompi)</strong>
+            <code>{paymentConfig.webhook_url}</code>
+            <p className="desc">
+              Copia esta URL en Wompi → Configuración → Eventos. El *Webhook Secret* es el
+              &quot;Events Secret&quot; que te da Wompi.
+            </p>
+            <ol className="steps">
+              {paymentConfig.setup_steps.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+          </div>
+        )}
 
         <form onSubmit={handleSave} className="form">
           <label>
@@ -146,7 +175,7 @@ export function IntegrationsPanel({ integration, onUpdate }: Props) {
             />
           </label>
           <label>
-            Webhook Secret
+            Webhook Secret (Events Secret de Wompi)
             <input
               type="password"
               value={form.payment_webhook_secret}
@@ -154,6 +183,21 @@ export function IntegrationsPanel({ integration, onUpdate }: Props) {
               placeholder="Secreto para verificar webhooks"
             />
           </label>
+
+          <label>
+            Recomendaciones post-pago (WhatsApp)
+            <textarea
+              rows={5}
+              value={form.reservation_recommendations}
+              onChange={(e) =>
+                setForm({ ...form, reservation_recommendations: e.target.value })
+              }
+              placeholder="Ej: Check-in desde las 3pm. Trae documento de identidad. Desayuno incluido de 7am a 10am."
+            />
+          </label>
+          <p className="desc">
+            Este texto se envía al huésped por WhatsApp cuando el pago es aprobado.
+          </p>
 
           <button type="submit" className="btn-primary" disabled={loading}>
             {loading ? 'Guardando...' : 'Guardar integraciones'}
@@ -189,50 +233,43 @@ export function IntegrationsPanel({ integration, onUpdate }: Props) {
           flex-direction: column;
           gap: 1rem;
         }
-        .field-row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 1rem;
+        .webhook-box {
+          background: rgba(59, 130, 246, 0.08);
+          border: 1px solid rgba(59, 130, 246, 0.25);
+          border-radius: 10px;
+          padding: 1rem;
+          margin-bottom: 1rem;
         }
-        label {
-          display: flex;
-          flex-direction: column;
-          gap: 0.35rem;
-          font-size: 0.85rem;
+        .webhook-box code {
+          display: block;
+          margin: 0.5rem 0;
+          padding: 0.65rem;
+          background: #0f172a;
+          color: #e2e8f0;
+          border-radius: 8px;
+          font-size: 0.82rem;
+          word-break: break-all;
+        }
+        .steps {
+          margin: 0.75rem 0 0 1.1rem;
           color: var(--text-muted);
+          font-size: 0.85rem;
+          line-height: 1.45;
         }
-        input, select {
-          padding: 0.65rem 0.875rem;
+        textarea {
+          width: 100%;
+          padding: 0.75rem;
+          border-radius: 8px;
+          border: 1px solid var(--border);
           background: var(--bg);
-          border: 1px solid var(--border);
-          border-radius: 8px;
           color: var(--text);
-        }
-        .actions {
-          display: flex;
-          gap: 0.75rem;
-        }
-        .btn-primary {
-          padding: 0.75rem 1.5rem;
-          background: var(--accent);
-          color: #000;
-          border: none;
-          border-radius: 8px;
-          font-weight: 600;
-          align-self: flex-start;
-        }
-        .btn-secondary {
-          padding: 0.65rem 1.25rem;
-          background: var(--surface-hover);
-          color: var(--text);
-          border: 1px solid var(--border);
-          border-radius: 8px;
+          font-family: inherit;
         }
         .toast {
-          padding: 1rem;
-          background: var(--surface-hover);
+          padding: 0.75rem 1rem;
+          background: var(--surface);
+          border: 1px solid var(--border);
           border-radius: 8px;
-          border-left: 3px solid var(--accent);
         }
       `}</style>
     </div>

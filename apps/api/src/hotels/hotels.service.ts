@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { buildWompiWebhookUrl } from '@hotel-bot/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../crypto/crypto.service';
 import { CoreIntegratorService } from '../core-integrator/core-integrator.service';
@@ -33,8 +34,16 @@ export class HotelsService {
       payment_public_key?: string;
       payment_private_key?: string;
       payment_webhook_secret?: string;
+      reservation_recommendations?: string;
     },
   ) {
+    if (data.reservation_recommendations !== undefined) {
+      await this.prisma.hotel.update({
+        where: { id: hotelId },
+        data: { reservationRecommendations: data.reservation_recommendations.trim() || null },
+      });
+    }
+
     await this.prisma.hotelIntegration.upsert({
       where: { hotelId },
       create: {
@@ -115,6 +124,33 @@ export class HotelsService {
       whatsapp_phone_number_id: hotel?.whatsappPhoneNumberId ?? null,
       whatsapp_has_token: await this.whatsappCredentials.hasOwnToken(hotelId),
       last_validated_at: integration.lastValidatedAt,
+    };
+  }
+
+  async getPaymentConfig(hotelId: string) {
+    const [integration, hotel] = await Promise.all([
+      this.prisma.hotelIntegration.findUnique({ where: { hotelId } }),
+      this.prisma.hotel.findUnique({
+        where: { id: hotelId },
+        select: { reservationRecommendations: true },
+      }),
+    ]);
+
+    const appUrl = process.env.APP_URL ?? 'https://app.bookichat.com';
+
+    return {
+      provider: integration?.paymentProvider ?? null,
+      connected: integration?.paymentConnected ?? false,
+      webhook_url: buildWompiWebhookUrl(appUrl),
+      stripe_webhook_url: `${appUrl.replace(/\/$/, '')}/api/webhooks/stripe`,
+      reservation_recommendations: hotel?.reservationRecommendations ?? '',
+      setup_steps: [
+        'En Wompi → Configuración → Eventos, agrega la URL de eventos (webhook) indicada abajo.',
+        'Copia el *Events Secret* de Wompi y pégalo en *Webhook Secret*.',
+        'Ingresa tu Public Key y Private Key de Wompi (modo producción o pruebas).',
+        'Opcional: escribe recomendaciones post-pago que el bot enviará tras un pago aprobado.',
+        'Guarda y realiza una reserva de prueba desde WhatsApp.',
+      ],
     };
   }
 

@@ -32,7 +32,9 @@ export class WompiProvider {
         reference,
         expires_at: request.expires_at,
         customer_email: request.guest_email,
-        redirect_url: `${process.env.APP_URL}/payment/success`,
+        redirect_url:
+          metadata.redirect_url ??
+          `${process.env.APP_URL?.replace(/\/$/, '')}/payment/result/${request.reservation_id}?token=${encodeURIComponent(metadata.payment_access_token ?? '')}`,
         metadata,
       }),
     });

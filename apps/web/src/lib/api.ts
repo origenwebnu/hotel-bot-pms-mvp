@@ -80,6 +80,8 @@ export const api = {
 
   getIntegration: () => request<IntegrationStatus>('/hotels/me/integration'),
 
+  getPaymentConfig: () => request<PaymentConfig>('/hotels/me/payment-config'),
+
   updateIntegration: (data: Record<string, string>) =>
     request<IntegrationStatus>('/hotels/me/integration', {
       method: 'PUT',
@@ -215,6 +217,15 @@ export interface IntegrationStatus {
   whatsapp_phone_number_id: string | null;
   whatsapp_has_token: boolean;
   last_validated_at: string | null;
+}
+
+export interface PaymentConfig {
+  provider: string | null;
+  connected: boolean;
+  webhook_url: string;
+  stripe_webhook_url: string;
+  reservation_recommendations: string;
+  setup_steps: string[];
 }
 
 export interface WhatsAppConfig {
