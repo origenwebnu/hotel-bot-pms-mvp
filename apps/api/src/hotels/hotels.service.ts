@@ -44,27 +44,43 @@ export class HotelsService {
       });
     }
 
+    const existing = await this.prisma.hotelIntegration.findUnique({
+      where: { hotelId },
+    });
+
+    const integrationData: {
+      pmsProvider?: string;
+      pmsPropertyId?: string;
+      paymentProvider?: string;
+    } = {};
+
+    if (data.pms_provider !== undefined) {
+      integrationData.pmsProvider = data.pms_provider;
+    }
+    if (data.pms_property_id?.trim()) {
+      integrationData.pmsPropertyId = data.pms_property_id.trim();
+    }
+    if (data.payment_provider !== undefined) {
+      integrationData.paymentProvider = data.payment_provider;
+    }
+
     await this.prisma.hotelIntegration.upsert({
       where: { hotelId },
       create: {
         hotelId,
-        pmsProvider: data.pms_provider,
-        pmsPropertyId: data.pms_property_id,
-        paymentProvider: data.payment_provider,
+        pmsProvider: data.pms_provider ?? 'local',
+        pmsPropertyId: data.pms_property_id?.trim() || null,
+        paymentProvider: data.payment_provider ?? 'wompi',
       },
-      update: {
-        pmsProvider: data.pms_provider,
-        pmsPropertyId: data.pms_property_id,
-        paymentProvider: data.payment_provider,
-      },
+      update: integrationData,
     });
 
     const credentialUpdates: Array<{ type: string; value?: string }> = [
-      { type: 'pms_api_key', value: data.pms_api_key },
-      { type: 'pms_api_secret', value: data.pms_api_secret },
-      { type: 'payment_public_key', value: data.payment_public_key },
-      { type: 'payment_private_key', value: data.payment_private_key },
-      { type: 'payment_webhook_secret', value: data.payment_webhook_secret },
+      { type: 'pms_api_key', value: data.pms_api_key?.trim() },
+      { type: 'pms_api_secret', value: data.pms_api_secret?.trim() },
+      { type: 'payment_public_key', value: data.payment_public_key?.trim() },
+      { type: 'payment_private_key', value: data.payment_private_key?.trim() },
+      { type: 'payment_webhook_secret', value: data.payment_webhook_secret?.trim() },
     ];
 
     for (const { type, value } of credentialUpdates) {
@@ -81,20 +97,33 @@ export class HotelsService {
       }
     }
 
-    let pmsConnected = false;
-    let paymentConnected = false;
+    let pmsConnected = existing?.pmsConnected ?? false;
+    let paymentConnected = existing?.paymentConnected ?? false;
 
-    if (data.pms_provider === 'local') {
+    const pmsProvider = data.pms_provider ?? existing?.pmsProvider;
+    if (pmsProvider === 'local') {
       pmsConnected = await this.pms.validatePmsCredentials(hotelId);
-    } else if (data.pms_provider && data.pms_api_key) {
+    } else if (data.pms_api_key?.trim()) {
       pmsConnected = await this.pms.validatePmsCredentials(hotelId);
     }
 
-    if (data.payment_provider && data.payment_private_key) {
+    if (data.payment_private_key?.trim()) {
       paymentConnected = true;
+    } else {
+      const storedPrivateKey = await this.prisma.encryptedCredential.findUnique({
+        where: {
+          hotelId_credentialType: {
+            hotelId,
+            credentialType: 'payment_private_key',
+          },
+        },
+      });
+      if (!storedPrivateKey) {
+        paymentConnected = false;
+      }
     }
 
-    return this.prisma.hotelIntegration.update({
+    await this.prisma.hotelIntegration.update({
       where: { hotelId },
       data: {
         pmsConnected,
@@ -128,19 +157,51 @@ export class HotelsService {
   }
 
   async getPaymentConfig(hotelId: string) {
-    const [integration, hotel] = await Promise.all([
+    const [integration, hotel, paymentCreds] = await Promise.all([
       this.prisma.hotelIntegration.findUnique({ where: { hotelId } }),
       this.prisma.hotel.findUnique({
         where: { id: hotelId },
         select: { reservationRecommendations: true },
       }),
+      this.prisma.encryptedCredential.findMany({
+        where: {
+          hotelId,
+          credentialType: {
+            in: [
+              'payment_public_key',
+              'payment_private_key',
+              'payment_webhook_secret',
+            ],
+          },
+        },
+      }),
     ]);
+
+    const credTypes = new Set(paymentCreds.map((c) => c.credentialType));
+    let publicKeyHint: string | null = null;
+
+    const publicCred = paymentCreds.find(
+      (c) => c.credentialType === 'payment_public_key',
+    );
+    if (publicCred) {
+      try {
+        const full = this.crypto.decrypt(publicCred.encryptedValue);
+        publicKeyHint =
+          full.length > 12 ? `${full.slice(0, 12)}…${full.slice(-4)}` : `${full.slice(0, 4)}…`;
+      } catch {
+        publicKeyHint = 'configurada';
+      }
+    }
 
     const appUrl = process.env.APP_URL ?? 'https://app.bookichat.com';
 
     return {
       provider: integration?.paymentProvider ?? null,
       connected: integration?.paymentConnected ?? false,
+      has_public_key: credTypes.has('payment_public_key'),
+      has_private_key: credTypes.has('payment_private_key'),
+      has_webhook_secret: credTypes.has('payment_webhook_secret'),
+      public_key_hint: publicKeyHint,
       webhook_url: buildWompiWebhookUrl(appUrl),
       stripe_webhook_url: `${appUrl.replace(/\/$/, '')}/api/webhooks/stripe`,
       reservation_recommendations: hotel?.reservationRecommendations ?? '',
@@ -148,6 +209,7 @@ export class HotelsService {
         'En Wompi → Configuración → Eventos, agrega la URL de eventos (webhook) indicada abajo.',
         'Copia el *Events Secret* de Wompi y pégalo en *Webhook Secret*.',
         'Ingresa tu Public Key y Private Key de Wompi (modo producción o pruebas).',
+        'Pulsa *Validar pasarela de pagos* para confirmar que Wompi acepta tus llaves.',
         'Opcional: escribe recomendaciones post-pago que el bot enviará tras un pago aprobado.',
         'Guarda y realiza una reserva de prueba desde WhatsApp.',
       ],

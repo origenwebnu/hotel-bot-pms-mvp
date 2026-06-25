@@ -228,6 +228,10 @@ export interface IntegrationStatus {
 export interface PaymentConfig {
   provider: string | null;
   connected: boolean;
+  has_public_key: boolean;
+  has_private_key: boolean;
+  has_webhook_secret: boolean;
+  public_key_hint: string | null;
   webhook_url: string;
   stripe_webhook_url: string;
   reservation_recommendations: string;

@@ -84,6 +84,24 @@ export class CheckoutService {
       };
     }
 
+    const publicKey = await this.prisma.encryptedCredential.findUnique({
+      where: {
+        hotelId_credentialType: {
+          hotelId,
+          credentialType: 'payment_public_key',
+        },
+      },
+    });
+
+    if (!publicKey) {
+      return {
+        configured: false,
+        provider: integration.paymentProvider,
+        hasPrivateKey: true,
+        reason: 'Falta la Public Key de Wompi. Guárdala en Integraciones → Pasarela de Pagos.',
+      };
+    }
+
     return {
       configured: true,
       provider: integration.paymentProvider,
@@ -485,7 +503,16 @@ export class CheckoutService {
     const decrypted: Record<string, string> = {};
     for (const cred of creds) {
       const key = cred.credentialType.replace('payment_', '');
-      decrypted[key] = this.crypto.decrypt(cred.encryptedValue);
+      try {
+        decrypted[key] = this.crypto.decrypt(cred.encryptedValue);
+      } catch (error) {
+        this.logger.error(
+          `Failed to decrypt ${cred.credentialType} for hotel ${hotelId}: ${error}`,
+        );
+        throw new Error(
+          'No se pudieron leer las llaves de pago guardadas. Vuelve a guardarlas en Integraciones.',
+        );
+      }
     }
 
     const integration = await this.prisma.hotelIntegration.findUniqueOrThrow({

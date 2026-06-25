@@ -13,6 +13,7 @@ import { HotelsService } from './hotels.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreIntegratorService } from '../core-integrator/core-integrator.service';
 import { CheckoutService } from '../checkout/checkout.service';
+import { UpdateIntegrationDto } from './dto/update-integration.dto';
 
 class UpdateWhatsAppDto {
   @IsOptional()
@@ -46,11 +47,17 @@ export class HotelsController {
   }
 
   @Put('me/integration')
-  updateIntegration(
+  async updateIntegration(
     @Request() req: { user: { hotelId: string } },
-    @Body() body: Record<string, string>,
+    @Body() body: UpdateIntegrationDto,
   ) {
-    return this.hotels.updateIntegration(req.user.hotelId, body);
+    await this.hotels.updateIntegration(req.user.hotelId, body);
+
+    if (body.payment_private_key?.trim() || body.payment_public_key?.trim()) {
+      await this.checkout.validatePaymentSetup(req.user.hotelId).catch(() => undefined);
+    }
+
+    return this.hotels.getIntegrationStatus(req.user.hotelId);
   }
 
   @Get('me/integration/validate-pms')
