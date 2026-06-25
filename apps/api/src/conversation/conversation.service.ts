@@ -394,6 +394,10 @@ export class ConversationService {
       where: { idempotencyKey },
     });
     if (existing && ['hold', 'payment_pending', 'confirmed'].includes(existing.status)) {
+      await this.updateSession(session.id, {
+        state: 'awaiting_payment',
+        reservationId: existing.id,
+      });
       await this.sendPaymentSummary(hotelId, session.whatsappPhone, existing, holdTtl);
       return;
     }
@@ -455,32 +459,6 @@ export class ConversationService {
           paymentAccessToken,
         },
       });
-
-      try {
-        const payment = await this.checkout.createPaymentLink(hotelId, {
-          amount: finalAmount,
-          currency: hold.currency,
-          reservation_id: reservation.id,
-          hold_id: hold.hold_id,
-          expires_at: hold.expires_at,
-          guest_email: email,
-          guest_name: `${firstName} ${lastName}`,
-          metadata: { payment_access_token: paymentAccessToken },
-        });
-
-        reservation = await this.prisma.reservation.update({
-          where: { id: reservation.id },
-          data: {
-            status: 'payment_pending',
-            paymentLink: payment.payment_url,
-            paymentId: payment.payment_id,
-          },
-        });
-      } catch (paymentError) {
-        this.logger.warn(
-          `Payment link failed for reservation ${reservation.id}: ${paymentError}`,
-        );
-      }
 
       await this.updateSession(session.id, {
         state: 'awaiting_payment',
@@ -574,6 +552,12 @@ export class ConversationService {
     },
     holdTtl: number,
   ) {
+    const paymentResult = await this.checkout.ensureReservationPayment(
+      hotelId,
+      reservation.id,
+    );
+    reservation = paymentResult.reservation;
+
     const hotel = await this.prisma.hotel.findUniqueOrThrow({
       where: { id: hotelId },
       select: { name: true },
@@ -604,7 +588,7 @@ export class ConversationService {
 
     await this.whatsapp.sendText(hotelId, phone, receipt.text.body);
 
-    if (reservation.paymentLink && reservation.paymentAccessToken) {
+    if (paymentResult.paymentReady && reservation.paymentLink && reservation.paymentAccessToken) {
       const paymentPageUrl = this.checkout.buildPaymentPageUrl(
         reservation.id,
         reservation.paymentAccessToken,
@@ -623,7 +607,8 @@ export class ConversationService {
       await this.whatsapp.sendText(
         hotelId,
         phone,
-        '⚠️ El hotel aún no tiene pasarela de pagos configurada. Tu reserva quedó registrada — el hotel te contactará para confirmar el pago.',
+        paymentResult.userMessage ??
+          '⚠️ No pudimos generar el link de pago. Revisa Wompi en Integraciones del panel e intenta escribiendo *pagar*.',
       );
     }
   }

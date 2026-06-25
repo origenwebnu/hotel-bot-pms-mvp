@@ -91,6 +91,12 @@ export const api = {
   validatePms: () =>
     request<{ valid: boolean }>('/hotels/me/integration/validate-pms'),
 
+  validatePayment: () =>
+    request<{ valid: boolean; reason?: string; api_base?: string }>(
+      '/hotels/me/integration/validate-payment',
+      { method: 'POST' },
+    ),
+
   getWhatsApp: () => request<WhatsAppConfig>('/hotels/me/whatsapp'),
 
   updateWhatsApp: (data: { phone_number_id?: string; access_token?: string }) =>

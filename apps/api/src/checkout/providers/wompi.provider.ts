@@ -8,6 +8,10 @@ import type {
 
 @Injectable()
 export class WompiProvider {
+  resolveApiBase(privateKey?: string): string {
+    return resolveWompiApiBase(privateKey);
+  }
+
   async createPaymentLink(
     credentials: PaymentCredentials,
     request: PaymentLinkRequest,
@@ -16,7 +20,9 @@ export class WompiProvider {
     const reference = `res-${request.reservation_id}`;
     const amountInCents = Math.round(request.amount * 100);
 
-    const response = await fetch('https://production.wompi.co/v1/payment_links', {
+    const apiBase = resolveWompiApiBase(credentials.private_key);
+
+    const response = await fetch(`${apiBase}/payment_links`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${credentials.private_key}`,
@@ -40,7 +46,10 @@ export class WompiProvider {
     });
 
     if (!response.ok) {
-      throw new Error(`Wompi payment link failed: ${response.status}`);
+      const errorBody = await response.text();
+      throw new Error(
+        `Wompi payment link failed: ${response.status} ${errorBody.slice(0, 500)}`,
+      );
     }
 
     const data = (await response.json()) as {
@@ -84,6 +93,17 @@ export class WompiProvider {
         return 'pending';
     }
   }
+}
+
+function resolveWompiApiBase(privateKey?: string): string {
+  if (process.env.WOMPI_API_BASE) {
+    return process.env.WOMPI_API_BASE.replace(/\/$/, '');
+  }
+  const isTestKey =
+    privateKey?.startsWith('prv_test_') || privateKey?.startsWith('pub_test_');
+  return isTestKey
+    ? 'https://sandbox.wompi.co/v1'
+    : 'https://production.wompi.co/v1';
 }
 
 interface WompiEvent {

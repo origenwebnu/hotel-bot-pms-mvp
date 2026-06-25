@@ -22,6 +22,7 @@ export function IntegrationsPanel({ integration, onUpdate }: Props) {
   const [paymentConfig, setPaymentConfig] = useState<PaymentConfig | null>(null);
   const [loading, setLoading] = useState(false);
   const [validating, setValidating] = useState(false);
+  const [validatingPayment, setValidatingPayment] = useState(false);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
@@ -64,6 +65,27 @@ export function IntegrationsPanel({ integration, onUpdate }: Props) {
       setMessage('Error al validar credenciales');
     } finally {
       setValidating(false);
+    }
+  }
+
+  async function handleValidatePayment() {
+    setValidatingPayment(true);
+    setMessage('');
+    try {
+      const result = await api.validatePayment();
+      if (result.valid) {
+        setMessage(
+          `✓ Wompi conectado correctamente${result.api_base ? ` (${result.api_base})` : ''}`,
+        );
+        const updated = await api.getIntegration();
+        onUpdate(updated);
+      } else {
+        setMessage(`✗ Pagos: ${result.reason ?? 'Credenciales inválidas'}`);
+      }
+    } catch {
+      setMessage('Error al validar pasarela de pagos');
+    } finally {
+      setValidatingPayment(false);
     }
   }
 
@@ -198,6 +220,17 @@ export function IntegrationsPanel({ integration, onUpdate }: Props) {
           <p className="desc">
             Este texto se envía al huésped por WhatsApp cuando el pago es aprobado.
           </p>
+
+          <div className="actions">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={handleValidatePayment}
+              disabled={validatingPayment}
+            >
+              {validatingPayment ? 'Validando Wompi...' : 'Validar pasarela de pagos'}
+            </button>
+          </div>
 
           <button type="submit" className="btn-primary" disabled={loading}>
             {loading ? 'Guardando...' : 'Guardar integraciones'}

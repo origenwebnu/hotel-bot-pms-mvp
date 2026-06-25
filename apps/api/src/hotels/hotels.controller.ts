@@ -12,6 +12,7 @@ import { IsOptional, IsString, MinLength } from 'class-validator';
 import { HotelsService } from './hotels.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreIntegratorService } from '../core-integrator/core-integrator.service';
+import { CheckoutService } from '../checkout/checkout.service';
 
 class UpdateWhatsAppDto {
   @IsOptional()
@@ -31,6 +32,7 @@ export class HotelsController {
   constructor(
     private readonly hotels: HotelsService,
     private readonly pms: CoreIntegratorService,
+    private readonly checkout: CheckoutService,
   ) {}
 
   @Get('me')
@@ -60,6 +62,11 @@ export class HotelsController {
   @Get('me/payment-config')
   getPaymentConfig(@Request() req: { user: { hotelId: string } }) {
     return this.hotels.getPaymentConfig(req.user.hotelId);
+  }
+
+  @Post('me/integration/validate-payment')
+  async validatePayment(@Request() req: { user: { hotelId: string } }) {
+    return this.checkout.validatePaymentSetup(req.user.hotelId);
   }
 
   @Get('me/whatsapp')

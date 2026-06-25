@@ -47,6 +47,199 @@ export class CheckoutService {
     );
   }
 
+  async getPaymentSetupStatus(hotelId: string): Promise<{
+    configured: boolean;
+    provider: string | null;
+    hasPrivateKey: boolean;
+    reason?: string;
+  }> {
+    const integration = await this.prisma.hotelIntegration.findUnique({
+      where: { hotelId },
+    });
+
+    if (!integration?.paymentProvider) {
+      return {
+        configured: false,
+        provider: null,
+        hasPrivateKey: false,
+        reason: 'No hay proveedor de pagos seleccionado en Integraciones.',
+      };
+    }
+
+    const privateKey = await this.prisma.encryptedCredential.findUnique({
+      where: {
+        hotelId_credentialType: {
+          hotelId,
+          credentialType: 'payment_private_key',
+        },
+      },
+    });
+
+    if (!privateKey) {
+      return {
+        configured: false,
+        provider: integration.paymentProvider,
+        hasPrivateKey: false,
+        reason: 'Falta la Private Key de Wompi. Guárdala en Integraciones → Pasarela de Pagos.',
+      };
+    }
+
+    return {
+      configured: true,
+      provider: integration.paymentProvider,
+      hasPrivateKey: true,
+    };
+  }
+
+  async validatePaymentSetup(hotelId: string): Promise<{
+    valid: boolean;
+    reason?: string;
+    api_base?: string;
+  }> {
+    const setup = await this.getPaymentSetupStatus(hotelId);
+    if (!setup.configured) {
+      return { valid: false, reason: setup.reason };
+    }
+
+    try {
+      const credentials = await this.getPaymentCredentials(hotelId);
+      const apiBase = this.wompi.resolveApiBase(credentials.private_key);
+
+      if (!credentials.public_key) {
+        return {
+          valid: false,
+          reason: 'Falta la Public Key de Wompi. Guárdala en Integraciones → Pasarela de Pagos.',
+          api_base: apiBase,
+        };
+      }
+
+      const response = await fetch(
+        `${apiBase}/merchants/${encodeURIComponent(credentials.public_key)}`,
+        { headers: { Authorization: `Bearer ${credentials.private_key}` } },
+      );
+
+      if (!response.ok) {
+        const body = await response.text();
+        return {
+          valid: false,
+          reason: `Wompi rechazó las llaves (${response.status}): ${body.slice(0, 200)}`,
+          api_base: apiBase,
+        };
+      }
+
+      await this.prisma.hotelIntegration.update({
+        where: { hotelId },
+        data: { paymentConnected: true, lastValidatedAt: new Date() },
+      });
+
+      return { valid: true, api_base: apiBase };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return { valid: false, reason: message };
+    }
+  }
+
+  async ensureReservationPayment(
+    hotelId: string,
+    reservationId: string,
+  ): Promise<{
+    reservation: Awaited<ReturnType<typeof this.loadReservationForPayment>>;
+    paymentReady: boolean;
+    userMessage?: string;
+  }> {
+    const setup = await this.getPaymentSetupStatus(hotelId);
+    if (!setup.configured) {
+      const reservation = await this.loadReservationForPayment(reservationId);
+      return {
+        reservation,
+        paymentReady: false,
+        userMessage:
+          `⚠️ ${setup.reason ?? 'Pagos no configurados.'}\n\n` +
+          `Tu reserva quedó registrada. Configura Wompi en el panel del hotel e intenta de nuevo escribiendo *pagar*.`,
+      };
+    }
+
+    let reservation = await this.loadReservationForPayment(reservationId);
+    let accessToken = reservation.paymentAccessToken;
+
+    if (!accessToken) {
+      accessToken = this.generatePaymentAccessToken();
+      reservation = await this.prisma.reservation.update({
+        where: { id: reservationId },
+        data: { paymentAccessToken: accessToken },
+      });
+    }
+
+    if (reservation.paymentLink) {
+      return { reservation, paymentReady: true };
+    }
+
+    if (!reservation.totalAmount || !reservation.guestEmail) {
+      return {
+        reservation,
+        paymentReady: false,
+        userMessage:
+          '⚠️ No pudimos generar el link de pago (faltan datos de la reserva). Escribe *menu* y vuelve a reservar.',
+      };
+    }
+
+    try {
+      const holdId = reservation.pmsReservationId ?? `local-${reservation.id}`;
+      const expiresAt =
+        reservation.holdExpiresAt?.toISOString() ??
+        new Date(Date.now() + 60 * 60 * 1000).toISOString();
+
+      const payment = await this.createPaymentLink(hotelId, {
+        amount: reservation.totalAmount,
+        currency: reservation.currency ?? 'COP',
+        reservation_id: reservation.id,
+        hold_id: holdId,
+        expires_at: expiresAt,
+        guest_email: reservation.guestEmail,
+        guest_name:
+          [reservation.guestFirstName, reservation.guestLastName]
+            .filter(Boolean)
+            .join(' ') || 'Huésped',
+        metadata: { payment_access_token: accessToken },
+      });
+
+      reservation = await this.prisma.reservation.update({
+        where: { id: reservationId },
+        data: {
+          status: 'payment_pending',
+          paymentLink: payment.payment_url,
+          paymentId: payment.payment_id,
+        },
+      });
+
+      return { reservation, paymentReady: true };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.error(
+        `ensureReservationPayment failed for ${reservationId}: ${message}`,
+      );
+
+      let userMessage =
+        '⚠️ No pudimos conectar con Wompi para generar el pago. Revisa las llaves en Integraciones (Public/Private Key).';
+
+      if (message.includes('401') || message.includes('403')) {
+        userMessage =
+          '⚠️ Las llaves de Wompi parecen incorrectas (error de autenticación). Verifica Public Key y Private Key en el panel.';
+      } else if (message.includes('sandbox') || message.includes('test')) {
+        userMessage =
+          '⚠️ Estás usando llaves de prueba: configura WOMPI_API_BASE=sandbox en el servidor o usa llaves de producción.';
+      }
+
+      return { reservation, paymentReady: false, userMessage };
+    }
+  }
+
+  private loadReservationForPayment(reservationId: string) {
+    return this.prisma.reservation.findUniqueOrThrow({
+      where: { id: reservationId },
+    });
+  }
+
   async createPaymentLink(
     hotelId: string,
     request: PaymentLinkRequest,
