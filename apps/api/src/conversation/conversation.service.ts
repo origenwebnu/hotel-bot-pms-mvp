@@ -64,8 +64,8 @@ export class ConversationService {
     const session = await this.getOrCreateSession(hotelId, phone);
     const text = this.extractText(message);
 
-    if (/^continuar\s+reserva$/i.test(text.trim())) {
-      await this.continueReservationFromGallery(hotelId, session, phone);
+    if (/^(continuar\s+reserva|reservar)$/i.test(text.trim())) {
+      await this.proceedToGuestInfo(hotelId, session, phone);
       return;
     }
 
@@ -156,6 +156,10 @@ export class ConversationService {
       case 'room_selected':
         if (this.wantsSessionReset(text)) {
           await this.returnToWelcomeMenu(hotelId, session.id, phone);
+          return;
+        }
+        if (/^reservar$/i.test(text.trim())) {
+          await this.proceedToGuestInfo(hotelId, session, phone);
           return;
         }
         if (this.isPriceSensitivityQuery(text, intent)) {
@@ -461,9 +465,15 @@ export class ConversationService {
       session.whatsappPhone,
       this.renderer.renderRoomGalleryLink(url, room.name),
     );
+
+    await this.whatsapp.sendInteractive(
+      hotelId,
+      session.whatsappPhone,
+      this.renderer.renderGalleryReservePrompt(room.name),
+    );
   }
 
-  private async continueReservationFromGallery(
+  private async proceedToGuestInfo(
     hotelId: string,
     session: { id: string; whatsappPhone: string },
     phone: string,
@@ -478,7 +488,7 @@ export class ConversationService {
       await this.whatsapp.sendText(
         hotelId,
         phone,
-        'No hay una reserva en curso. Escribe *menu* para empezar.',
+        'No hay una habitación seleccionada. Escribe *menu* para empezar de nuevo.',
       );
       return;
     }
@@ -499,7 +509,12 @@ export class ConversationService {
       return;
     }
 
-    await this.selectRoom(hotelId, session, room);
+    await this.updateSession(session.id, { state: 'collecting_guest_info' });
+    await this.whatsapp.sendText(
+      hotelId,
+      phone,
+      '¡Excelente elección! Para confirmar, comparte:\n• Nombre completo\n• Email\n\n(ej: Juan Pérez, juan@email.com)',
+    );
   }
 
   private async handleButton(
@@ -533,12 +548,7 @@ export class ConversationService {
     }
 
     if (buttonId === WHATSAPP_BUTTON_IDS.RESERVE) {
-      await this.updateSession(session.id, { state: 'collecting_guest_info' });
-      await this.whatsapp.sendText(
-        hotelId,
-        session.whatsappPhone,
-        '¡Excelente elección! Para confirmar, comparte:\n• Nombre completo\n• Email\n\n(ej: Juan Pérez, juan@email.com)',
-      );
+      await this.proceedToGuestInfo(hotelId, session, session.whatsappPhone);
       return;
     }
 

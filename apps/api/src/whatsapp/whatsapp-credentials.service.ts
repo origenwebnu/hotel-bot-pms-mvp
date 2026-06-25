@@ -52,4 +52,43 @@ export class WhatsAppCredentialsService {
     });
     return Boolean(cred);
   }
+
+  async resolveDisplayPhone(hotelId: string): Promise<string | null> {
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: { whatsappDisplayPhone: true },
+    });
+
+    const stored = hotel?.whatsappDisplayPhone?.replace(/\D/g, '').trim();
+    if (stored) return stored;
+
+    const envDefault = process.env.DEFAULT_WHATSAPP_DISPLAY_PHONE?.replace(/\D/g, '').trim();
+    if (envDefault) return envDefault;
+
+    const { phoneNumberId, accessToken } = await this.resolve(hotelId);
+    if (!phoneNumberId || !accessToken) return null;
+
+    const apiVersion = process.env.WHATSAPP_API_VERSION ?? 'v21.0';
+    const response = await fetch(
+      `https://graph.facebook.com/${apiVersion}/${phoneNumberId}?fields=display_phone_number`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+
+    if (!response.ok) return null;
+
+    try {
+      const data = (await response.json()) as { display_phone_number?: string };
+      const fetched = data.display_phone_number?.replace(/\D/g, '').trim();
+      if (!fetched) return null;
+
+      await this.prisma.hotel.update({
+        where: { id: hotelId },
+        data: { whatsappDisplayPhone: fetched },
+      });
+
+      return fetched;
+    } catch {
+      return null;
+    }
+  }
 }
