@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api } from '@/lib/api';
+import { api, saveAuthSession, getPostLoginPath } from '@/lib/api';
 import { AuthLayout } from '@/components/AuthLayout';
 import { PasswordInput } from '@/components/PasswordInput';
 
@@ -77,9 +77,8 @@ export default function RegistroPage() {
         email: form.email,
         code: code.trim(),
       });
-      localStorage.setItem('token', data.access_token);
-      localStorage.setItem('hotel_id', data.hotel_id);
-      router.push('/dashboard');
+      saveAuthSession(data);
+      router.push(getPostLoginPath(data.role));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Código inválido');
     } finally {

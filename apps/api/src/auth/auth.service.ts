@@ -204,24 +204,103 @@ export class AuthService {
     });
 
     const user = hotel.users[0];
-    return this.signToken(user.id, user.email, hotel.id);
+    return this.signToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      hotelId: hotel.id,
+      name: user.name,
+    });
   }
 
   async login(email: string, password: string) {
+    const normalized = email.trim().toLowerCase();
+
+    const platformAdmin = await this.prisma.platformAdmin.findUnique({
+      where: { email: normalized },
+    });
+
+    if (platformAdmin?.isActive) {
+      const valid = await bcrypt.compare(password, platformAdmin.passwordHash);
+      if (valid) {
+        return this.signToken({
+          userId: platformAdmin.id,
+          email: platformAdmin.email,
+          role: 'super_admin',
+          name: platformAdmin.name,
+        });
+      }
+    }
+
     const user = await this.prisma.adminUser.findUnique({
-      where: { email: email.trim().toLowerCase() },
+      where: { email: normalized },
     });
     if (!user) throw new UnauthorizedException('Credenciales inválidas');
 
     const valid = await bcrypt.compare(password, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Credenciales inválidas');
 
-    return this.signToken(user.id, user.email, user.hotelId);
+    return this.signToken({
+      userId: user.id,
+      email: user.email,
+      role: user.role,
+      hotelId: user.hotelId,
+      name: user.name,
+    });
   }
 
-  private signToken(userId: string, email: string, hotelId: string) {
-    const token = this.jwt.sign({ sub: userId, email, hotelId });
-    return { access_token: token, hotel_id: hotelId };
+  async getProfile(userId: string, role: string) {
+    if (role === 'super_admin') {
+      const admin = await this.prisma.platformAdmin.findUnique({
+        where: { id: userId },
+      });
+      if (!admin) throw new UnauthorizedException('Sesión inválida');
+      return {
+        id: admin.id,
+        email: admin.email,
+        name: admin.name,
+        role: admin.role,
+        hotel_id: null,
+      };
+    }
+
+    const user = await this.prisma.adminUser.findUnique({
+      where: { id: userId },
+      include: { hotel: { select: { id: true, name: true } } },
+    });
+    if (!user) throw new UnauthorizedException('Sesión inválida');
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      hotel_id: user.hotelId,
+      hotel_name: user.hotel.name,
+    };
+  }
+
+  private signToken(params: {
+    userId: string;
+    email: string;
+    role: string;
+    hotelId?: string | null;
+    name?: string;
+  }) {
+    const token = this.jwt.sign({
+      sub: params.userId,
+      email: params.email,
+      role: params.role,
+      hotelId: params.hotelId ?? null,
+      name: params.name,
+    });
+
+    return {
+      access_token: token,
+      role: params.role,
+      hotel_id: params.hotelId ?? null,
+      name: params.name,
+    };
   }
 
   private hashCode(code: string): string {

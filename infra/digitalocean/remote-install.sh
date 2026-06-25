@@ -44,6 +44,11 @@ fi
 $COMPOSE_CMD build --no-cache api web
 $COMPOSE_CMD up -d
 
+echo "==> Migraciones de base de datos..."
+bash infra/digitalocean/migrate-api.sh || {
+  echo "WARN: migrate deploy falló — revisar logs del contenedor api"
+}
+
 echo "==> Esperando servicios (hasta 90s)..."
 OK=0
 for i in $(seq 1 18); do

@@ -12,6 +12,7 @@ import { HotelsModule } from './hotels/hotels.module';
 import { KnowledgeModule } from './knowledge/knowledge.module';
 import { LocalInventoryModule } from './local-inventory/local-inventory.module';
 import { ReservationsModule } from './reservations/reservations.module';
+import { SuperAdminModule } from './super-admin/super-admin.module';
 import { HealthModule } from './health/health.module';
 import { QUEUE_NAMES } from '@hotel-bot/shared';
 
@@ -41,6 +42,7 @@ import { QUEUE_NAMES } from '@hotel-bot/shared';
     KnowledgeModule,
     LocalInventoryModule,
     ReservationsModule,
+    SuperAdminModule,
     HealthModule,
   ],
 })
