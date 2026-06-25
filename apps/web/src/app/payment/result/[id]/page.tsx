@@ -197,6 +197,7 @@ function PaymentResultContent() {
           width: 100%;
           max-width: 420px;
           background: #fff;
+          color: #0f172a;
           border-radius: 16px;
           padding: 1.5rem;
           margin-top: 0.5rem;
@@ -218,6 +219,7 @@ function PaymentResultContent() {
         h1 {
           font-size: 1.35rem;
           margin: 0.25rem 0;
+          color: #0f172a;
         }
         .hotel {
           color: #334155;
@@ -230,6 +232,7 @@ function PaymentResultContent() {
           display: flex;
           flex-direction: column;
           gap: 0.65rem;
+          background: #f8fafc;
         }
         .line {
           display: flex;
@@ -240,17 +243,28 @@ function PaymentResultContent() {
         .line span {
           color: #64748b;
         }
+        .line strong {
+          color: #0f172a;
+          text-align: right;
+        }
         .total {
           border-top: 1px dashed #cbd5e1;
           padding-top: 0.75rem;
           display: flex;
           justify-content: space-between;
         }
+        .total span {
+          color: #64748b;
+        }
+        .total strong {
+          color: #0f172a;
+        }
         .thanks,
         .fail {
           margin-top: 1rem;
           font-size: 0.92rem;
           line-height: 1.45;
+          color: #334155;
         }
         .reco {
           margin-top: 1rem;

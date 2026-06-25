@@ -124,21 +124,23 @@ function PaymentCheckoutContent() {
           width: 100%;
           max-width: 420px;
           background: #fff;
+          color: #0f172a;
           border-radius: 16px;
           padding: 1.5rem;
           margin-top: 1rem;
         }
         .eyebrow {
-          color: #64748b;
+          color: #475569;
           font-size: 0.8rem;
           margin-bottom: 0.25rem;
         }
         h1 {
           font-size: 1.4rem;
           margin-bottom: 0.25rem;
+          color: #0f172a;
         }
         .subtitle {
-          color: #64748b;
+          color: #475569;
           font-size: 0.9rem;
           margin-bottom: 1.25rem;
         }
@@ -150,6 +152,7 @@ function PaymentCheckoutContent() {
           flex-direction: column;
           gap: 0.75rem;
           margin-bottom: 1.25rem;
+          background: #f8fafc;
         }
         .row {
           display: flex;
@@ -160,12 +163,22 @@ function PaymentCheckoutContent() {
         .row span {
           color: #64748b;
         }
+        .row strong {
+          color: #0f172a;
+          text-align: right;
+        }
         .total {
           border-top: 1px dashed #cbd5e1;
           padding-top: 0.75rem;
           display: flex;
           justify-content: space-between;
           font-size: 1.05rem;
+        }
+        .total span {
+          color: #64748b;
+        }
+        .total strong {
+          color: #0f172a;
         }
         .pay-btn {
           display: block;
@@ -181,7 +194,7 @@ function PaymentCheckoutContent() {
         .warn {
           margin-top: 1rem;
           font-size: 0.82rem;
-          color: #64748b;
+          color: #475569;
           line-height: 1.4;
         }
         .warn {

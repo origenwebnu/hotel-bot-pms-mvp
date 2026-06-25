@@ -22,6 +22,7 @@ fi
 sed -i "s|APP_URL=.*|APP_URL=https://app.bookichat.com|" .env
 sed -i "s|API_URL=.*|API_URL=https://app.bookichat.com|" .env
 grep -q '^CORS_ORIGINS=' .env && sed -i "s|CORS_ORIGINS=.*|CORS_ORIGINS=https://app.bookichat.com|" .env || echo "CORS_ORIGINS=https://app.bookichat.com" >> .env
+grep -q '^ROOM_HOLD_TTL_MINUTES=' .env && sed -i "s|ROOM_HOLD_TTL_MINUTES=.*|ROOM_HOLD_TTL_MINUTES=30|" .env || echo "ROOM_HOLD_TTL_MINUTES=30" >> .env
 
 export API_URL="http://${PUBLIC_IP}"
 
