@@ -12,6 +12,7 @@ import type {
   RoomHoldResult,
   StandardRoomAvailability,
 } from '@hotel-bot/shared';
+import { filterValidMediaUrls, sanitizeWhatsAppText } from '@hotel-bot/shared';
 import { PrismaService } from '../prisma/prisma.service';
 
 const BLOCKING_STATUSES = ['hold', 'payment_pending', 'confirmed'];
@@ -49,11 +50,13 @@ export class LocalInventoryService {
 
       rooms.push({
         room_type_id: rt.id,
-        name: rt.name,
-        description: rt.description ?? undefined,
+        name: sanitizeWhatsAppText(rt.name, 60),
+        description: rt.description
+          ? sanitizeWhatsAppText(rt.description, 200)
+          : undefined,
         price: rt.pricePerNight,
         currency: rt.currency,
-        photos_urls: rt.photoUrls,
+        photos_urls: filterValidMediaUrls(rt.photoUrls),
         max_occupancy: rt.maxOccupancy,
         available_units: available,
       });

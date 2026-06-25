@@ -9,7 +9,10 @@ import {
   QUEUE_NAMES,
   WHATSAPP_BUTTON_IDS,
   countNights,
+  filterValidMediaUrls,
   formatDisplayDateRange,
+  normalizeRoomLabel,
+  sanitizeWhatsAppText,
   type SessionDiscountOffer,
   type StandardRoomAvailability,
   type WhatsAppInboundMessage,
@@ -44,6 +47,14 @@ export class ConversationService {
       removeOnComplete: true,
       attempts: 3,
     });
+  }
+
+  async notifyUnexpectedError(hotelId: string, phone: string) {
+    await this.whatsapp.sendText(
+      hotelId,
+      phone,
+      'Disculpa, hubo un problema procesando tu mensaje. Escribe *menu* para volver al inicio o intenta de nuevo.',
+    );
   }
 
   async processMessage(hotelId: string, message: WhatsAppInboundMessage) {
@@ -275,15 +286,17 @@ export class ConversationService {
   ) {
     const fullSession = await this.getSession(session.id);
     const availability = await this.fetchAvailability(hotelId, fullSession);
-    const normalized = text.trim().toLowerCase();
+    const normalized = normalizeRoomLabel(text);
 
-    const room = availability.rooms.find(
-      (r) =>
+    const room = availability.rooms.find((r) => {
+      const name = normalizeRoomLabel(r.name);
+      return (
         r.room_type_id.toLowerCase() === normalized ||
-        r.name.toLowerCase() === normalized ||
-        r.name.toLowerCase().includes(normalized) ||
-        normalized.includes(r.name.toLowerCase()),
-    );
+        name === normalized ||
+        name.includes(normalized) ||
+        normalized.includes(name)
+      );
+    });
 
     if (!room) {
       await this.whatsapp.sendText(
@@ -308,6 +321,9 @@ export class ConversationService {
 
     const room = availability.rooms.find((r) => r.room_type_id === roomTypeId);
     if (!room) {
+      this.logger.warn(
+        `Room ${roomTypeId} not available for session ${session.id} (hotel ${hotelId})`,
+      );
       await this.whatsapp.sendText(hotelId, session.whatsappPhone, 'Esa habitación ya no está disponible.');
       return;
     }
@@ -320,23 +336,72 @@ export class ConversationService {
     session: { id: string; whatsappPhone: string },
     room: StandardRoomAvailability,
   ) {
+    const photos = filterValidMediaUrls(room.photos_urls);
+    const sanitizedRoom: StandardRoomAvailability = {
+      ...room,
+      name: sanitizeWhatsAppText(room.name, 60),
+      description: room.description
+        ? sanitizeWhatsAppText(room.description, 200)
+        : room.description,
+      photos_urls: photos,
+    };
+
+    let delivered = false;
+
+    try {
+      await this.whatsapp.sendInteractive(
+        hotelId,
+        session.whatsappPhone,
+        this.renderer.renderRoomDetail(sanitizedRoom),
+      );
+      delivered = true;
+    } catch (err) {
+      this.logger.warn(
+        `Room detail interactive failed for ${sanitizedRoom.room_type_id}: ${err instanceof Error ? err.message : err}`,
+      );
+      try {
+        await this.whatsapp.sendInteractive(
+          hotelId,
+          session.whatsappPhone,
+          this.renderer.renderRoomDetailWithoutHeader(sanitizedRoom),
+        );
+        delivered = true;
+      } catch (fallbackErr) {
+        this.logger.error(
+          `Room detail fallback failed for ${sanitizedRoom.room_type_id}: ${fallbackErr instanceof Error ? fallbackErr.message : fallbackErr}`,
+        );
+        const description =
+          sanitizedRoom.description ?? 'Habitación confortable para tu estadía.';
+        await this.whatsapp.sendText(
+          hotelId,
+          session.whatsappPhone,
+          `*${sanitizedRoom.name}*\n\n${description}\n\n💰 *${sanitizedRoom.currency} ${sanitizedRoom.price.toLocaleString()}* / noche\n\nEscribe *reservar* para continuar o *menu* para volver al inicio.`,
+        );
+        delivered = true;
+      }
+    }
+
+    if (!delivered) return;
+
+    for (let i = 0; i < photos.slice(1, 4).length; i++) {
+      try {
+        await this.whatsapp.sendImage(
+          hotelId,
+          session.whatsappPhone,
+          photos[i + 1],
+          i === 0 ? `📸 Más fotos — ${sanitizedRoom.name}` : undefined,
+        );
+      } catch (err) {
+        this.logger.warn(
+          `Extra room photo failed for ${sanitizedRoom.room_type_id}: ${err instanceof Error ? err.message : err}`,
+        );
+      }
+    }
+
     await this.updateSession(session.id, {
       state: 'room_selected',
       selectedRoomTypeId: room.room_type_id,
     });
-
-    const detailMsg = this.renderer.renderRoomDetail(room);
-    await this.whatsapp.sendInteractive(hotelId, session.whatsappPhone, detailMsg);
-
-    const extraPhotos = room.photos_urls.slice(1, 4);
-    for (let i = 0; i < extraPhotos.length; i++) {
-      await this.whatsapp.sendImage(
-        hotelId,
-        session.whatsappPhone,
-        extraPhotos[i],
-        i === 0 ? `📸 Más fotos — ${room.name}` : undefined,
-      );
-    }
   }
 
   private async handleButton(

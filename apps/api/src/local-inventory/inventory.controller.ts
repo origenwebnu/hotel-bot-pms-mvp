@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PrismaService } from '../prisma/prisma.service';
+import { filterValidMediaUrls } from '@hotel-bot/shared';
 
 @Controller('hotels/me/inventory')
 @UseGuards(JwtAuthGuard)
@@ -50,7 +51,7 @@ export class InventoryController {
         currency: body.currency ?? 'COP',
         maxOccupancy: body.max_occupancy ?? 2,
         totalUnits: body.total_units ?? 1,
-        photoUrls: body.photo_urls ?? [],
+        photoUrls: filterValidMediaUrls(body.photo_urls ?? []),
       },
     });
     return this.format(room);
@@ -93,7 +94,9 @@ export class InventoryController {
           maxOccupancy: body.max_occupancy,
         }),
         ...(body.total_units !== undefined && { totalUnits: body.total_units }),
-        ...(body.photo_urls !== undefined && { photoUrls: body.photo_urls }),
+        ...(body.photo_urls !== undefined && {
+          photoUrls: filterValidMediaUrls(body.photo_urls),
+        }),
         ...(body.is_active !== undefined && { isActive: body.is_active }),
         ...(body.sort_order !== undefined && { sortOrder: body.sort_order }),
       },
