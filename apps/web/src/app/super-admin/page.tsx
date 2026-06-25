@@ -8,10 +8,11 @@ import {
   type PlatformHotel,
   type PlatformUser,
   type PlatformAdminUser,
+  type SubscriptionPlan,
 } from '@/lib/super-admin-api';
 import { clearAuthSession } from '@/lib/api-core';
 
-type Tab = 'overview' | 'hotels' | 'users' | 'admins' | 'settings';
+type Tab = 'overview' | 'hotels' | 'plans' | 'users' | 'admins' | 'settings';
 
 export default function SuperAdminPage() {
   const router = useRouter();
@@ -20,6 +21,7 @@ export default function SuperAdminPage() {
   const [error, setError] = useState('');
   const [stats, setStats] = useState<PlatformStats | null>(null);
   const [hotels, setHotels] = useState<PlatformHotel[]>([]);
+  const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [users, setUsers] = useState<PlatformUser[]>([]);
   const [admins, setAdmins] = useState<PlatformAdminUser[]>([]);
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -46,6 +48,8 @@ export default function SuperAdminPage() {
         setStats(await superAdminApi.getStats());
       } else if (activeTab === 'hotels') {
         setHotels(await superAdminApi.listHotels());
+      } else if (activeTab === 'plans') {
+        setPlans(await superAdminApi.listPlans());
       } else if (activeTab === 'users') {
         setUsers(await superAdminApi.listUsers());
       } else if (activeTab === 'admins') {
@@ -95,6 +99,12 @@ export default function SuperAdminPage() {
             🏨 Hoteles
           </button>
           <button
+            className={tab === 'plans' ? 'active' : ''}
+            onClick={() => setTab('plans')}
+          >
+            💳 Planes
+          </button>
+          <button
             className={tab === 'users' ? 'active' : ''}
             onClick={() => setTab('users')}
           >
@@ -126,6 +136,7 @@ export default function SuperAdminPage() {
           <h1>
             {tab === 'overview' && 'Resumen de la plataforma'}
             {tab === 'hotels' && 'Gestión de hoteles'}
+            {tab === 'plans' && 'Planes de suscripción'}
             {tab === 'users' && 'Usuarios de hoteles'}
             {tab === 'admins' && 'Super administradores'}
             {tab === 'settings' && 'Parametrización global'}
@@ -136,7 +147,14 @@ export default function SuperAdminPage() {
 
         {tab === 'overview' && stats && <OverviewPanel stats={stats} />}
         {tab === 'hotels' && (
-          <HotelsPanel hotels={hotels} onRefresh={() => loadData('hotels')} />
+          <HotelsPanel
+            hotels={hotels}
+            plans={plans.length ? plans : undefined}
+            onRefresh={() => loadData('hotels')}
+          />
+        )}
+        {tab === 'plans' && (
+          <PlansPanel plans={plans} onRefresh={() => loadData('plans')} />
         )}
         {tab === 'users' && (
           <UsersPanel users={users} onRefresh={() => loadData('users')} />
@@ -203,21 +221,51 @@ function OverviewPanel({ stats }: { stats: PlatformStats }) {
   );
 }
 
+function subscriptionLabel(hotel: PlatformHotel): string {
+  const sub = hotel.subscription;
+  if (!sub) return 'Sin suscripción';
+  if (sub.status === 'trial') {
+    return `Prueba ${sub.used}/${sub.limit}`;
+  }
+  if (sub.plan_name) {
+    return `${sub.plan_name} (${sub.used}/${sub.limit})`;
+  }
+  const labels: Record<string, string> = {
+    trial_expired: 'Prueba vencida',
+    quota_reached: 'Cuota agotada',
+    suspended: 'Suspendido',
+    active: 'Activo',
+  };
+  return labels[sub.status] ?? sub.status;
+}
+
 function HotelsPanel({
   hotels,
+  plans: plansProp,
   onRefresh,
 }: {
   hotels: PlatformHotel[];
+  plans?: SubscriptionPlan[];
   onRefresh: () => void;
 }) {
   const [editing, setEditing] = useState<PlatformHotel | null>(null);
+  const [plans, setPlans] = useState<SubscriptionPlan[]>(plansProp ?? []);
   const [form, setForm] = useState({
     name: '',
     timezone: '',
     currency: '',
     is_active: true,
+    plan_id: '' as string,
   });
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (plansProp?.length) {
+      setPlans(plansProp);
+      return;
+    }
+    superAdminApi.listPlans().then(setPlans).catch(() => undefined);
+  }, [plansProp]);
 
   function openEdit(hotel: PlatformHotel) {
     setEditing(hotel);
@@ -226,6 +274,7 @@ function HotelsPanel({
       timezone: hotel.timezone,
       currency: hotel.currency,
       is_active: hotel.is_active,
+      plan_id: hotel.subscription?.plan_id ?? '',
     });
   }
 
@@ -233,7 +282,29 @@ function HotelsPanel({
     if (!editing) return;
     setSaving(true);
     try {
-      await superAdminApi.updateHotel(editing.id, form);
+      await superAdminApi.updateHotel(editing.id, {
+        name: form.name,
+        timezone: form.timezone,
+        currency: form.currency,
+        is_active: form.is_active,
+      });
+      const currentPlanId = editing.subscription?.plan_id ?? null;
+      const nextPlanId = form.plan_id || null;
+      if (nextPlanId !== currentPlanId) {
+        await superAdminApi.assignHotelPlan(editing.id, nextPlanId);
+      }
+      setEditing(null);
+      onRefresh();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function resetTrial() {
+    if (!editing || !confirm('¿Reiniciar periodo de prueba de este hotel?')) return;
+    setSaving(true);
+    try {
+      await superAdminApi.resetHotelTrial(editing.id);
       setEditing(null);
       onRefresh();
     } finally {
@@ -249,6 +320,7 @@ function HotelsPanel({
             <tr>
               <th>Hotel</th>
               <th>Estado</th>
+              <th>Suscripción</th>
               <th>Integraciones</th>
               <th>Actividad</th>
               <th></th>
@@ -264,6 +336,18 @@ function HotelsPanel({
                 <td>
                   <span className={`pill ${h.is_active ? 'ok' : 'off'}`}>
                     {h.is_active ? 'Activo' : 'Inactivo'}
+                  </span>
+                </td>
+                <td>
+                  <span
+                    className={`pill ${
+                      h.subscription?.status === 'active' ||
+                      h.subscription?.status === 'trial'
+                        ? 'ok'
+                        : 'off'
+                    }`}
+                  >
+                    {subscriptionLabel(h)}
                   </span>
                 </td>
                 <td>
@@ -322,7 +406,44 @@ function HotelsPanel({
               />
               Hotel activo
             </label>
+            <label>
+              Plan de suscripción
+              <select
+                value={form.plan_id}
+                onChange={(e) => setForm({ ...form, plan_id: e.target.value })}
+              >
+                <option value="">Sin plan (prueba vencida)</option>
+                {plans
+                  .filter((p) => p.is_active)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} — hasta {p.max_reservations_per_month} res/mes —{' '}
+                      {new Intl.NumberFormat('es-CO', {
+                        style: 'currency',
+                        currency: p.currency,
+                        maximumFractionDigits: 0,
+                      }).format(p.price_monthly)}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            {editing.subscription?.status === 'trial' && (
+              <p className="muted">
+                Prueba: {editing.subscription.used}/{editing.subscription.limit}{' '}
+                reservas
+                {editing.subscription.trial_days_left != null &&
+                  ` · ${editing.subscription.trial_days_left} días restantes`}
+              </p>
+            )}
             <div className="modal-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={resetTrial}
+                disabled={saving}
+              >
+                Reiniciar prueba
+              </button>
               <button className="btn-secondary" onClick={() => setEditing(null)}>
                 Cancelar
               </button>
@@ -333,6 +454,244 @@ function HotelsPanel({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function PlansPanel({
+  plans,
+  onRefresh,
+}: {
+  plans: SubscriptionPlan[];
+  onRefresh: () => void;
+}) {
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<SubscriptionPlan | null>(null);
+  const [form, setForm] = useState({
+    name: '',
+    max_reservations_per_month: 50,
+    price_monthly: 190000,
+    currency: 'COP',
+    description: '',
+    sort_order: 0,
+    is_active: true,
+  });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  function openCreate() {
+    setEditing(null);
+    setForm({
+      name: '',
+      max_reservations_per_month: 50,
+      price_monthly: 190000,
+      currency: 'COP',
+      description: '',
+      sort_order: plans.length + 1,
+      is_active: true,
+    });
+    setShowForm(true);
+    setError('');
+  }
+
+  function openEdit(plan: SubscriptionPlan) {
+    setEditing(plan);
+    setForm({
+      name: plan.name,
+      max_reservations_per_month: plan.max_reservations_per_month,
+      price_monthly: plan.price_monthly,
+      currency: plan.currency,
+      description: plan.description ?? '',
+      sort_order: plan.sort_order,
+      is_active: plan.is_active,
+    });
+    setShowForm(true);
+    setError('');
+  }
+
+  async function savePlan(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    setError('');
+    try {
+      if (editing) {
+        await superAdminApi.updatePlan(editing.id, {
+          name: form.name,
+          max_reservations_per_month: form.max_reservations_per_month,
+          price_monthly: form.price_monthly,
+          currency: form.currency,
+          description: form.description,
+          sort_order: form.sort_order,
+          is_active: form.is_active,
+        });
+      } else {
+        await superAdminApi.createPlan({
+          name: form.name,
+          max_reservations_per_month: form.max_reservations_per_month,
+          price_monthly: form.price_monthly,
+          currency: form.currency,
+          description: form.description,
+          sort_order: form.sort_order,
+        });
+      }
+      setShowForm(false);
+      onRefresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al guardar');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const formatCop = (amount: number, currency: string) =>
+    new Intl.NumberFormat('es-CO', {
+      style: 'currency',
+      currency,
+      maximumFractionDigits: 0,
+    }).format(amount);
+
+  return (
+    <div className="admin-content">
+      <div className="panel-header-row">
+        <p>
+          Cobra a los hoteles según reservas efectivas al mes. Cuando lleguen al
+          límite, reciben un email para actualizar plan.
+        </p>
+        <button className="btn-primary" onClick={openCreate}>
+          + Nuevo plan
+        </button>
+      </div>
+
+      {showForm && (
+        <form className="panel form-panel" onSubmit={savePlan}>
+          <h3>{editing ? 'Editar plan' : 'Crear plan'}</h3>
+          {error && <div className="error-banner">{error}</div>}
+          <label>
+            Nombre
+            <input
+              required
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="Plan 0-50 reservas"
+            />
+          </label>
+          <label>
+            Máximo reservas / mes
+            <input
+              type="number"
+              min={1}
+              required
+              value={form.max_reservations_per_month}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  max_reservations_per_month: parseInt(e.target.value, 10) || 1,
+                })
+              }
+            />
+          </label>
+          <label>
+            Precio mensual
+            <input
+              type="number"
+              min={0}
+              required
+              value={form.price_monthly}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  price_monthly: parseFloat(e.target.value) || 0,
+                })
+              }
+            />
+          </label>
+          <label>
+            Moneda
+            <input
+              value={form.currency}
+              onChange={(e) => setForm({ ...form, currency: e.target.value })}
+            />
+          </label>
+          <label>
+            Descripción
+            <textarea
+              rows={2}
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+            />
+          </label>
+          <label>
+            Orden
+            <input
+              type="number"
+              value={form.sort_order}
+              onChange={(e) =>
+                setForm({ ...form, sort_order: parseInt(e.target.value, 10) || 0 })
+              }
+            />
+          </label>
+          {editing && (
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                checked={form.is_active}
+                onChange={(e) =>
+                  setForm({ ...form, is_active: e.target.checked })
+                }
+              />
+              Plan activo (visible para asignar)
+            </label>
+          )}
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="btn-secondary"
+              onClick={() => setShowForm(false)}
+            >
+              Cancelar
+            </button>
+            <button type="submit" className="btn-primary" disabled={saving}>
+              {saving ? 'Guardando...' : 'Guardar plan'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      <div className="panel">
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th>Plan</th>
+              <th>Reservas/mes</th>
+              <th>Precio</th>
+              <th>Estado</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {plans.map((p) => (
+              <tr key={p.id}>
+                <td>
+                  <strong>{p.name}</strong>
+                  {p.description && <small>{p.description}</small>}
+                </td>
+                <td>{p.max_reservations_per_month}</td>
+                <td>{formatCop(p.price_monthly, p.currency)}/mes</td>
+                <td>
+                  <span className={`pill ${p.is_active ? 'ok' : 'off'}`}>
+                    {p.is_active ? 'Activo' : 'Inactivo'}
+                  </span>
+                </td>
+                <td>
+                  <button className="btn-sm" onClick={() => openEdit(p)}>
+                    Editar
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -555,6 +914,8 @@ const SETTING_LABELS: Record<string, string> = {
   default_currency: 'Moneda por defecto',
   whatsapp_verify_token: 'Token de verificación WhatsApp (webhook)',
   maintenance_mode: 'Modo mantenimiento (true/false)',
+  trial_duration_days: 'Días de periodo de prueba por hotel',
+  trial_reservation_limit: 'Límite de reservas efectivas en prueba',
 };
 
 function SettingsPanel({

@@ -101,4 +101,57 @@ export class SuperAdminController {
   updateSettings(@Body() body: Record<string, string>) {
     return this.superAdmin.updateSettings(body);
   }
+
+  @Get('plans')
+  listPlans() {
+    return this.superAdmin.listSubscriptionPlans();
+  }
+
+  @Post('plans')
+  createPlan(
+    @Body()
+    body: {
+      name: string;
+      max_reservations_per_month: number;
+      price_monthly: number;
+      currency?: string;
+      description?: string;
+      sort_order?: number;
+    },
+  ) {
+    return this.superAdmin.createSubscriptionPlan(body);
+  }
+
+  @Patch('plans/:id')
+  updatePlan(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      name?: string;
+      max_reservations_per_month?: number;
+      price_monthly?: number;
+      currency?: string;
+      description?: string;
+      sort_order?: number;
+      is_active?: boolean;
+    },
+  ) {
+    return this.superAdmin.updateSubscriptionPlan(id, body);
+  }
+
+  @Get('hotels/:id/subscription')
+  getHotelSubscription(@Param('id') id: string) {
+    return this.superAdmin.getHotelSubscription(id);
+  }
+
+  @Patch('hotels/:id/subscription')
+  assignHotelPlan(
+    @Param('id') id: string,
+    @Body() body: { plan_id?: string | null; reset_trial?: boolean },
+  ) {
+    if (body.reset_trial) {
+      return this.superAdmin.resetHotelTrial(id);
+    }
+    return this.superAdmin.assignHotelPlan(id, body.plan_id ?? null);
+  }
 }

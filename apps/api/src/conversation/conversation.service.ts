@@ -27,6 +27,8 @@ import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { CheckoutService } from '../checkout/checkout.service';
 import { DiscountTierService } from '../local-inventory/discount-tier.service';
 import { signGalleryToken } from '../utils/gallery-token';
+import { SubscriptionService } from '../subscription/subscription.service';
+import { SubscriptionLimitError } from '../subscription/subscription.errors';
 
 @Injectable()
 export class ConversationService {
@@ -40,6 +42,7 @@ export class ConversationService {
     private readonly whatsapp: WhatsAppService,
     private readonly checkout: CheckoutService,
     private readonly discountTiers: DiscountTierService,
+    private readonly subscription: SubscriptionService,
     @InjectQueue(QUEUE_NAMES.WHATSAPP_INBOUND) private readonly inboundQueue: Queue,
   ) {}
 
@@ -478,6 +481,8 @@ export class ConversationService {
     session: { id: string; whatsappPhone: string },
     phone: string,
   ) {
+    if (!(await this.ensureCanCreateReservation(hotelId, phone))) return;
+
     const fullSession = await this.getSession(session.id);
     if (
       !fullSession.selectedRoomTypeId ||
@@ -590,6 +595,10 @@ export class ConversationService {
     session: { id: string; whatsappPhone: string },
     text: string,
   ) {
+    if (!(await this.ensureCanCreateReservation(hotelId, session.whatsappPhone))) {
+      return;
+    }
+
     const fullSession = await this.getSession(session.id);
     const emailMatch = text.match(/[\w.-]+@[\w.-]+\.\w+/);
     const namePart = text.replace(/[\w.-]+@[\w.-]+\.\w+/, '').replace(/,/g, ' ').trim();
@@ -695,8 +704,14 @@ export class ConversationService {
         reservationId: reservation.id,
       });
 
+      await this.subscription.recordBillableReservation(hotelId, reservation.id);
+
       await this.sendPaymentSummary(hotelId, session.whatsappPhone, reservation, holdTtl);
     } catch (error) {
+      if (error instanceof SubscriptionLimitError) {
+        await this.whatsapp.sendText(hotelId, session.whatsappPhone, error.message);
+        return;
+      }
       this.logger.error(`handleGuestInfo failed: ${error}`);
       await this.whatsapp.sendText(
         hotelId,
@@ -1690,6 +1705,22 @@ export class ConversationService {
       phone,
       '¡Empecemos una reserva nueva! 📅 Indica *fechas* y *huéspedes* (ej: *2 personas del 28 al 29 de junio*).',
     );
+  }
+
+  private async ensureCanCreateReservation(
+    hotelId: string,
+    phone: string,
+  ): Promise<boolean> {
+    try {
+      await this.subscription.assertCanCreateReservation(hotelId);
+      return true;
+    } catch (error) {
+      if (error instanceof SubscriptionLimitError) {
+        await this.whatsapp.sendText(hotelId, phone, error.message);
+        return false;
+      }
+      throw error;
+    }
   }
 
   private async resetSession(id: string) {

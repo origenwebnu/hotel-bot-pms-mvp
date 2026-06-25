@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { SubscriptionService } from '../subscription/subscription.service';
+import { SubscriptionPlanService } from '../subscription/subscription-plan.service';
 
 const DEFAULT_SETTINGS = [
   { key: 'platform_name', value: 'BookiChat' },
@@ -15,11 +17,17 @@ const DEFAULT_SETTINGS = [
   { key: 'default_currency', value: 'COP' },
   { key: 'whatsapp_verify_token', value: 'bookichat_wa_verify_2026' },
   { key: 'maintenance_mode', value: 'false' },
+  { key: 'trial_duration_days', value: '15' },
+  { key: 'trial_reservation_limit', value: '20' },
 ];
 
 @Injectable()
 export class SuperAdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly subscription: SubscriptionService,
+    private readonly subscriptionPlans: SubscriptionPlanService,
+  ) {}
 
   async getStats() {
     const [
@@ -74,6 +82,7 @@ export class SuperAdminService {
       orderBy: { createdAt: 'desc' },
       include: {
         integration: true,
+        subscription: { include: { plan: true } },
         _count: {
           select: {
             users: true,
@@ -84,6 +93,16 @@ export class SuperAdminService {
         },
       },
     });
+
+    const usageByHotel = await Promise.all(
+      hotels.map(async (h) => ({
+        id: h.id,
+        usage: await this.subscription.getUsageSnapshot(h.id),
+      })),
+    );
+    const usageMap = Object.fromEntries(
+      usageByHotel.map((u) => [u.id, u.usage]),
+    );
 
     return hotels.map((h) => ({
       id: h.id,
@@ -103,6 +122,7 @@ export class SuperAdminService {
             whatsapp_connected: h.integration.whatsappConnected,
           }
         : null,
+      subscription: usageMap[h.id] ?? null,
       counts: {
         users: h._count.users,
         knowledge: h._count.knowledge,
@@ -398,5 +418,47 @@ export class SuperAdminService {
         name: name.trim(),
       },
     });
+  }
+
+  listSubscriptionPlans(includeInactive = true) {
+    return this.subscriptionPlans.listPlans(includeInactive);
+  }
+
+  createSubscriptionPlan(data: {
+    name: string;
+    max_reservations_per_month: number;
+    price_monthly: number;
+    currency?: string;
+    description?: string;
+    sort_order?: number;
+  }) {
+    return this.subscriptionPlans.createPlan(data);
+  }
+
+  updateSubscriptionPlan(
+    id: string,
+    data: {
+      name?: string;
+      max_reservations_per_month?: number;
+      price_monthly?: number;
+      currency?: string;
+      description?: string;
+      sort_order?: number;
+      is_active?: boolean;
+    },
+  ) {
+    return this.subscriptionPlans.updatePlan(id, data);
+  }
+
+  getHotelSubscription(hotelId: string) {
+    return this.subscription.getUsageSnapshot(hotelId);
+  }
+
+  assignHotelPlan(hotelId: string, planId: string | null) {
+    return this.subscription.assignPlanToHotel(hotelId, planId);
+  }
+
+  resetHotelTrial(hotelId: string) {
+    return this.subscription.resetTrialForHotel(hotelId);
   }
 }

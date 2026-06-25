@@ -10,6 +10,7 @@ import * as bcrypt from 'bcrypt';
 import { createHash, randomInt, timingSafeEqual } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { SubscriptionService } from '../subscription/subscription.service';
 
 const CODE_TTL_MS = 15 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 60 * 1000;
@@ -20,6 +21,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
     private readonly email: EmailService,
+    private readonly subscription: SubscriptionService,
   ) {}
 
   async sendRegistrationCode(data: {
@@ -202,6 +204,8 @@ export class AuthService {
     await this.prisma.registrationVerification.delete({
       where: { email: normalized },
     });
+
+    await this.subscription.initializeTrialForHotel(hotel.id, hotel.createdAt);
 
     const user = hotel.users[0];
     return this.signToken({

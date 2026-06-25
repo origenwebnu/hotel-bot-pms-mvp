@@ -31,6 +31,7 @@ model Hotel {
   vectors       KnowledgeVector[]
   roomTypes     RoomType[]
   discountTiers HotelDiscountTier[]
+  subscription  HotelSubscription?
 
   @@map("hotels")
 }
@@ -257,4 +258,53 @@ model PlatformSetting {
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("platform_settings")
+}
+
+model SubscriptionPlan {
+  id                      String   @id @default(cuid())
+  name                    String
+  maxReservationsPerMonth Int      @map("max_reservations_per_month")
+  priceMonthly            Float    @map("price_monthly")
+  currency                String   @default("COP")
+  description             String?  @db.Text
+  isActive                Boolean  @default(true) @map("is_active")
+  sortOrder               Int      @default(0) @map("sort_order")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  subscriptions HotelSubscription[]
+
+  @@map("subscription_plans")
+}
+
+model HotelSubscription {
+  id                   String    @id @default(cuid())
+  hotelId              String    @unique @map("hotel_id")
+  planId               String?   @map("plan_id")
+  status               String    @default("trial")
+  trialStartedAt       DateTime  @default(now()) @map("trial_started_at")
+  trialEndsAt          DateTime  @map("trial_ends_at")
+  currentPeriodStart   DateTime? @map("current_period_start")
+  currentPeriodEnd     DateTime? @map("current_period_end")
+  quotaNotifiedAt      DateTime? @map("quota_notified_at")
+  trialQuotaNotifiedAt DateTime? @map("trial_quota_notified_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  hotel Hotel             @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  plan  SubscriptionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  @@map("hotel_subscriptions")
+}
+
+model BillableReservation {
+  id            String   @id @default(cuid())
+  hotelId       String   @map("hotel_id")
+  reservationId String   @unique @map("reservation_id")
+  isTrialPeriod Boolean  @default(false) @map("is_trial_period")
+  billedAt      DateTime @default(now()) @map("billed_at")
+  periodMonth   String   @map("period_month")
+
+  @@index([hotelId, periodMonth])
+  @@map("billable_reservations")
 }

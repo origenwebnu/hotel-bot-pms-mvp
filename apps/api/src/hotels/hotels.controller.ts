@@ -13,6 +13,7 @@ import { HotelsService } from './hotels.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreIntegratorService } from '../core-integrator/core-integrator.service';
 import { CheckoutService } from '../checkout/checkout.service';
+import { SubscriptionService } from '../subscription/subscription.service';
 import { UpdateIntegrationDto } from './dto/update-integration.dto';
 
 class UpdateWhatsAppDto {
@@ -38,11 +39,17 @@ export class HotelsController {
     private readonly hotels: HotelsService,
     private readonly pms: CoreIntegratorService,
     private readonly checkout: CheckoutService,
+    private readonly subscription: SubscriptionService,
   ) {}
 
   @Get('me')
   getMyHotel(@Request() req: { user: { hotelId: string } }) {
     return this.hotels.getHotel(req.user.hotelId);
+  }
+
+  @Get('me/subscription')
+  getMySubscription(@Request() req: { user: { hotelId: string } }) {
+    return this.subscription.getUsageSnapshot(req.user.hotelId);
   }
 
   @Get('me/integration')

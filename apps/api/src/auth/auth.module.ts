@@ -9,9 +9,12 @@ import { SuperAdminGuard } from './super-admin.guard';
 import { RolesGuard } from './roles.guard';
 import { EmailModule } from '../email/email.module';
 
+import { SubscriptionModule } from '../subscription/subscription.module';
+
 @Module({
   imports: [
     EmailModule,
+    SubscriptionModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({
       secret: process.env.JWT_SECRET ?? 'dev-secret',
