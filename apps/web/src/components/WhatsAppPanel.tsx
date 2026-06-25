@@ -10,6 +10,7 @@ interface Props {
 export function WhatsAppPanel({ onConnectionChange }: Props) {
   const [config, setConfig] = useState<WhatsAppConfig | null>(null);
   const [phoneNumberId, setPhoneNumberId] = useState('');
+  const [displayPhone, setDisplayPhone] = useState('');
   const [accessToken, setAccessToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [validating, setValidating] = useState(false);
@@ -19,6 +20,7 @@ export function WhatsAppPanel({ onConnectionChange }: Props) {
     api.getWhatsApp().then((c) => {
       setConfig(c);
       setPhoneNumberId(c.phone_number_id ?? '');
+      setDisplayPhone(c.display_phone ?? '');
     }).catch(console.error);
   }, []);
 
@@ -29,10 +31,12 @@ export function WhatsAppPanel({ onConnectionChange }: Props) {
     try {
       const updated = await api.updateWhatsApp({
         phone_number_id: phoneNumberId,
+        display_phone: displayPhone,
         ...(accessToken.trim() ? { access_token: accessToken } : {}),
       });
       setConfig(updated);
       setAccessToken('');
+      setDisplayPhone(updated.display_phone ?? '');
       setMessage('WhatsApp guardado correctamente.');
       onConnectionChange?.(updated.connected);
     } catch (err) {
@@ -50,6 +54,7 @@ export function WhatsAppPanel({ onConnectionChange }: Props) {
       if (config) {
         const refreshed = await api.getWhatsApp();
         setConfig(refreshed);
+        setDisplayPhone(refreshed.display_phone ?? '');
         onConnectionChange?.(refreshed.connected);
       }
       setMessage(valid ? '✓ WhatsApp conectado y verificado' : '✗ No se pudo verificar. Revisa Phone Number ID y token.');
@@ -104,6 +109,19 @@ export function WhatsAppPanel({ onConnectionChange }: Props) {
             placeholder={config.has_token ? '•••••••• (dejar vacío para mantener)' : 'EAA... token permanente de Meta'}
           />
           <span className="hint">Usuario del sistema → Generar identificador</span>
+        </label>
+
+        <label>
+          Número WhatsApp (para volver desde la galería)
+          <input
+            type="text"
+            value={displayPhone}
+            onChange={(e) => setDisplayPhone(e.target.value)}
+            placeholder="573001234567"
+          />
+          <span className="hint">
+            Formato internacional sin + (ej: 573001234567). Se detecta al validar o puedes ingresarlo manualmente.
+          </span>
         </label>
 
         <div className="status-row">

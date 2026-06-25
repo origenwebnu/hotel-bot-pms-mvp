@@ -25,6 +25,10 @@ class UpdateWhatsAppDto {
   @IsString()
   @MinLength(20)
   access_token?: string;
+
+  @IsOptional()
+  @IsString()
+  display_phone?: string;
 }
 
 @Controller('hotels')

@@ -2,8 +2,10 @@ import { Injectable } from '@nestjs/common';
 import {
   MAX_LIST_MESSAGE_ROWS,
   WHATSAPP_BUTTON_IDS,
+  filterValidMediaUrls,
   formatDisplayDate,
   formatDisplayDateRange,
+  sanitizeWhatsAppText,
   type StandardRoomAvailability,
   type WhatsAppListMessage,
   type WhatsAppButtonMessage,
@@ -57,7 +59,7 @@ export class WhatsAppRendererService {
 
     const rows = rooms.slice(0, MAX_LIST_MESSAGE_ROWS).map((r) => ({
       id: `room_${r.room_type_id}`,
-      title: r.name.slice(0, 24),
+      title: sanitizeWhatsAppText(r.name, 24),
       description: `${r.currency} ${r.price.toLocaleString()}/noche`.slice(0, 72),
     }));
 
@@ -76,7 +78,7 @@ export class WhatsAppRendererService {
   }
 
   private truncateButtonTitle(name: string): string {
-    const trimmed = name.trim();
+    const trimmed = sanitizeWhatsAppText(name, 20);
     if (trimmed.length <= 20) return trimmed;
     return `${trimmed.slice(0, 17)}…`;
   }
@@ -112,16 +114,29 @@ export class WhatsAppRendererService {
   }
 
   renderRoomDetail(room: StandardRoomAvailability): WhatsAppButtonMessage {
-    const photoUrl = room.photos_urls[0];
-    const description = room.description?.slice(0, 200) ?? 'Habitación confortable para tu estadía.';
+    return this.buildRoomDetailMessage(room, true);
+  }
 
-    return {
+  renderRoomDetailWithoutHeader(room: StandardRoomAvailability): WhatsAppButtonMessage {
+    return this.buildRoomDetailMessage(room, false);
+  }
+
+  private buildRoomDetailMessage(
+    room: StandardRoomAvailability,
+    includeHeader: boolean,
+  ): WhatsAppButtonMessage {
+    const name = sanitizeWhatsAppText(room.name, 60);
+    const photos = filterValidMediaUrls(room.photos_urls);
+    const photoUrl = photos[0];
+    const description = sanitizeWhatsAppText(
+      room.description ?? 'Habitación confortable para tu estadía.',
+      200,
+    );
+
+    const message: WhatsAppButtonMessage = {
       type: 'button',
-      header: photoUrl
-        ? { type: 'image', image: { link: photoUrl } }
-        : { type: 'text', text: room.name },
       body: {
-        text: `*${room.name}*\n\n${description}\n\n💰 *${room.currency} ${room.price.toLocaleString()}* / noche`,
+        text: `*${name}*\n\n${description}\n\n💰 *${room.currency} ${room.price.toLocaleString()}* / noche`,
       },
       action: {
         buttons: [
@@ -131,9 +146,47 @@ export class WhatsAppRendererService {
           },
           {
             type: 'reply',
+            reply: { id: WHATSAPP_BUTTON_IDS.VIEW_PHOTOS, title: 'Ver fotos' },
+          },
+          {
+            type: 'reply',
             reply: { id: WHATSAPP_BUTTON_IDS.BACK_TO_ROOMS, title: 'Ver opciones' },
           },
         ],
+      },
+    };
+
+    if (includeHeader) {
+      if (photoUrl) {
+        message.header = { type: 'image', image: { link: photoUrl } };
+      } else if (name) {
+        message.header = { type: 'text', text: name };
+      }
+    }
+
+    return message;
+  }
+
+  renderRoomGalleryLink(
+    url: string,
+    roomName: string,
+  ): import('@hotel-bot/shared').WhatsAppCtaUrlMessage {
+    const name = sanitizeWhatsAppText(roomName, 40);
+
+    return {
+      type: 'cta_url',
+      body: {
+        text:
+          `📸 Galería de *${name}*\n\n` +
+          `Pulsa el botón para ver todas las fotos en la web.\n` +
+          `Desde ahí puedes volver a WhatsApp para continuar tu reserva.`,
+      },
+      action: {
+        name: 'cta_url',
+        parameters: {
+          display_text: 'Ver galería',
+          url,
+        },
       },
     };
   }

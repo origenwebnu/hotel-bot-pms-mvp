@@ -219,7 +219,7 @@ export class HotelsService {
   async getWhatsAppConfig(hotelId: string) {
     const hotel = await this.prisma.hotel.findUnique({
       where: { id: hotelId },
-      select: { whatsappPhoneNumberId: true },
+      select: { whatsappPhoneNumberId: true, whatsappDisplayPhone: true },
     });
     if (!hotel) throw new NotFoundException('Hotel not found');
 
@@ -231,6 +231,7 @@ export class HotelsService {
 
     return {
       phone_number_id: hotel.whatsappPhoneNumberId,
+      display_phone: hotel.whatsappDisplayPhone,
       connected: integration?.whatsappConnected ?? false,
       has_token: await this.whatsappCredentials.hasOwnToken(hotelId),
       webhook_url: `${appUrl.replace(/\/$/, '')}/api/webhooks/whatsapp`,
@@ -242,18 +243,28 @@ export class HotelsService {
         'Genera un Access Token permanente (Usuario del sistema → Generar identificador).',
         'El webhook lo configura BookiChat una sola vez; todos los hoteles usan la misma URL.',
         'Guarda aquí tu Phone Number ID y token, luego pulsa Validar.',
+        'Al validar se detecta el número público para el botón "Continuar reserva" en la galería de fotos.',
       ],
     };
   }
 
   async updateWhatsApp(
     hotelId: string,
-    data: { phone_number_id?: string; access_token?: string },
+    data: { phone_number_id?: string; access_token?: string; display_phone?: string },
   ) {
     if (data.phone_number_id !== undefined) {
       await this.prisma.hotel.update({
         where: { id: hotelId },
         data: { whatsappPhoneNumberId: data.phone_number_id.trim() || null },
+      });
+    }
+
+    if (data.display_phone !== undefined) {
+      await this.prisma.hotel.update({
+        where: { id: hotelId },
+        data: {
+          whatsappDisplayPhone: data.display_phone.trim().replace(/\s+/g, '') || null,
+        },
       });
     }
 
@@ -292,11 +303,27 @@ export class HotelsService {
 
     const apiVersion = process.env.WHATSAPP_API_VERSION ?? 'v21.0';
     const response = await fetch(
-      `https://graph.facebook.com/${apiVersion}/${phoneNumberId}`,
+      `https://graph.facebook.com/${apiVersion}/${phoneNumberId}?fields=display_phone_number`,
       { headers: { Authorization: `Bearer ${accessToken}` } },
     );
 
     const valid = response.ok;
+    if (valid) {
+      try {
+        const data = (await response.json()) as { display_phone_number?: string };
+        if (data.display_phone_number?.trim()) {
+          await this.prisma.hotel.update({
+            where: { id: hotelId },
+            data: {
+              whatsappDisplayPhone: data.display_phone_number.replace(/\D/g, ''),
+            },
+          });
+        }
+      } catch {
+        // ignore parse errors; connection still valid
+      }
+    }
+
     await this.setWhatsAppConnected(hotelId, valid);
     return valid;
   }

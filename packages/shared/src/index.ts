@@ -6,5 +6,7 @@ export * from './types/hotel';
 export * from './constants';
 export * from './utils/display-date';
 export * from './utils/payment-url';
+export * from './utils/room-gallery-url';
 export * from './types/discount';
 export * from './utils/discount';
+export * from './utils/whatsapp-text';
