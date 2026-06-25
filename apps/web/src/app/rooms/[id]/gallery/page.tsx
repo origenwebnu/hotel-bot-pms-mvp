@@ -97,12 +97,18 @@ function RoomGalleryContent() {
       </div>
 
       {data.whatsapp_continue_url ? (
-        <a className="continue-btn" href={data.whatsapp_continue_url}>
+        <a
+          className="continue-btn"
+          href={data.whatsapp_continue_url}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
           Continuar reserva
         </a>
       ) : (
         <div className="continue-fallback">
-          Vuelve a WhatsApp y escribe <strong>Continuar reserva</strong>
+          Configura el número WhatsApp del hotel en el panel para habilitar este botón.
+          Vuelve al chat y escribe <strong>Reservar</strong>.
         </div>
       )}
 

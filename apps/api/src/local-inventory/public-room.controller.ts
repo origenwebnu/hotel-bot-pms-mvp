@@ -13,10 +13,14 @@ import {
 } from '@hotel-bot/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { verifyGalleryToken } from '../utils/gallery-token';
+import { WhatsAppCredentialsService } from '../whatsapp/whatsapp-credentials.service';
 
 @Controller('public/rooms')
 export class PublicRoomController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly whatsappCredentials: WhatsAppCredentialsService,
+  ) {}
 
   @Get(':id')
   async getRoomGallery(
@@ -39,7 +43,6 @@ export class PublicRoomController {
           select: {
             name: true,
             slug: true,
-            whatsappDisplayPhone: true,
           },
         },
       },
@@ -60,13 +63,9 @@ export class PublicRoomController {
       throw new NotFoundException('Sesión no encontrada');
     }
 
-    const displayPhone =
-      room.hotel.whatsappDisplayPhone?.trim() ||
-      process.env.DEFAULT_WHATSAPP_DISPLAY_PHONE?.trim() ||
-      null;
-
+    const displayPhone = await this.whatsappCredentials.resolveDisplayPhone(payload.hotelId);
     const whatsappContinueUrl = displayPhone
-      ? buildWhatsAppDeepLink(displayPhone, 'Continuar reserva')
+      ? buildWhatsAppDeepLink(displayPhone, 'Reservar')
       : null;
 
     return {

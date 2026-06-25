@@ -178,8 +178,8 @@ export class WhatsAppRendererService {
       body: {
         text:
           `📸 Galería de *${name}*\n\n` +
-          `Pulsa el botón para ver todas las fotos en la web.\n` +
-          `Desde ahí puedes volver a WhatsApp para continuar tu reserva.`,
+          `Pulsa *Ver galería* para ver todas las fotos en la web.\n` +
+          `Luego usa *Reservar* (mensaje siguiente) para continuar sin repetir la habitación.`,
       },
       action: {
         name: 'cta_url',
@@ -187,6 +187,27 @@ export class WhatsAppRendererService {
           display_text: 'Ver galería',
           url,
         },
+      },
+    };
+  }
+
+  renderGalleryReservePrompt(roomName: string): WhatsAppButtonMessage {
+    const name = sanitizeWhatsAppText(roomName, 40);
+
+    return {
+      type: 'button',
+      body: {
+        text:
+          `¿Listo para reservar *${name}*?\n\n` +
+          `Pulsa *Reservar* para ingresar tus datos (nombre y email).`,
+      },
+      action: {
+        buttons: [
+          {
+            type: 'reply',
+            reply: { id: WHATSAPP_BUTTON_IDS.RESERVE, title: 'Reservar' },
+          },
+        ],
       },
     };
   }

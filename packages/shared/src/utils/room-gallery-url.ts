@@ -11,8 +11,9 @@ export function buildRoomGalleryUrl(
 
 export function buildWhatsAppDeepLink(displayPhone: string, message?: string): string {
   const phone = displayPhone.replace(/\D/g, '');
+  const base = `https://api.whatsapp.com/send?phone=${phone}`;
   if (!message?.trim()) {
-    return `https://wa.me/${phone}`;
+    return base;
   }
-  return `https://wa.me/${phone}?text=${encodeURIComponent(message.trim())}`;
+  return `${base}&text=${encodeURIComponent(message.trim())}`;
 }
