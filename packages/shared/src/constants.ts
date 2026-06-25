@@ -17,6 +17,7 @@ export const WHATSAPP_BUTTON_IDS = {
   PAY_CHANGE: 'btn_pay_change',
   RESUME_BOOKING: 'btn_resume_booking',
   NEW_BOOKING: 'btn_new_booking',
+  VIEW_PHOTOS: 'btn_view_photos',
 } as const;
 
 export const QUEUE_NAMES = {

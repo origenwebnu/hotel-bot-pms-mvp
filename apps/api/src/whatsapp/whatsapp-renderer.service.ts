@@ -146,6 +146,10 @@ export class WhatsAppRendererService {
           },
           {
             type: 'reply',
+            reply: { id: WHATSAPP_BUTTON_IDS.VIEW_PHOTOS, title: 'Ver fotos' },
+          },
+          {
+            type: 'reply',
             reply: { id: WHATSAPP_BUTTON_IDS.BACK_TO_ROOMS, title: 'Ver opciones' },
           },
         ],
@@ -161,6 +165,30 @@ export class WhatsAppRendererService {
     }
 
     return message;
+  }
+
+  renderRoomGalleryLink(
+    url: string,
+    roomName: string,
+  ): import('@hotel-bot/shared').WhatsAppCtaUrlMessage {
+    const name = sanitizeWhatsAppText(roomName, 40);
+
+    return {
+      type: 'cta_url',
+      body: {
+        text:
+          `📸 Galería de *${name}*\n\n` +
+          `Pulsa el botón para ver todas las fotos en la web.\n` +
+          `Desde ahí puedes volver a WhatsApp para continuar tu reserva.`,
+      },
+      action: {
+        name: 'cta_url',
+        parameters: {
+          display_text: 'Ver galería',
+          url,
+        },
+      },
+    };
   }
 
   renderPaymentLink(

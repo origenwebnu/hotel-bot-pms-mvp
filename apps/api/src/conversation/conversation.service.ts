@@ -13,6 +13,7 @@ import {
   formatDisplayDateRange,
   normalizeRoomLabel,
   sanitizeWhatsAppText,
+  buildRoomGalleryUrl,
   type SessionDiscountOffer,
   type StandardRoomAvailability,
   type WhatsAppInboundMessage,
@@ -25,6 +26,7 @@ import { WhatsAppRendererService } from '../whatsapp/whatsapp-renderer.service';
 import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { CheckoutService } from '../checkout/checkout.service';
 import { DiscountTierService } from '../local-inventory/discount-tier.service';
+import { signGalleryToken } from '../utils/gallery-token';
 
 @Injectable()
 export class ConversationService {
@@ -61,6 +63,11 @@ export class ConversationService {
     const phone = message.from;
     const session = await this.getOrCreateSession(hotelId, phone);
     const text = this.extractText(message);
+
+    if (/^continuar\s+reserva$/i.test(text.trim())) {
+      await this.continueReservationFromGallery(hotelId, session, phone);
+      return;
+    }
 
     if (message.interactive?.list_reply) {
       return this.handleRoomSelection(hotelId, session, message.interactive.list_reply.id);
@@ -383,25 +390,103 @@ export class ConversationService {
 
     if (!delivered) return;
 
-    for (let i = 0; i < photos.slice(1, 4).length; i++) {
-      try {
-        await this.whatsapp.sendImage(
-          hotelId,
-          session.whatsappPhone,
-          photos[i + 1],
-          i === 0 ? `📸 Más fotos — ${sanitizedRoom.name}` : undefined,
-        );
-      } catch (err) {
-        this.logger.warn(
-          `Extra room photo failed for ${sanitizedRoom.room_type_id}: ${err instanceof Error ? err.message : err}`,
-        );
-      }
-    }
-
     await this.updateSession(session.id, {
       state: 'room_selected',
       selectedRoomTypeId: room.room_type_id,
     });
+  }
+
+  private async sendRoomGalleryLink(
+    hotelId: string,
+    session: { id: string; whatsappPhone: string },
+  ) {
+    const fullSession = await this.getSession(session.id);
+    const roomId = fullSession.selectedRoomTypeId;
+    if (!roomId) {
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        'Primero elige una habitación de la lista.',
+      );
+      return;
+    }
+
+    const room = await this.prisma.roomType.findFirst({
+      where: { id: roomId, hotelId, isActive: true },
+      select: { name: true, photoUrls: true },
+    });
+
+    if (!room) {
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        'No encontramos esa habitación.',
+      );
+      return;
+    }
+
+    const photos = filterValidMediaUrls(room.photoUrls);
+    if (photos.length === 0) {
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        'Esta habitación aún no tiene fotos en la galería.',
+      );
+      return;
+    }
+
+    const token = signGalleryToken({
+      roomId,
+      sessionId: session.id,
+      hotelId,
+    });
+    const appUrl = process.env.APP_URL ?? 'https://app.bookichat.com';
+    const url = buildRoomGalleryUrl(roomId, token, appUrl);
+
+    await this.whatsapp.sendInteractive(
+      hotelId,
+      session.whatsappPhone,
+      this.renderer.renderRoomGalleryLink(url, room.name),
+    );
+  }
+
+  private async continueReservationFromGallery(
+    hotelId: string,
+    session: { id: string; whatsappPhone: string },
+    phone: string,
+  ) {
+    const fullSession = await this.getSession(session.id);
+    if (
+      !fullSession.selectedRoomTypeId ||
+      !fullSession.checkIn ||
+      !fullSession.checkOut ||
+      fullSession.adults == null
+    ) {
+      await this.whatsapp.sendText(
+        hotelId,
+        phone,
+        'No hay una reserva en curso. Escribe *menu* para empezar.',
+      );
+      return;
+    }
+
+    const availability = await this.fetchAvailability(hotelId, fullSession);
+    const room = availability.rooms.find(
+      (r) => r.room_type_id === fullSession.selectedRoomTypeId,
+    );
+
+    if (!room) {
+      await this.updateSession(session.id, { state: 'showing_rooms' });
+      await this.whatsapp.sendText(
+        hotelId,
+        phone,
+        'Esa habitación ya no está disponible para tus fechas. Te muestro otras opciones.',
+      );
+      await this.showAvailableRooms(hotelId, session.id, phone);
+      return;
+    }
+
+    await this.selectRoom(hotelId, session, room);
   }
 
   private async handleButton(
@@ -441,6 +526,11 @@ export class ConversationService {
         session.whatsappPhone,
         '¡Excelente elección! Para confirmar, comparte:\n• Nombre completo\n• Email\n\n(ej: Juan Pérez, juan@email.com)',
       );
+      return;
+    }
+
+    if (buttonId === WHATSAPP_BUTTON_IDS.VIEW_PHOTOS) {
+      await this.sendRoomGalleryLink(hotelId, session);
       return;
     }
 

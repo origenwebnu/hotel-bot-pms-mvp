@@ -99,7 +99,11 @@ export const api = {
 
   getWhatsApp: () => request<WhatsAppConfig>('/hotels/me/whatsapp'),
 
-  updateWhatsApp: (data: { phone_number_id?: string; access_token?: string }) =>
+  updateWhatsApp: (data: {
+    phone_number_id?: string;
+    access_token?: string;
+    display_phone?: string;
+  }) =>
     request<WhatsAppConfig>('/hotels/me/whatsapp', {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -240,6 +244,7 @@ export interface PaymentConfig {
 
 export interface WhatsAppConfig {
   phone_number_id: string | null;
+  display_phone: string | null;
   connected: boolean;
   has_token: boolean;
   webhook_url: string;
