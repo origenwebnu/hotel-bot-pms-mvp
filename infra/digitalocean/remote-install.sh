@@ -36,6 +36,10 @@ fi
 echo "==> Reconstruyendo contenedores..."
 $COMPOSE_CMD down --remove-orphans 2>/dev/null || true
 
+for svc in postgres redis api web nginx; do
+  docker rm -f "hotel-bot-${svc}-1" 2>/dev/null || true
+done
+
 if [ "$SSL_ENABLED" != "1" ]; then
   docker stop hotel-bot-nginx-1 2>/dev/null || true
   docker rm hotel-bot-nginx-1 2>/dev/null || true
