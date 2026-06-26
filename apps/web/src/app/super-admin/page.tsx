@@ -12,8 +12,10 @@ import {
 } from '@/lib/super-admin-api';
 import { clearAuthSession } from '@/lib/api-core';
 import { SuperAdminReservationsPanel } from '@/components/SuperAdminReservationsPanel';
+import { AppShell } from '@/components/AppShell';
+import { SUPER_ADMIN_NAV, SUPER_ADMIN_TAB_TITLES } from '@/lib/app-shell-nav';
 
-type Tab = 'overview' | 'hotels' | 'plans' | 'reservations' | 'users' | 'admins' | 'settings';
+type Tab = (typeof SUPER_ADMIN_NAV)[number]['id'];
 
 export default function SuperAdminPage() {
   const router = useRouter();
@@ -79,123 +81,44 @@ export default function SuperAdminPage() {
   }
 
   return (
-    <div className="dashboard super-admin">
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <span>🛡️</span>
-          <div>
-            <strong>BookiChat</strong>
-            <small>Super Admin</small>
-          </div>
-        </div>
-        <nav>
-          <button
-            className={tab === 'overview' ? 'active' : ''}
-            onClick={() => setTab('overview')}
-          >
-            📊 Resumen
-          </button>
-          <button
-            className={tab === 'hotels' ? 'active' : ''}
-            onClick={() => setTab('hotels')}
-          >
-            🏨 Hoteles
-          </button>
-          <button
-            className={tab === 'plans' ? 'active' : ''}
-            onClick={() => setTab('plans')}
-          >
-            💳 Planes
-          </button>
-          <button
-            className={tab === 'reservations' ? 'active' : ''}
-            onClick={() => setTab('reservations')}
-          >
-            📋 Reservas
-          </button>
-          <button
-            className={tab === 'users' ? 'active' : ''}
-            onClick={() => setTab('users')}
-          >
-            👥 Usuarios
-          </button>
-          <button
-            className={tab === 'admins' ? 'active' : ''}
-            onClick={() => setTab('admins')}
-          >
-            🔐 Super Admins
-          </button>
-          <button
-            className={tab === 'settings' ? 'active' : ''}
-            onClick={() => setTab('settings')}
-          >
-            ⚙️ Parametrización
-          </button>
-        </nav>
-        <div className="sidebar-user">
-          <small>{userName}</small>
-        </div>
-        <button className="logout-btn" onClick={logout}>
-          Cerrar sesión
-        </button>
-      </aside>
+    <AppShell
+      title={SUPER_ADMIN_TAB_TITLES[tab] ?? 'Super Admin'}
+      subtitle={`Super Admin · ${userName}`}
+      navItems={SUPER_ADMIN_NAV}
+      activeId={tab}
+      onNavigate={(id) => setTab(id as Tab)}
+      onLogout={logout}
+    >
+      {error && <div className="error-banner panel-error">{error}</div>}
 
-      <main className="main">
-        <header className="main-header">
-          <h1>
-            {tab === 'overview' && 'Resumen de la plataforma'}
-            {tab === 'hotels' && 'Gestión de hoteles'}
-            {tab === 'plans' && 'Planes de suscripción'}
-            {tab === 'reservations' && 'Historial de reservas'}
-            {tab === 'users' && 'Usuarios de hoteles'}
-            {tab === 'admins' && 'Super administradores'}
-            {tab === 'settings' && 'Parametrización global'}
-          </h1>
-        </header>
-
-        {error && <div className="error-banner panel-error">{error}</div>}
-
-        {tab === 'overview' && stats && <OverviewPanel stats={stats} />}
-        {tab === 'hotels' && (
-          <HotelsPanel
-            hotels={hotels}
-            plans={plans.length ? plans : undefined}
-            onRefresh={() => loadData('hotels')}
-          />
-        )}
-        {tab === 'plans' && (
-          <PlansPanel plans={plans} onRefresh={() => loadData('plans')} />
-        )}
-        {tab === 'reservations' && <SuperAdminReservationsPanel hotels={hotels} />}
-        {tab === 'users' && (
-          <UsersPanel users={users} onRefresh={() => loadData('users')} />
-        )}
-        {tab === 'admins' && (
-          <AdminsPanel admins={admins} onRefresh={() => loadData('admins')} />
-        )}
-        {tab === 'settings' && (
-          <SettingsPanel
-            settings={settings}
-            onSaved={(s) => setSettings(s)}
-          />
-        )}
-      </main>
+      {tab === 'overview' && stats && <OverviewPanel stats={stats} />}
+      {tab === 'hotels' && (
+        <HotelsPanel
+          hotels={hotels}
+          plans={plans.length ? plans : undefined}
+          onRefresh={() => loadData('hotels')}
+        />
+      )}
+      {tab === 'plans' && (
+        <PlansPanel plans={plans} onRefresh={() => loadData('plans')} />
+      )}
+      {tab === 'reservations' && <SuperAdminReservationsPanel hotels={hotels} />}
+      {tab === 'users' && (
+        <UsersPanel users={users} onRefresh={() => loadData('users')} />
+      )}
+      {tab === 'admins' && (
+        <AdminsPanel admins={admins} onRefresh={() => loadData('admins')} />
+      )}
+      {tab === 'settings' && (
+        <SettingsPanel settings={settings} onSaved={(s) => setSettings(s)} />
+      )}
 
       <style jsx>{`
-        .super-admin .sidebar-brand span:first-child {
-          font-size: 1.75rem;
-        }
-        .sidebar-user {
-          padding: 0.5rem 0;
-          color: var(--text-muted);
-          font-size: 0.85rem;
-          border-top: 1px solid var(--border);
-        }
         .panel-error {
           margin-bottom: 1.5rem;
         }
       `}</style>
-    </div>
+    </AppShell>
   );
 }
 
