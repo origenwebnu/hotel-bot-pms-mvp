@@ -3,6 +3,12 @@
 import { useEffect, useState } from 'react';
 import { api, type DiscountTier } from '@/lib/api';
 
+const emptyForm = {
+  min_total: '',
+  max_total: '',
+  discount_percent: '',
+};
+
 function formatRange(tier: DiscountTier) {
   const fmt = (n: number) => `COP ${n.toLocaleString('es-CO')}`;
   if (tier.max_total == null) {
@@ -11,16 +17,22 @@ function formatRange(tier: DiscountTier) {
   return `${fmt(tier.min_total)} – ${fmt(tier.max_total)}`;
 }
 
+function tierToForm(tier: DiscountTier) {
+  return {
+    min_total: String(tier.min_total),
+    max_total: tier.max_total == null ? '' : String(tier.max_total),
+    discount_percent: String(tier.discount_percent),
+  };
+}
+
 export function DiscountTiersPanel() {
   const [tiers, setTiers] = useState<DiscountTier[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
-  const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({
-    min_total: '',
-    max_total: '',
-    discount_percent: '',
-  });
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     loadTiers();
@@ -48,21 +60,49 @@ export function DiscountTiersPanel() {
     }
   }
 
-  async function handleCreate(e: React.FormEvent) {
+  function cancelForm() {
+    setForm(emptyForm);
+    setShowCreateForm(false);
+    setEditingId(null);
+  }
+
+  function startCreate() {
+    cancelForm();
+    setShowCreateForm(true);
+  }
+
+  function startEdit(tier: DiscountTier) {
+    setShowCreateForm(false);
+    setEditingId(tier.id);
+    setForm(tierToForm(tier));
+    setMessage('');
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setMessage('');
+    setSaving(true);
+
+    const payload = {
+      min_total: Number(form.min_total),
+      max_total: form.max_total ? Number(form.max_total) : null,
+      discount_percent: Number(form.discount_percent),
+    };
+
     try {
-      await api.createDiscountTier({
-        min_total: Number(form.min_total),
-        max_total: form.max_total ? Number(form.max_total) : null,
-        discount_percent: Number(form.discount_percent),
-      });
-      setForm({ min_total: '', max_total: '', discount_percent: '' });
-      setShowForm(false);
+      if (editingId) {
+        await api.updateDiscountTier(editingId, payload);
+        setMessage('Rango de descuento actualizado.');
+      } else {
+        await api.createDiscountTier(payload);
+        setMessage('Rango de descuento creado.');
+      }
+      cancelForm();
       await loadTiers();
-      setMessage('Rango de descuento creado.');
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Error al crear');
+      setMessage(err instanceof Error ? err.message : 'Error al guardar');
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -74,8 +114,11 @@ export function DiscountTiersPanel() {
   async function removeTier(id: string) {
     if (!confirm('¿Eliminar este rango de descuento?')) return;
     await api.deleteDiscountTier(id);
+    if (editingId === id) cancelForm();
     await loadTiers();
   }
+
+  const showForm = showCreateForm || editingId !== null;
 
   if (loading) return <div className="panel">Cargando descuentos...</div>;
 
@@ -95,8 +138,12 @@ export function DiscountTiersPanel() {
             <button type="button" className="btn-secondary" onClick={seedDefault}>
               Cargar ejemplo (5% / 10% / 15%)
             </button>
-            <button type="button" className="btn-primary" onClick={() => setShowForm(!showForm)}>
-              {showForm ? 'Cancelar' : '+ Nuevo rango'}
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={() => (showCreateForm ? cancelForm() : startCreate())}
+            >
+              {showCreateForm ? 'Cancelar' : '+ Nuevo rango'}
             </button>
           </div>
         </div>
@@ -109,8 +156,8 @@ export function DiscountTiersPanel() {
       </div>
 
       {showForm && (
-        <form className="panel form-panel" onSubmit={handleCreate}>
-          <h3>Nuevo rango de descuento</h3>
+        <form className="panel form-panel" onSubmit={handleSubmit}>
+          <h3>{editingId ? 'Editar rango de descuento' : 'Nuevo rango de descuento'}</h3>
           <div
             className="field-row"
             style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}
@@ -150,9 +197,16 @@ export function DiscountTiersPanel() {
           <p className="muted">
             Ejemplo: de 0 a 500.000 → 5%; de 500.001 a 1.000.000 → 10%.
           </p>
-          <button type="submit" className="btn-primary">
-            Guardar rango
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button type="submit" className="btn-primary" disabled={saving}>
+              {saving ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Guardar rango'}
+            </button>
+            {editingId && (
+              <button type="button" className="btn-secondary" onClick={cancelForm}>
+                Cancelar
+              </button>
+            )}
+          </div>
         </form>
       )}
 
@@ -173,7 +227,7 @@ export function DiscountTiersPanel() {
             </thead>
             <tbody>
               {tiers.map((tier) => (
-                <tr key={tier.id}>
+                <tr key={tier.id} className={editingId === tier.id ? 'row-editing' : undefined}>
                   <td>{formatRange(tier)}</td>
                   <td>
                     <strong>{tier.discount_percent}%</strong>
@@ -184,6 +238,9 @@ export function DiscountTiersPanel() {
                     </span>
                   </td>
                   <td className="tier-actions">
+                    <button type="button" className="btn-secondary" onClick={() => startEdit(tier)}>
+                      Editar
+                    </button>
                     <button type="button" className="btn-secondary" onClick={() => toggleActive(tier)}>
                       {tier.is_active ? 'Desactivar' : 'Activar'}
                     </button>
@@ -220,9 +277,13 @@ export function DiscountTiersPanel() {
           padding: 0.75rem 0.5rem;
           border-bottom: 1px solid var(--border);
         }
+        .row-editing {
+          background: rgba(95, 66, 209, 0.08);
+        }
         .tier-actions {
           display: flex;
           gap: 0.5rem;
+          flex-wrap: wrap;
         }
         .pill {
           padding: 0.2rem 0.6rem;
