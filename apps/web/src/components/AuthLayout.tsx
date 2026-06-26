@@ -18,7 +18,15 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
             alt="BookiChat"
             width={180}
             height={34}
-            className="auth-logo"
+            className="auth-logo auth-logo-light"
+            priority
+          />
+          <Image
+            src="/brand/logo-full-dark.png"
+            alt="BookiChat"
+            width={180}
+            height={34}
+            className="auth-logo auth-logo-dark"
             priority
           />
           <h1>{title}</h1>
