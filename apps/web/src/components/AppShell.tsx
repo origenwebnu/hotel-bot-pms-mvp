@@ -5,10 +5,16 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { useTheme } from '@/components/ThemeProvider';
 import { SIDEBAR_STORAGE_KEY } from '@/lib/theme';
 
+export interface AppNavChild {
+  id: string;
+  label: string;
+}
+
 export interface AppNavItem {
   id: string;
   label: string;
   icon: string;
+  children?: AppNavChild[];
 }
 
 interface AppShellProps {
@@ -20,6 +26,10 @@ interface AppShellProps {
   onLogout: () => void;
   headerExtra?: ReactNode;
   children: ReactNode;
+}
+
+function isChildActive(item: AppNavItem, activeId: string): boolean {
+  return item.children?.some((child) => child.id === activeId) ?? false;
 }
 
 export function AppShell({
@@ -35,11 +45,24 @@ export function AppShell({
   const { theme, toggleTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
     if (stored === 'true') setCollapsed(true);
   }, []);
+
+  useEffect(() => {
+    setExpandedGroups((prev) => {
+      const next = { ...prev };
+      navItems.forEach((item) => {
+        if (item.children && isChildActive(item, activeId)) {
+          next[item.id] = true;
+        }
+      });
+      return next;
+    });
+  }, [activeId, navItems]);
 
   function toggleCollapsed() {
     setCollapsed((prev) => {
@@ -47,6 +70,21 @@ export function AppShell({
       localStorage.setItem(SIDEBAR_STORAGE_KEY, String(next));
       return next;
     });
+  }
+
+  function toggleGroup(item: AppNavItem) {
+    if (collapsed) {
+      setCollapsed(false);
+      localStorage.setItem(SIDEBAR_STORAGE_KEY, 'false');
+      setExpandedGroups((prev) => ({ ...prev, [item.id]: true }));
+      return;
+    }
+    setExpandedGroups((prev) => ({ ...prev, [item.id]: !prev[item.id] }));
+  }
+
+  function isGroupExpanded(item: AppNavItem): boolean {
+    if (collapsed) return false;
+    return expandedGroups[item.id] ?? isChildActive(item, activeId);
   }
 
   const logoFull =
@@ -102,29 +140,81 @@ export function AppShell({
         {subtitle && !collapsed && <p className="sidebar-subtitle">{subtitle}</p>}
 
         <nav className="sidebar-nav">
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              className={`nav-item ${activeId === item.id ? 'active' : ''}`}
-              onClick={() => {
-                onNavigate(item.id);
-                setMobileOpen(false);
-              }}
-              data-tooltip={collapsed ? item.label : undefined}
-              aria-label={collapsed ? item.label : undefined}
-            >
-              <Image
-                src={item.icon}
-                alt=""
-                width={22}
-                height={22}
-                className="nav-icon"
-                aria-hidden
-              />
-              {!collapsed && <span>{item.label}</span>}
-            </button>
-          ))}
+          {navItems.map((item) =>
+            item.children?.length ? (
+              <div key={item.id} className="nav-group">
+                <button
+                  type="button"
+                  className={`nav-item nav-group-toggle ${
+                    isChildActive(item, activeId) ? 'active' : ''
+                  }`}
+                  onClick={() => toggleGroup(item)}
+                  data-tooltip={collapsed ? item.label : undefined}
+                  aria-label={collapsed ? item.label : undefined}
+                  aria-expanded={isGroupExpanded(item)}
+                >
+                  <Image
+                    src={item.icon}
+                    alt=""
+                    width={22}
+                    height={22}
+                    className="nav-icon"
+                    aria-hidden
+                  />
+                  {!collapsed && (
+                    <>
+                      <span className="nav-group-label">{item.label}</span>
+                      <span
+                        className={`nav-chevron ${isGroupExpanded(item) ? 'expanded' : ''}`}
+                        aria-hidden
+                      >
+                        ▾
+                      </span>
+                    </>
+                  )}
+                </button>
+                {isGroupExpanded(item) && (
+                  <div className="nav-subitems">
+                    {item.children.map((child) => (
+                      <button
+                        key={child.id}
+                        type="button"
+                        className={`nav-subitem ${activeId === child.id ? 'active' : ''}`}
+                        onClick={() => {
+                          onNavigate(child.id);
+                          setMobileOpen(false);
+                        }}
+                      >
+                        {child.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <button
+                key={item.id}
+                type="button"
+                className={`nav-item ${activeId === item.id ? 'active' : ''}`}
+                onClick={() => {
+                  onNavigate(item.id);
+                  setMobileOpen(false);
+                }}
+                data-tooltip={collapsed ? item.label : undefined}
+                aria-label={collapsed ? item.label : undefined}
+              >
+                <Image
+                  src={item.icon}
+                  alt=""
+                  width={22}
+                  height={22}
+                  className="nav-icon"
+                  aria-hidden
+                />
+                {!collapsed && <span>{item.label}</span>}
+              </button>
+            ),
+          )}
         </nav>
 
         <div className="sidebar-footer">

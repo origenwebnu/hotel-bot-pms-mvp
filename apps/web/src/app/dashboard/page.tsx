@@ -10,9 +10,15 @@ import {
   clearAuthSession,
 } from '@/lib/api';
 import { AppShell } from '@/components/AppShell';
-import { HOTEL_NAV, HOTEL_TAB_TITLES } from '@/lib/app-shell-nav';
-import { IntegrationsPanel } from '@/components/IntegrationsPanel';
+import {
+  HOTEL_NAV,
+  HOTEL_TAB_TITLES,
+  isIntegrationTab,
+  type HotelTab,
+} from '@/lib/app-shell-nav';
 import { WhatsAppPanel } from '@/components/WhatsAppPanel';
+import { PmsIntegrationPanel } from '@/components/PmsIntegrationPanel';
+import { PaymentIntegrationPanel } from '@/components/PaymentIntegrationPanel';
 import { KnowledgePanel } from '@/components/KnowledgePanel';
 import { DiscountTiersPanel } from '@/components/DiscountTiersPanel';
 import { InventoryPanel } from '@/components/InventoryPanel';
@@ -20,11 +26,11 @@ import { ChatSimulator } from '@/components/ChatSimulator';
 import { DashboardOverviewPanel } from '@/components/DashboardOverviewPanel';
 import { ReservationsHistoryPanel } from '@/components/ReservationsHistoryPanel';
 
-type Tab = (typeof HOTEL_NAV)[number]['id'];
+const DEFAULT_INTEGRATION_TAB: HotelTab = 'integration-whatsapp';
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>('overview');
+  const [tab, setTab] = useState<HotelTab>('overview');
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [integration, setIntegration] = useState<IntegrationStatus | null>(null);
   const [subscription, setSubscription] = useState<HotelSubscription | null>(null);
@@ -66,11 +72,19 @@ export default function DashboardPage() {
     [],
   );
 
+  function handleNavigate(id: string) {
+    if (id === 'integrations') {
+      setTab(DEFAULT_INTEGRATION_TAB);
+      return;
+    }
+    setTab(id as HotelTab);
+  }
+
   if (!hotel) {
     return <div className="loading">Cargando panel...</div>;
   }
 
-  const headerExtra = tab === 'integrations' && integration && (
+  const headerExtra = isIntegrationTab(tab) && integration && (
     <div className="status-badges">
       <span className={`badge ${integration.whatsapp_connected ? 'ok' : 'warn'}`}>
         WhatsApp {integration.whatsapp_connected ? '✓' : '○'}
@@ -90,7 +104,7 @@ export default function DashboardPage() {
       subtitle={hotel.name}
       navItems={HOTEL_NAV}
       activeId={tab}
-      onNavigate={(id) => setTab(id as Tab)}
+      onNavigate={handleNavigate}
       onLogout={() => {
         clearAuthSession();
         router.push('/');
@@ -108,17 +122,18 @@ export default function DashboardPage() {
       {tab === 'reservations' && (
         <ReservationsHistoryPanel loadReservations={loadReservations} />
       )}
-      {tab === 'integrations' && (
-        <div className="integrations-stack">
-          <WhatsAppPanel
-            onConnectionChange={(connected) =>
-              setIntegration((prev) =>
-                prev ? { ...prev, whatsapp_connected: connected } : prev,
-              )
-            }
-          />
-          <IntegrationsPanel integration={integration} onUpdate={setIntegration} />
-        </div>
+      {tab === 'integration-whatsapp' && (
+        <WhatsAppPanel
+          onConnectionChange={(connected) =>
+            setIntegration((prev) => (prev ? { ...prev, whatsapp_connected: connected } : prev))
+          }
+        />
+      )}
+      {tab === 'integration-pms' && (
+        <PmsIntegrationPanel integration={integration} onUpdate={setIntegration} />
+      )}
+      {tab === 'integration-payments' && (
+        <PaymentIntegrationPanel integration={integration} onUpdate={setIntegration} />
       )}
       {tab === 'inventory' && <InventoryPanel />}
       {tab === 'discounts' && <DiscountTiersPanel />}
