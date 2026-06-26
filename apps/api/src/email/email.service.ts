@@ -7,6 +7,12 @@ import {
 import * as nodemailer from 'nodemailer';
 import type SMTPTransport from 'nodemailer/lib/smtp-transport';
 import type Transporter from 'nodemailer/lib/mailer';
+import {
+  renderMonthlyQuotaEmail,
+  renderRegistrationCodeEmail,
+  renderTrialExpiredEmail,
+  renderTrialQuotaEmail,
+} from './email-templates';
 
 @Injectable()
 export class EmailService {
@@ -95,14 +101,7 @@ export class EmailService {
       `— Equipo BookiChat`,
     ].join('\n');
 
-    const html = `
-      <div style="font-family:sans-serif;max-width:480px;margin:0 auto;color:#1a2332">
-        <h2 style="color:#25d366">BookiChat</h2>
-        <p>Verifica tu email para registrar <strong>${this.escapeHtml(hotelName)}</strong>.</p>
-        <p style="font-size:32px;letter-spacing:8px;font-weight:700;text-align:center;padding:16px;background:#f4f6f8;border-radius:8px">${code}</p>
-        <p style="color:#666;font-size:14px">Este código expira en <strong>15 minutos</strong>.</p>
-        <p style="color:#999;font-size:12px">Si no solicitaste este registro, ignora este email.</p>
-      </div>`;
+    const html = renderRegistrationCodeEmail(hotelName, code);
 
     try {
       const transporter = this.getTransporter();
@@ -160,13 +159,7 @@ export class EmailService {
       `— Equipo BookiChat`,
     ].join('\n');
 
-    const html = `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#1a2332">
-        <h2 style="color:#25d366">BookiChat</h2>
-        <p>El hotel <strong>${this.escapeHtml(hotelName)}</strong> consumió las <strong>${reservationLimit}</strong> reservas de prueba.</p>
-        <p>Para continuar operando, elige un plan en tu panel:</p>
-        <p><a href="${dashboard}" style="display:inline-block;background:#25d366;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Ir al panel</a></p>
-      </div>`;
+    const html = renderTrialQuotaEmail(hotelName, reservationLimit, dashboard);
 
     await this.sendOptional(email, subject, text, html, 'trial quota');
   }
@@ -193,13 +186,7 @@ export class EmailService {
       `— Equipo BookiChat`,
     ].join('\n');
 
-    const html = `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#1a2332">
-        <h2 style="color:#25d366">BookiChat</h2>
-        <p>${this.escapeHtml(reasonText)}</p>
-        <p>El hotel <strong>${this.escapeHtml(hotelName)}</strong> necesita un plan activo para continuar.</p>
-        <p><a href="${dashboard}" style="display:inline-block;background:#25d366;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Elegir plan</a></p>
-      </div>`;
+    const html = renderTrialExpiredEmail(hotelName, reasonText, dashboard);
 
     await this.sendOptional(email, subject, text, html, 'trial expired');
   }
@@ -223,13 +210,7 @@ export class EmailService {
       `— Equipo BookiChat`,
     ].join('\n');
 
-    const html = `
-      <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#1a2332">
-        <h2 style="color:#25d366">BookiChat</h2>
-        <p>El hotel <strong>${this.escapeHtml(hotelName)}</strong> consumió las <strong>${limit}</strong> reservas de su plan <strong>${this.escapeHtml(planName)}</strong> este mes.</p>
-        <p>Actualiza a un plan superior para seguir recibiendo reservas:</p>
-        <p><a href="${dashboard}" style="display:inline-block;background:#25d366;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">Actualizar plan</a></p>
-      </div>`;
+    const html = renderMonthlyQuotaEmail(hotelName, planName, limit, dashboard);
 
     await this.sendOptional(email, subject, text, html, 'monthly quota');
   }
@@ -260,11 +241,4 @@ export class EmailService {
     }
   }
 
-  private escapeHtml(value: string): string {
-    return value
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
-  }
 }
