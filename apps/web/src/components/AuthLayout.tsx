@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import Image from 'next/image';
 import { ReactNode } from 'react';
 
 interface AuthLayoutProps {
@@ -11,9 +11,16 @@ interface AuthLayoutProps {
 export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProps) {
   return (
     <div className="auth-page">
-      <div className="auth-card">
+      <div className="auth-card glass-panel">
         <div className="auth-header">
-          <span className="logo">BookiChat</span>
+          <Image
+            src="/brand/logo-full-light.svg"
+            alt="BookiChat"
+            width={180}
+            height={34}
+            className="auth-logo"
+            priority
+          />
           <h1>{title}</h1>
           <p>{subtitle}</p>
         </div>
@@ -27,30 +34,31 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
           display: flex;
           align-items: center;
           justify-content: center;
-          padding: 2rem;
-          background: radial-gradient(ellipse at top, #1a2838 0%, var(--bg) 70%);
+          padding: 2rem 1rem;
+          background:
+            radial-gradient(circle at 10% 10%, rgba(188, 194, 253, 0.45), transparent 40%),
+            radial-gradient(circle at 90% 0%, rgba(95, 66, 209, 0.18), transparent 35%),
+            var(--bg);
         }
         .auth-card {
           width: 100%;
           max-width: 420px;
-          background: var(--surface);
-          border: 1px solid var(--border);
-          border-radius: 16px;
-          padding: 2.5rem;
+          border-radius: var(--radius-lg);
+          padding: 2.25rem;
+          box-shadow: var(--shadow-lg);
         }
         .auth-header {
           text-align: center;
           margin-bottom: 2rem;
         }
-        .logo {
-          font-size: 1.5rem;
-          font-weight: 700;
-          color: var(--accent);
-          letter-spacing: -0.02em;
+        .auth-header :global(.auth-logo) {
+          width: auto;
+          height: 34px;
+          margin-bottom: 1rem;
         }
         h1 {
           font-size: 1.5rem;
-          margin: 0.75rem 0 0.25rem;
+          margin: 0.25rem 0;
         }
         .auth-header p {
           color: var(--text-muted);
@@ -68,7 +76,7 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
           text-decoration: none;
         }
         .auth-footer :global(a:hover) {
-          text-decoration: underline;
+          color: var(--accent-hover);
         }
       `}</style>
     </div>
