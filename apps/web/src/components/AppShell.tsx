@@ -111,8 +111,8 @@ export function AppShell({
                 onNavigate(item.id);
                 setMobileOpen(false);
               }}
-              title={collapsed ? item.label : undefined}
               data-tooltip={collapsed ? item.label : undefined}
+              aria-label={collapsed ? item.label : undefined}
             >
               <Image
                 src={item.icon}
@@ -132,10 +132,10 @@ export function AppShell({
             type="button"
             className="nav-item theme-toggle"
             onClick={toggleTheme}
-            title={collapsed ? (theme === 'light' ? 'Modo oscuro' : 'Modo claro') : undefined}
             data-tooltip={
               collapsed ? (theme === 'light' ? 'Modo oscuro' : 'Modo claro') : undefined
             }
+            aria-label={collapsed ? (theme === 'light' ? 'Modo oscuro' : 'Modo claro') : undefined}
           >
             <span className="theme-icon" aria-hidden>
               {theme === 'light' ? '🌙' : '☀️'}
@@ -148,8 +148,8 @@ export function AppShell({
             type="button"
             className="nav-item logout"
             onClick={onLogout}
-            title={collapsed ? 'Cerrar sesión' : undefined}
             data-tooltip={collapsed ? 'Cerrar sesión' : undefined}
+            aria-label={collapsed ? 'Cerrar sesión' : undefined}
           >
             <span className="theme-icon" aria-hidden>
               ⎋

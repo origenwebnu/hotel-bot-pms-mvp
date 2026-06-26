@@ -533,7 +533,6 @@ input, select, textarea {
   display: flex;
   min-height: 100vh;
   background: var(--bg);
-  overflow-x: hidden;
   max-width: 100vw;
 }
 
@@ -558,6 +557,8 @@ input, select, textarea {
   width: var(--sidebar-collapsed);
   padding-left: 0.65rem;
   padding-right: 0.65rem;
+  overflow: visible;
+  z-index: 45;
 }
 
 .sidebar-top {
@@ -722,34 +723,54 @@ input, select, textarea {
   box-shadow: none;
 }
 
+.app-shell.sidebar-collapsed .sidebar-nav,
+.app-shell.sidebar-collapsed .sidebar-footer {
+  overflow: visible;
+}
+
 .app-shell.sidebar-collapsed .nav-item span:not(.theme-icon) {
   display: none;
+}
+
+.app-shell.sidebar-collapsed .nav-item[data-tooltip]::before {
+  content: '';
+  position: absolute;
+  left: calc(100% + 2px);
+  top: 50%;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-right-color: var(--brand-primary);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  z-index: 60;
 }
 
 .app-shell.sidebar-collapsed .nav-item[data-tooltip]::after {
   content: attr(data-tooltip);
   position: absolute;
-  left: 50%;
-  top: auto;
-  bottom: calc(100% + 6px);
-  transform: translateX(-50%);
+  left: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
   background: var(--brand-primary);
   color: #fff;
-  padding: 0.35rem 0.55rem;
+  padding: 0.45rem 0.7rem;
   border-radius: 8px;
-  font-size: 0.72rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1.2;
   white-space: nowrap;
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.15s ease;
-  z-index: 50;
+  z-index: 60;
   box-shadow: var(--shadow-md);
 }
 
-.app-shell.sidebar-collapsed .nav-item[data-tooltip]:hover::after {
+.app-shell.sidebar-collapsed .nav-item[data-tooltip]:hover::before,
+.app-shell.sidebar-collapsed .nav-item[data-tooltip]:hover::after,
+.app-shell.sidebar-collapsed .nav-item[data-tooltip]:focus-visible::before,
+.app-shell.sidebar-collapsed .nav-item[data-tooltip]:focus-visible::after {
   opacity: 1;
 }
 
@@ -764,6 +785,7 @@ input, select, textarea {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  overflow-x: hidden;
 }
 
 .app-header {
