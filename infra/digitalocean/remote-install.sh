@@ -79,6 +79,18 @@ if [ "$OK" != "1" ]; then
   exit 1
 fi
 
+DEMO_HOTEL_CLEANUP_MARKER="$APP_DIR/.demo-hotel-cleanup-v1.done"
+if [ ! -f "$DEMO_HOTEL_CLEANUP_MARKER" ]; then
+  echo ""
+  echo "==> Limpieza one-time: conservar solo hotel demo..."
+  if bash infra/digitalocean/cleanup-test-hotels.sh "hotel-origen-web-1782248576158"; then
+    touch "$DEMO_HOTEL_CLEANUP_MARKER"
+    echo "✅ Limpieza de hoteles de prueba completada"
+  else
+    echo "WARN: limpieza de hoteles de prueba falló — reintentará en el próximo deploy"
+  fi
+fi
+
 echo ""
 echo "✅ Deploy OK"
 echo "   http://${PUBLIC_IP}"
