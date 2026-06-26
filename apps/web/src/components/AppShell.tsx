@@ -66,14 +66,14 @@ export function AppShell({
       )}
 
       <aside className={`app-sidebar glass-panel ${mobileOpen ? 'mobile-open' : ''}`}>
-        <div className="sidebar-top">
+        <div className={`sidebar-top ${collapsed ? 'is-collapsed' : ''}`}>
           <div className="sidebar-brand">
             {collapsed ? (
               <Image
                 src={logoIcon}
                 alt="BookiChat"
-                width={36}
-                height={36}
+                width={40}
+                height={40}
                 className="brand-icon"
                 priority
               />
