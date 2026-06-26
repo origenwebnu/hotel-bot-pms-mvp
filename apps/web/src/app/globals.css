@@ -786,6 +786,7 @@ input, select, textarea {
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
+  padding: 1.5rem 2rem 2rem;
 }
 
 .app-header {
@@ -794,7 +795,7 @@ input, select, textarea {
   align-items: center;
   gap: 1rem;
   padding: 1rem 1.25rem;
-  margin: 1rem 1rem 0;
+  margin: 0;
   border-radius: var(--radius-md);
 }
 
@@ -824,7 +825,7 @@ input, select, textarea {
 
 .app-content {
   flex: 1;
-  padding: 1rem 1.25rem 1.5rem;
+  padding: 1.25rem 0 0;
   overflow-y: auto;
 }
 
@@ -884,6 +885,10 @@ input, select, textarea {
 
   .app-shell.sidebar-collapsed .app-sidebar {
     width: var(--sidebar-width);
+  }
+
+  .app-main {
+    padding: 1rem 1.25rem 1.25rem;
   }
 }
 
