@@ -3,6 +3,8 @@ import { Request } from 'express';
 import { CheckoutService } from './checkout.service';
 import { WompiProvider } from './providers/wompi.provider';
 import { StripeProvider } from './providers/stripe.provider';
+import { BoldProvider } from './providers/bold.provider';
+import { EpaycoProvider } from './providers/epayco.provider';
 
 @Controller('webhooks')
 export class CheckoutController {
@@ -12,6 +14,8 @@ export class CheckoutController {
     private readonly checkout: CheckoutService,
     private readonly wompi: WompiProvider,
     private readonly stripe: StripeProvider,
+    private readonly bold: BoldProvider,
+    private readonly epayco: EpaycoProvider,
   ) {}
 
   @Post('wompi')
@@ -37,5 +41,30 @@ export class CheckoutController {
     const payload = this.stripe.parseWebhook(rawBody, signature);
     await this.checkout.enqueueWebhook(payload);
     return { received: true };
+  }
+
+  @Post('bold')
+  async boldWebhook(
+    @Req() req: RawBodyRequest<Request>,
+    @Headers('x-bold-signature') signature?: string,
+  ) {
+    try {
+      const payload = this.bold.parseWebhook(req.body, signature);
+      await this.checkout.enqueueWebhook(payload);
+    } catch (error) {
+      this.logger.error(`Bold webhook enqueue failed: ${error}`);
+    }
+    return { received: true };
+  }
+
+  @Post('epayco')
+  async epaycoWebhook(@Req() req: RawBodyRequest<Request>) {
+    try {
+      const payload = this.epayco.parseWebhook(req.body);
+      await this.checkout.enqueueWebhook(payload);
+    } catch (error) {
+      this.logger.error(`ePayco webhook enqueue failed: ${error}`);
+    }
+    return 'OK';
   }
 }

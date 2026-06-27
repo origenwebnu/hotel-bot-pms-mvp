@@ -7,6 +7,8 @@ import { PublicPaymentController } from './public-payment.controller';
 import { PaymentProcessor } from './payment.processor';
 import { WompiProvider } from './providers/wompi.provider';
 import { StripeProvider } from './providers/stripe.provider';
+import { BoldProvider } from './providers/bold.provider';
+import { EpaycoProvider } from './providers/epayco.provider';
 import { CoreIntegratorModule } from '../core-integrator/core-integrator.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 
@@ -22,6 +24,8 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
     PaymentProcessor,
     WompiProvider,
     StripeProvider,
+    BoldProvider,
+    EpaycoProvider,
   ],
   exports: [CheckoutService],
 })
