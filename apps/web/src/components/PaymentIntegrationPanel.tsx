@@ -172,6 +172,14 @@ export function PaymentIntegrationPanel({ integration, onUpdate }: Props) {
   const webhookUrl = paymentConfig
     ? resolveWebhookUrl(form.payment_provider, paymentConfig)
     : '';
+  const connectedProvider =
+    paymentConfig?.provider ?? integration?.payment_provider ?? form.payment_provider;
+  const connectedProviderLabel =
+    PROVIDER_LABELS[connectedProvider] ?? connectedProvider;
+  const isConnected = Boolean(integration?.payment_connected || paymentConfig?.connected);
+  const statusLabel = isConnected
+    ? `Conectado: ${connectedProviderLabel}`
+    : 'Sin conectar';
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -244,12 +252,8 @@ export function PaymentIntegrationPanel({ integration, onUpdate }: Props) {
     <IntegrationViewShell
       title="Pagos / Recaudo"
       description={HOTEL_TAB_DESCRIPTIONS['integration-payments']}
-      statusLabel={
-        integration?.payment_connected || paymentConfig?.connected
-          ? 'Conectado'
-          : 'Sin conectar'
-      }
-      statusOk={Boolean(integration?.payment_connected || paymentConfig?.connected)}
+      statusLabel={statusLabel}
+      statusOk={isConnected}
     >
       <section className="integration-card glass-panel">
         <form onSubmit={handleSave} className="integration-form">
@@ -257,19 +261,6 @@ export function PaymentIntegrationPanel({ integration, onUpdate }: Props) {
             Configura Wompi, Bold, ePayco o Stripe para procesar pagos de reservas directas en
             Colombia.
           </p>
-
-          {paymentConfig && (
-            <div className="integration-info-box">
-              <strong>URL de webhook / confirmación ({providerLabel})</strong>
-              <code>{webhookUrl}</code>
-              <p>{ui.webhook_help}</p>
-              <ol>
-                {ui.setup_steps.map((step) => (
-                  <li key={step}>{step}</li>
-                ))}
-              </ol>
-            </div>
-          )}
 
           <label>
             Proveedor de pagos
@@ -283,6 +274,19 @@ export function PaymentIntegrationPanel({ integration, onUpdate }: Props) {
               <option value="stripe">Stripe</option>
             </select>
           </label>
+
+          {paymentConfig && (
+            <div className="integration-info-box">
+              <strong>URL de webhook / confirmación ({providerLabel})</strong>
+              <code>{webhookUrl}</code>
+              <p>{ui.webhook_help}</p>
+              <ol>
+                {ui.setup_steps.map((step) => (
+                  <li key={step}>{step}</li>
+                ))}
+              </ol>
+            </div>
+          )}
 
           {showPublicKey && (
             <label>
