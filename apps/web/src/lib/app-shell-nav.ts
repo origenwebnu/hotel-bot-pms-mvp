@@ -21,6 +21,7 @@ export const HOTEL_NAV: AppNavItem[] = [
   { id: 'discounts', label: 'Descuentos', icon: '/icons/modules/discounts.svg' },
   { id: 'knowledge', label: 'Entrenamiento AI', icon: '/icons/modules/knowledge.svg' },
   { id: 'simulator', label: 'Simulador IA', icon: '/icons/modules/simulator.svg' },
+  { id: 'account', label: 'Mi cuenta', icon: '/icons/modules/mi-cuenta.svg' },
 ];
 
 export type HotelTab =
@@ -30,6 +31,7 @@ export type HotelTab =
   | 'discounts'
   | 'knowledge'
   | 'simulator'
+  | 'account'
   | HotelIntegrationTab;
 
 export const HOTEL_TAB_TITLES: Record<string, string> = {
@@ -42,6 +44,7 @@ export const HOTEL_TAB_TITLES: Record<string, string> = {
   discounts: 'Descuentos automáticos',
   knowledge: 'Entrenamiento AI',
   simulator: 'Simulador de Chat',
+  account: 'Mi cuenta',
 };
 
 export const HOTEL_TAB_DESCRIPTIONS: Record<string, string> = {

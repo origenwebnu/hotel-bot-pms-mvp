@@ -284,6 +284,55 @@ export class AuthService {
     };
   }
 
+  async updateProfile(userId: string, data: { name?: string }) {
+    const user = await this.prisma.adminUser.update({
+      where: { id: userId },
+      data: {
+        ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+      },
+      include: { hotel: { select: { id: true, name: true } } },
+    });
+
+    return {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      hotel_id: user.hotelId,
+      hotel_name: user.hotel.name,
+    };
+  }
+
+  async updatePassword(
+    userId: string,
+    currentPassword: string,
+    newPassword: string,
+  ) {
+    const user = await this.prisma.adminUser.findUnique({
+      where: { id: userId },
+    });
+    if (!user) throw new UnauthorizedException('Sesión inválida');
+
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) {
+      throw new BadRequestException('La contraseña actual es incorrecta');
+    }
+
+    if (newPassword.length < 8) {
+      throw new BadRequestException(
+        'La nueva contraseña debe tener al menos 8 caracteres',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await this.prisma.adminUser.update({
+      where: { id: userId },
+      data: { passwordHash },
+    });
+
+    return { message: 'Contraseña actualizada correctamente' };
+  }
+
   private signToken(params: {
     userId: string;
     email: string;

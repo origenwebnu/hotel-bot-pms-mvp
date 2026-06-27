@@ -32,6 +32,7 @@ model Hotel {
   roomTypes     RoomType[]
   discountTiers HotelDiscountTier[]
   subscription  HotelSubscription?
+  subscriptionPayments HotelSubscriptionPayment[]
 
   @@map("hotels")
 }
@@ -310,4 +311,23 @@ model BillableReservation {
 
   @@index([hotelId, periodMonth])
   @@map("billable_reservations")
+}
+
+model HotelSubscriptionPayment {
+  id          String    @id @default(cuid())
+  hotelId     String    @map("hotel_id")
+  periodMonth String    @map("period_month")
+  amount      Float
+  currency    String    @default("COP")
+  planName    String?   @map("plan_name")
+  status      String    @default("pending")
+  description String?   @db.Text
+  paidAt      DateTime? @map("paid_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@unique([hotelId, periodMonth])
+  @@index([hotelId])
+  @@map("hotel_subscription_payments")
 }

@@ -25,6 +25,7 @@ import { InventoryPanel } from '@/components/InventoryPanel';
 import { ChatSimulator } from '@/components/ChatSimulator';
 import { DashboardOverviewPanel } from '@/components/DashboardOverviewPanel';
 import { ReservationsHistoryPanel } from '@/components/ReservationsHistoryPanel';
+import { MyAccountPanel } from '@/components/MyAccountPanel';
 
 const DEFAULT_INTEGRATION_TAB: HotelTab = 'integration-whatsapp';
 
@@ -111,7 +112,9 @@ export default function DashboardPage() {
       }}
       headerExtra={headerExtra}
     >
-      {subscription && tab !== 'overview' && <SubscriptionBanner subscription={subscription} />}
+      {subscription && tab !== 'overview' && tab !== 'account' && (
+        <SubscriptionBanner subscription={subscription} />
+      )}
 
       {tab === 'overview' && (
         <>
@@ -139,6 +142,15 @@ export default function DashboardPage() {
       {tab === 'discounts' && <DiscountTiersPanel />}
       {tab === 'knowledge' && <KnowledgePanel />}
       {tab === 'simulator' && <ChatSimulator />}
+      {tab === 'account' && (
+        <MyAccountPanel
+          hotel={hotel}
+          subscription={subscription}
+          onHotelUpdate={(updated) => {
+            setHotel((prev) => (prev ? { ...prev, ...updated } : prev));
+          }}
+        />
+      )}
     </AppShell>
   );
 }

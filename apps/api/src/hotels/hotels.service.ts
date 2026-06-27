@@ -23,6 +23,28 @@ export class HotelsService {
     return hotel;
   }
 
+  async updateHotel(
+    hotelId: string,
+    data: { name?: string; timezone?: string; currency?: string },
+  ) {
+    const hotel = await this.prisma.hotel.update({
+      where: { id: hotelId },
+      data: {
+        ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+        ...(data.timezone !== undefined ? { timezone: data.timezone } : {}),
+        ...(data.currency !== undefined ? { currency: data.currency } : {}),
+      },
+    });
+
+    return {
+      id: hotel.id,
+      name: hotel.name,
+      slug: hotel.slug,
+      timezone: hotel.timezone,
+      currency: hotel.currency,
+    };
+  }
+
   async updateIntegration(
     hotelId: string,
     data: {

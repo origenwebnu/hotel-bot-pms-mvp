@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, UseGuards, Req } from '@nestjs/common';
+import { Controller, Post, Body, Get, Put, UseGuards, Req, BadRequestException } from '@nestjs/common';
 import { IsEmail, IsString, MinLength, Matches } from 'class-validator';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -46,6 +46,21 @@ class LoginDto {
   password!: string;
 }
 
+class UpdateProfileDto {
+  @IsString()
+  @MinLength(2)
+  name!: string;
+}
+
+class UpdatePasswordDto {
+  @IsString()
+  current_password!: string;
+
+  @IsString()
+  @MinLength(8)
+  new_password!: string;
+}
+
 @Controller('auth')
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
@@ -77,5 +92,33 @@ export class AuthController {
     req: { user: { userId: string; role: string } },
   ) {
     return this.auth.getProfile(req.user.userId, req.user.role);
+  }
+
+  @Put('me')
+  @UseGuards(JwtAuthGuard)
+  updateProfile(
+    @Req() req: { user: { userId: string; role: string } },
+    @Body() dto: UpdateProfileDto,
+  ) {
+    if (req.user.role === 'super_admin') {
+      throw new BadRequestException('Los super administradores no usan este endpoint');
+    }
+    return this.auth.updateProfile(req.user.userId, { name: dto.name });
+  }
+
+  @Put('me/password')
+  @UseGuards(JwtAuthGuard)
+  updatePassword(
+    @Req() req: { user: { userId: string; role: string } },
+    @Body() dto: UpdatePasswordDto,
+  ) {
+    if (req.user.role === 'super_admin') {
+      throw new BadRequestException('Los super administradores no usan este endpoint');
+    }
+    return this.auth.updatePassword(
+      req.user.userId,
+      dto.current_password,
+      dto.new_password,
+    );
   }
 }
