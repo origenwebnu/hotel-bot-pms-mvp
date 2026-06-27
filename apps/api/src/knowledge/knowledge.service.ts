@@ -7,6 +7,9 @@ import { EmbeddingsService } from './embeddings.service';
 
 const CHUNK_SIZE = 500;
 const CHUNK_OVERLAP = 50;
+/** Similitud mínima (coseno) para considerar que un documento aportó al RAG */
+const RAG_MIN_SIMILARITY = 0.68;
+const RAG_CANDIDATE_LIMIT = 20;
 
 @Injectable()
 export class KnowledgeService {
@@ -129,10 +132,18 @@ export class KnowledgeService {
        LIMIT $3`,
       vectorStr,
       hotelId,
-      limit,
+      RAG_CANDIDATE_LIMIT,
     );
 
-    const documentIds = [...new Set(results.map((r) => r.document_id))];
+    const ranked = results.map((r) => ({
+      ...r,
+      similarity: Number(r.similarity),
+    }));
+
+    const relevant = ranked.filter((r) => r.similarity >= RAG_MIN_SIMILARITY);
+    const selected = (relevant.length > 0 ? relevant : ranked.slice(0, 1)).slice(0, limit);
+
+    const documentIds = [...new Set(selected.map((r) => r.document_id))];
     if (documentIds.length > 0) {
       await this.prisma.knowledgeDocument.updateMany({
         where: { id: { in: documentIds }, hotelId },
@@ -140,7 +151,7 @@ export class KnowledgeService {
       });
     }
 
-    return results.map((r) => r.content).join('\n---\n');
+    return selected.map((r) => r.content).join('\n---\n');
   }
 
   async testChat(hotelId: string, message: string, generateResponse: (msg: string, ctx: string) => Promise<string>): Promise<string> {
