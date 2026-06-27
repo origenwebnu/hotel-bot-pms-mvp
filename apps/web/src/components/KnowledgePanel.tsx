@@ -70,7 +70,7 @@ export function KnowledgePanel() {
         setMessage('Documento actualizado. Reindexando…');
       } else {
         await api.createKnowledge(form);
-        setMessage('Documento guardado. Indexando…');
+        setMessage('Documento guardado. Procesando…');
       }
       closeFormModal();
       await loadDocs();
@@ -126,7 +126,7 @@ export function KnowledgePanel() {
             <article key={doc.id} className="ai-doc-card glass-panel">
               <div className="ai-doc-card-top">
                 <span className={`ai-doc-status ${doc.isIndexed ? 'indexed' : 'pending'}`}>
-                  {doc.isIndexed ? 'Indexado' : 'Indexando…'}
+                  {doc.isIndexed ? 'Activo' : 'Pendiente'}
                 </span>
                 <span className="ai-doc-usage" title="Veces usado por la IA en respuestas">
                   {doc.aiUsageCount ?? 0} usos
@@ -184,7 +184,7 @@ export function KnowledgePanel() {
               {saving
                 ? formMode === 'edit'
                   ? 'Guardando…'
-                  : 'Indexando…'
+                  : 'Procesando…'
                 : formMode === 'edit'
                   ? 'Guardar cambios'
                   : 'Guardar e indexar'}
@@ -203,7 +203,7 @@ export function KnowledgePanel() {
           <div className="ai-training-view">
             <div className="ai-training-view-meta">
               <span className={`ai-doc-status ${viewDoc.isIndexed ? 'indexed' : 'pending'}`}>
-                {viewDoc.isIndexed ? 'Indexado' : 'Indexando…'}
+                {viewDoc.isIndexed ? 'Activo' : 'Pendiente'}
               </span>
               <span className="ai-doc-usage">{viewDoc.aiUsageCount ?? 0} usos por la IA</span>
             </div>
