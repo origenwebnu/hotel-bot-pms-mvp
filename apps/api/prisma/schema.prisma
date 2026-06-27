@@ -142,6 +142,7 @@ model KnowledgeDocument {
   sourceType String   @default("text") @map("source_type")
   fileName   String?  @map("file_name")
   isIndexed  Boolean  @default(false) @map("is_indexed")
+  aiUsageCount Int    @default(0) @map("ai_usage_count")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 

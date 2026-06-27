@@ -44,8 +44,31 @@ export class KnowledgeService {
   async listDocuments(hotelId: string) {
     return this.prisma.knowledgeDocument.findMany({
       where: { hotelId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ aiUsageCount: 'desc' }, { createdAt: 'desc' }],
     });
+  }
+
+  async updateDocument(
+    hotelId: string,
+    documentId: string,
+    data: { title: string; content: string },
+  ) {
+    const doc = await this.prisma.knowledgeDocument.update({
+      where: { id: documentId, hotelId },
+      data: {
+        title: data.title,
+        content: data.content,
+        isIndexed: false,
+      },
+    });
+
+    await this.indexQueue.add(
+      JOB_NAMES.INDEX_DOCUMENT,
+      { documentId: doc.id, hotelId },
+      { removeOnComplete: true },
+    );
+
+    return doc;
   }
 
   async deleteDocument(hotelId: string, documentId: string) {
@@ -97,9 +120,9 @@ export class KnowledgeService {
     const vectorStr = `[${embedding.join(',')}]`;
 
     const results = await this.prisma.$queryRawUnsafe<
-      Array<{ content: string; similarity: number }>
+      Array<{ content: string; document_id: string; similarity: number }>
     >(
-      `SELECT content, 1 - (embedding <=> $1::vector) AS similarity
+      `SELECT content, document_id, 1 - (embedding <=> $1::vector) AS similarity
        FROM knowledge_vectors
        WHERE hotel_id = $2 AND embedding IS NOT NULL
        ORDER BY embedding <=> $1::vector
@@ -108,6 +131,14 @@ export class KnowledgeService {
       hotelId,
       limit,
     );
+
+    const documentIds = [...new Set(results.map((r) => r.document_id))];
+    if (documentIds.length > 0) {
+      await this.prisma.knowledgeDocument.updateMany({
+        where: { id: { in: documentIds }, hotelId },
+        data: { aiUsageCount: { increment: 1 } },
+      });
+    }
 
     return results.map((r) => r.content).join('\n---\n');
   }

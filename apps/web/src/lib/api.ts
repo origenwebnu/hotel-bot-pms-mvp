@@ -110,6 +110,12 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
+  updateKnowledge: (id: string, data: { title: string; content: string }) =>
+    request<KnowledgeDoc>(`/hotels/me/knowledge/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
   deleteKnowledge: (id: string) =>
     request<void>(`/hotels/me/knowledge/${id}`, { method: 'DELETE' }),
 
@@ -286,6 +292,7 @@ export interface KnowledgeDoc {
   title: string;
   content: string;
   isIndexed: boolean;
+  aiUsageCount: number;
   createdAt: string;
 }
 

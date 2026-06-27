@@ -19,7 +19,7 @@ export const HOTEL_NAV: AppNavItem[] = [
   },
   { id: 'inventory', label: 'Inventario', icon: '/icons/modules/inventory.svg' },
   { id: 'discounts', label: 'Descuentos', icon: '/icons/modules/discounts.svg' },
-  { id: 'knowledge', label: 'Knowledge Base', icon: '/icons/modules/knowledge.svg' },
+  { id: 'knowledge', label: 'Entrenamiento AI', icon: '/icons/modules/knowledge.svg' },
   { id: 'simulator', label: 'Simulador IA', icon: '/icons/modules/simulator.svg' },
 ];
 
@@ -40,7 +40,7 @@ export const HOTEL_TAB_TITLES: Record<string, string> = {
   'integration-payments': 'Pagos / Recaudo',
   inventory: 'Inventario de habitaciones',
   discounts: 'Descuentos automáticos',
-  knowledge: 'Knowledge Base',
+  knowledge: 'Entrenamiento AI',
   simulator: 'Simulador de Chat',
 };
 
