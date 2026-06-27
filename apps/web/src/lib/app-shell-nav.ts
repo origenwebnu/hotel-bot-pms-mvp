@@ -57,6 +57,29 @@ export function isIntegrationTab(tab: string): tab is HotelIntegrationTab {
   return HOTEL_INTEGRATION_ITEMS.some((item) => item.id === tab);
 }
 
+const HOTEL_TAB_IDS = new Set<string>([
+  'overview',
+  'reservations',
+  'inventory',
+  'discounts',
+  'knowledge',
+  'simulator',
+  'account',
+  ...HOTEL_INTEGRATION_ITEMS.map((item) => item.id),
+]);
+
+export function parseHotelTab(tabParam: string | null): HotelTab {
+  if (tabParam && HOTEL_TAB_IDS.has(tabParam)) {
+    return tabParam as HotelTab;
+  }
+  return 'overview';
+}
+
+export function buildHotelDashboardPath(tab: HotelTab): string {
+  if (tab === 'overview') return '/dashboard';
+  return `/dashboard?tab=${encodeURIComponent(tab)}`;
+}
+
 export const SUPER_ADMIN_NAV: AppNavItem[] = [
   { id: 'overview', label: 'Resumen', icon: '/icons/modules/overview.svg' },
   { id: 'hotels', label: 'Hoteles', icon: '/icons/modules/hotels.svg' },
@@ -76,3 +99,19 @@ export const SUPER_ADMIN_TAB_TITLES: Record<string, string> = {
   admins: 'Super administradores',
   settings: 'Parametrización global',
 };
+
+export type SuperAdminTab = (typeof SUPER_ADMIN_NAV)[number]['id'];
+
+const SUPER_ADMIN_TAB_IDS = new Set<string>(SUPER_ADMIN_NAV.map((item) => item.id));
+
+export function parseSuperAdminTab(tabParam: string | null): SuperAdminTab {
+  if (tabParam && SUPER_ADMIN_TAB_IDS.has(tabParam)) {
+    return tabParam as SuperAdminTab;
+  }
+  return 'overview';
+}
+
+export function buildSuperAdminPath(tab: SuperAdminTab): string {
+  if (tab === 'overview') return '/super-admin';
+  return `/super-admin?tab=${encodeURIComponent(tab)}`;
+}

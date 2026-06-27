@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   superAdminApi,
   type PlatformStats,
@@ -13,13 +13,20 @@ import {
 import { clearAuthSession } from '@/lib/api-core';
 import { SuperAdminReservationsPanel } from '@/components/SuperAdminReservationsPanel';
 import { AppShell } from '@/components/AppShell';
-import { SUPER_ADMIN_NAV, SUPER_ADMIN_TAB_TITLES } from '@/lib/app-shell-nav';
-
-type Tab = (typeof SUPER_ADMIN_NAV)[number]['id'];
+import { SUPER_ADMIN_NAV, SUPER_ADMIN_TAB_TITLES, buildSuperAdminPath, parseSuperAdminTab, type SuperAdminTab } from '@/lib/app-shell-nav';
 
 export default function SuperAdminPage() {
+  return (
+    <Suspense fallback={<div className="loading">Cargando panel de plataforma...</div>}>
+      <SuperAdminPageContent />
+    </Suspense>
+  );
+}
+
+function SuperAdminPageContent() {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>('overview');
+  const searchParams = useSearchParams();
+  const tab = parseSuperAdminTab(searchParams.get('tab'));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [stats, setStats] = useState<PlatformStats | null>(null);
@@ -44,7 +51,7 @@ export default function SuperAdminPage() {
     loadData(tab).finally(() => setLoading(false));
   }, [router, tab]);
 
-  async function loadData(activeTab: Tab) {
+  async function loadData(activeTab: SuperAdminTab) {
     setError('');
     try {
       if (activeTab === 'overview') {
@@ -86,7 +93,9 @@ export default function SuperAdminPage() {
       subtitle={`Super Admin · ${userName}`}
       navItems={SUPER_ADMIN_NAV}
       activeId={tab}
-      onNavigate={(id) => setTab(id as Tab)}
+      onNavigate={(id) =>
+        router.replace(buildSuperAdminPath(id as SuperAdminTab), { scroll: false })
+      }
       onLogout={logout}
     >
       {error && <div className="error-banner panel-error">{error}</div>}

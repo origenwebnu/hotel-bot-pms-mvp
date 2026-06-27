@@ -1,7 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   api,
   type Hotel,
@@ -13,7 +13,9 @@ import { AppShell } from '@/components/AppShell';
 import {
   HOTEL_NAV,
   HOTEL_TAB_TITLES,
+  buildHotelDashboardPath,
   isIntegrationTab,
+  parseHotelTab,
   type HotelTab,
 } from '@/lib/app-shell-nav';
 import { WhatsAppPanel } from '@/components/WhatsAppPanel';
@@ -30,8 +32,17 @@ import { MyAccountPanel } from '@/components/MyAccountPanel';
 const DEFAULT_INTEGRATION_TAB: HotelTab = 'integration-whatsapp';
 
 export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="loading">Cargando panel...</div>}>
+      <DashboardPageContent />
+    </Suspense>
+  );
+}
+
+function DashboardPageContent() {
   const router = useRouter();
-  const [tab, setTab] = useState<HotelTab>('overview');
+  const searchParams = useSearchParams();
+  const tab = parseHotelTab(searchParams.get('tab'));
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [integration, setIntegration] = useState<IntegrationStatus | null>(null);
   const [subscription, setSubscription] = useState<HotelSubscription | null>(null);
@@ -74,11 +85,9 @@ export default function DashboardPage() {
   );
 
   function handleNavigate(id: string) {
-    if (id === 'integrations') {
-      setTab(DEFAULT_INTEGRATION_TAB);
-      return;
-    }
-    setTab(id as HotelTab);
+    const nextTab: HotelTab =
+      id === 'integrations' ? DEFAULT_INTEGRATION_TAB : (id as HotelTab);
+    router.replace(buildHotelDashboardPath(nextTab), { scroll: false });
   }
 
   if (!hotel) {
