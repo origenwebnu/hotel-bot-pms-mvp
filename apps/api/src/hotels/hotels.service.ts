@@ -1,5 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { buildWompiWebhookUrl } from '@hotel-bot/shared';
+import {
+  buildBoldWebhookUrl,
+  buildEpaycoWebhookUrl,
+  buildStripeWebhookUrl,
+  buildWompiWebhookUrl,
+  type PaymentProvider,
+} from '@hotel-bot/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../crypto/crypto.service';
 import { CoreIntegratorService } from '../core-integrator/core-integrator.service';
@@ -56,6 +62,7 @@ export class HotelsService {
       payment_public_key?: string;
       payment_private_key?: string;
       payment_webhook_secret?: string;
+      payment_customer_id?: string;
       reservation_recommendations?: string;
     },
   ) {
@@ -103,6 +110,7 @@ export class HotelsService {
       { type: 'payment_public_key', value: data.payment_public_key?.trim() },
       { type: 'payment_private_key', value: data.payment_private_key?.trim() },
       { type: 'payment_webhook_secret', value: data.payment_webhook_secret?.trim() },
+      { type: 'payment_customer_id', value: data.payment_customer_id?.trim() },
     ];
 
     for (const { type, value } of credentialUpdates) {
@@ -193,6 +201,7 @@ export class HotelsService {
               'payment_public_key',
               'payment_private_key',
               'payment_webhook_secret',
+              'payment_customer_id',
             ],
           },
         },
@@ -201,6 +210,7 @@ export class HotelsService {
 
     const credTypes = new Set(paymentCreds.map((c) => c.credentialType));
     let publicKeyHint: string | null = null;
+    let customerIdHint: string | null = null;
 
     const publicCred = paymentCreds.find(
       (c) => c.credentialType === 'payment_public_key',
@@ -215,7 +225,22 @@ export class HotelsService {
       }
     }
 
+    const customerCred = paymentCreds.find(
+      (c) => c.credentialType === 'payment_customer_id',
+    );
+    if (customerCred) {
+      try {
+        const full = this.crypto.decrypt(customerCred.encryptedValue);
+        customerIdHint =
+          full.length > 8 ? `${full.slice(0, 4)}…${full.slice(-4)}` : `${full.slice(0, 2)}…`;
+      } catch {
+        customerIdHint = 'configurado';
+      }
+    }
+
     const appUrl = process.env.APP_URL ?? 'https://app.bookichat.com';
+    const provider = (integration?.paymentProvider ?? 'wompi') as PaymentProvider;
+    const providerConfig = this.buildPaymentProviderConfig(provider, appUrl);
 
     return {
       provider: integration?.paymentProvider ?? null,
@@ -223,19 +248,100 @@ export class HotelsService {
       has_public_key: credTypes.has('payment_public_key'),
       has_private_key: credTypes.has('payment_private_key'),
       has_webhook_secret: credTypes.has('payment_webhook_secret'),
+      has_customer_id: credTypes.has('payment_customer_id'),
       public_key_hint: publicKeyHint,
-      webhook_url: buildWompiWebhookUrl(appUrl),
-      stripe_webhook_url: `${appUrl.replace(/\/$/, '')}/api/webhooks/stripe`,
+      customer_id_hint: customerIdHint,
+      webhook_url: providerConfig.webhook_url,
+      wompi_webhook_url: buildWompiWebhookUrl(appUrl),
+      bold_webhook_url: buildBoldWebhookUrl(appUrl),
+      epayco_webhook_url: buildEpaycoWebhookUrl(appUrl),
+      stripe_webhook_url: buildStripeWebhookUrl(appUrl),
       reservation_recommendations: hotel?.reservationRecommendations ?? '',
-      setup_steps: [
-        'En Wompi → Configuración → Eventos, agrega la URL de eventos (webhook) indicada abajo.',
-        'Copia el *Events Secret* de Wompi y pégalo en *Webhook Secret*.',
-        'Ingresa tu Public Key y Private Key de Wompi (modo producción o pruebas).',
-        'Pulsa *Validar pasarela de pagos* para confirmar que Wompi acepta tus llaves.',
-        'Opcional: escribe recomendaciones post-pago que el bot enviará tras un pago aprobado.',
-        'Guarda y realiza una reserva de prueba desde WhatsApp.',
-      ],
+      setup_steps: providerConfig.setup_steps,
+      webhook_help: providerConfig.webhook_help,
+      requires_public_key: providerConfig.requires_public_key,
+      requires_customer_id: providerConfig.requires_customer_id,
+      private_key_label: providerConfig.private_key_label,
+      public_key_label: providerConfig.public_key_label,
+      webhook_secret_label: providerConfig.webhook_secret_label,
     };
+  }
+
+  private buildPaymentProviderConfig(provider: PaymentProvider, appUrl: string) {
+    switch (provider) {
+      case 'bold':
+        return {
+          webhook_url: buildBoldWebhookUrl(appUrl),
+          requires_public_key: false,
+          requires_customer_id: false,
+          private_key_label: 'API Key (llave de identidad)',
+          public_key_label: 'Public Key',
+          webhook_secret_label: 'Webhook Secret',
+          webhook_help:
+            'En el panel de Bold → Integraciones → Webhooks, agrega la URL indicada abajo para eventos SALE_APPROVED y SALE_REJECTED.',
+          setup_steps: [
+            'Obtén tu API Key en Bold → Integraciones → Llaves de integración.',
+            'Pégala en *API Key* y guarda.',
+            'Configura la URL de webhook en Bold (eventos de venta aprobada/rechazada).',
+            'Pulsa *Validar pasarela de pagos* para confirmar la conexión.',
+            'Realiza una reserva de prueba desde WhatsApp.',
+          ],
+        };
+      case 'epayco':
+        return {
+          webhook_url: buildEpaycoWebhookUrl(appUrl),
+          requires_public_key: true,
+          requires_customer_id: true,
+          private_key_label: 'Private Key (llave privada)',
+          public_key_label: 'Public Key (llave pública)',
+          webhook_secret_label: 'P_KEY (firma de confirmación)',
+          webhook_help:
+            'En ePayco → Integraciones → Webhooks, configura la URL de confirmación indicada abajo (método POST). El P_KEY y Customer ID (COD_EMP) están en tu panel de ePayco.',
+          setup_steps: [
+            'Ingresa Public Key y Private Key de ePayco (Apify).',
+            'Ingresa Customer ID (COD_EMP) y P_KEY para verificar confirmaciones.',
+            'Configura la URL de confirmación en ePayco con la URL indicada abajo.',
+            'Pulsa *Validar pasarela de pagos* para confirmar las credenciales.',
+            'Realiza una reserva de prueba desde WhatsApp.',
+          ],
+        };
+      case 'stripe':
+        return {
+          webhook_url: buildStripeWebhookUrl(appUrl),
+          requires_public_key: false,
+          requires_customer_id: false,
+          private_key_label: 'Secret Key',
+          public_key_label: 'Public Key',
+          webhook_secret_label: 'Webhook Signing Secret',
+          webhook_help:
+            'En Stripe → Developers → Webhooks, agrega la URL indicada abajo.',
+          setup_steps: [
+            'Ingresa tu Secret Key de Stripe.',
+            'Configura el webhook en Stripe con la URL indicada abajo.',
+            'Pulsa *Validar pasarela de pagos*.',
+          ],
+        };
+      case 'wompi':
+      default:
+        return {
+          webhook_url: buildWompiWebhookUrl(appUrl),
+          requires_public_key: true,
+          requires_customer_id: false,
+          private_key_label: 'Private Key',
+          public_key_label: 'Public Key',
+          webhook_secret_label: 'Webhook Secret (Events Secret)',
+          webhook_help:
+            'Copia esta URL en Wompi → Configuración → Eventos. El Webhook Secret es el "Events Secret" que te da Wompi.',
+          setup_steps: [
+            'En Wompi → Configuración → Eventos, agrega la URL de eventos (webhook) indicada abajo.',
+            'Copia el *Events Secret* de Wompi y pégalo en *Webhook Secret*.',
+            'Ingresa tu Public Key y Private Key de Wompi (modo producción o pruebas).',
+            'Pulsa *Validar pasarela de pagos* para confirmar que Wompi acepta tus llaves.',
+            'Opcional: escribe recomendaciones post-pago que el bot enviará tras un pago aprobado.',
+            'Guarda y realiza una reserva de prueba desde WhatsApp.',
+          ],
+        };
+    }
   }
 
   async getWhatsAppConfig(hotelId: string) {

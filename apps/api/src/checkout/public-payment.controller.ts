@@ -7,11 +7,15 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { CryptoService } from '../crypto/crypto.service';
 import { formatDisplayDate } from '@hotel-bot/shared';
 
 @Controller('public/payments')
 export class PublicPaymentController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly crypto: CryptoService,
+  ) {}
 
   @Get(':id')
   async getPaymentCheckout(
@@ -20,6 +24,15 @@ export class PublicPaymentController {
   ) {
     const reservation = await this.loadReservation(id, token);
     const hotel = reservation.hotel;
+    const integration = await this.prisma.hotelIntegration.findUnique({
+      where: { hotelId: reservation.hotelId },
+      select: { paymentProvider: true },
+    });
+    const paymentProvider = integration?.paymentProvider ?? 'wompi';
+    let epaycoPublicKey: string | null = null;
+    if (paymentProvider === 'epayco') {
+      epaycoPublicKey = await this.loadPublicPaymentKey(reservation.hotelId);
+    }
 
     return {
       reservation_id: reservation.id,
@@ -45,7 +58,12 @@ export class PublicPaymentController {
         .join(' '),
       guest_email: reservation.guestEmail,
       hold_expires_at: reservation.holdExpiresAt,
+      payment_provider: paymentProvider,
       payment_provider_url: reservation.paymentLink,
+      epayco_session_id:
+        paymentProvider === 'epayco' ? reservation.paymentId : null,
+      epayco_public_key: epaycoPublicKey,
+      epayco_test_mode: epaycoPublicKey?.includes('test') ?? false,
       payment_page_token: reservation.paymentAccessToken,
     };
   }
@@ -115,5 +133,22 @@ export class PublicPaymentController {
     }
 
     return reservation;
+  }
+
+  private async loadPublicPaymentKey(hotelId: string): Promise<string | null> {
+    const cred = await this.prisma.encryptedCredential.findUnique({
+      where: {
+        hotelId_credentialType: {
+          hotelId,
+          credentialType: 'payment_public_key',
+        },
+      },
+    });
+    if (!cred) return null;
+    try {
+      return this.crypto.decrypt(cred.encryptedValue);
+    } catch {
+      return null;
+    }
   }
 }

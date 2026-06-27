@@ -2,6 +2,7 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
+import Script from 'next/script';
 
 type CheckoutData = {
   reservation_id: string;
@@ -16,9 +17,30 @@ type CheckoutData = {
   currency: string | null;
   guest_name: string;
   guest_email: string | null;
+  payment_provider: string;
   payment_provider_url: string | null;
+  epayco_session_id: string | null;
+  epayco_public_key: string | null;
+  epayco_test_mode: boolean;
   hold_expires_at: string | null;
 };
+
+declare global {
+  interface Window {
+    ePayco?: {
+      checkout: {
+        configure: (opts: {
+          sessionId: string;
+          type?: string;
+          test?: boolean;
+        }) => {
+          open: () => void;
+          onCloseModal?: () => void;
+        };
+      };
+    };
+  }
+}
 
 function PaymentCheckoutContent() {
   const params = useParams();
@@ -27,6 +49,8 @@ function PaymentCheckoutContent() {
   const token = searchParams.get('token') ?? '';
   const [data, setData] = useState<CheckoutData | null>(null);
   const [error, setError] = useState('');
+  const [epaycoReady, setEpaycoReady] = useState(false);
+  const [openingCheckout, setOpeningCheckout] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -41,6 +65,37 @@ function PaymentCheckoutContent() {
       .then(setData)
       .catch((err) => setError(err instanceof Error ? err.message : 'Error'));
   }, [id, token]);
+
+  function openEpaycoCheckout() {
+    if (!data?.epayco_session_id || !window.ePayco) return;
+    setOpeningCheckout(true);
+    try {
+      const checkout = window.ePayco.checkout.configure({
+        sessionId: data.epayco_session_id,
+        type: 'onpage',
+        test: data.epayco_test_mode,
+      });
+      checkout.onCloseModal = () => setOpeningCheckout(false);
+      checkout.open();
+    } catch {
+      setOpeningCheckout(false);
+      setError('No se pudo abrir el checkout de ePayco.');
+    }
+  }
+
+  const isEpayco = data?.payment_provider === 'epayco';
+  const isExternalCheckout =
+    data?.payment_provider === 'wompi' ||
+    data?.payment_provider === 'bold' ||
+    data?.payment_provider === 'stripe';
+  const providerHint =
+    data?.payment_provider === 'bold'
+      ? 'Bold'
+      : data?.payment_provider === 'epayco'
+        ? 'ePayco'
+        : data?.payment_provider === 'stripe'
+          ? 'Stripe'
+          : 'Wompi';
 
   if (error) {
     return (
@@ -60,6 +115,14 @@ function PaymentCheckoutContent() {
 
   return (
     <main className="page">
+      {isEpayco && (
+        <Script
+          src="https://checkout.epayco.co/checkout-v2.js"
+          strategy="afterInteractive"
+          onLoad={() => setEpaycoReady(true)}
+        />
+      )}
+
       <div className="card">
         <p className="eyebrow">BookiChat · Pago seguro</p>
         <h1>{data.hotel_name}</h1>
@@ -98,7 +161,24 @@ function PaymentCheckoutContent() {
           </div>
         </div>
 
-        {data.payment_provider_url ? (
+        {isEpayco && data.epayco_session_id ? (
+          <button
+            type="button"
+            className="pay-btn"
+            disabled={!epaycoReady || openingCheckout}
+            onClick={openEpaycoCheckout}
+          >
+            {openingCheckout
+              ? 'Abriendo checkout...'
+              : epaycoReady
+                ? 'Pagar con ePayco'
+                : 'Cargando checkout...'}
+          </button>
+        ) : isExternalCheckout && data.payment_provider_url ? (
+          <a className="pay-btn" href={data.payment_provider_url}>
+            Continuar al pago
+          </a>
+        ) : data.payment_provider_url ? (
           <a className="pay-btn" href={data.payment_provider_url}>
             Continuar al pago
           </a>
@@ -107,8 +187,9 @@ function PaymentCheckoutContent() {
         )}
 
         <p className="hint">
-          Serás redirigido a Wompi para ingresar tu tarjeta o PSE. Al finalizar volverás aquí
-          para ver tu recibo.
+          {isEpayco
+            ? 'Completa el pago con tarjeta, PSE u otros medios en el checkout seguro de ePayco. Al finalizar volverás aquí para ver tu recibo.'
+            : `Serás redirigido a ${providerHint} para ingresar tu tarjeta o PSE. Al finalizar volverás aquí para ver tu recibo.`}
         </p>
       </div>
 
@@ -182,6 +263,7 @@ function PaymentCheckoutContent() {
         }
         .pay-btn {
           display: block;
+          width: 100%;
           text-align: center;
           background: #16a34a;
           color: #fff;
@@ -189,6 +271,13 @@ function PaymentCheckoutContent() {
           border-radius: 12px;
           font-weight: 600;
           text-decoration: none;
+          border: none;
+          cursor: pointer;
+          font-size: 1rem;
+        }
+        .pay-btn:disabled {
+          opacity: 0.65;
+          cursor: wait;
         }
         .hint,
         .warn {

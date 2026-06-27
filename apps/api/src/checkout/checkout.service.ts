@@ -19,6 +19,9 @@ import { WhatsAppService } from '../whatsapp/whatsapp.service';
 import { WhatsAppRendererService } from '../whatsapp/whatsapp-renderer.service';
 import { WompiProvider } from './providers/wompi.provider';
 import { StripeProvider } from './providers/stripe.provider';
+import { BoldProvider } from './providers/bold.provider';
+import { EpaycoProvider } from './providers/epayco.provider';
+import type { PaymentProviderAdapter } from './providers/payment-provider.interface';
 
 @Injectable()
 export class CheckoutService {
@@ -32,6 +35,8 @@ export class CheckoutService {
     private readonly renderer: WhatsAppRendererService,
     private readonly wompi: WompiProvider,
     private readonly stripe: StripeProvider,
+    private readonly bold: BoldProvider,
+    private readonly epayco: EpaycoProvider,
     @InjectQueue(QUEUE_NAMES.PAYMENT_WEBHOOK) private readonly paymentQueue: Queue,
   ) {}
 
@@ -80,7 +85,7 @@ export class CheckoutService {
         configured: false,
         provider: integration.paymentProvider,
         hasPrivateKey: false,
-        reason: 'Falta la Private Key de Wompi. Guárdala en Integraciones → Pasarela de Pagos.',
+        reason: `Falta la llave privada o API Key. Guárdala en Integraciones → Pagos.`,
       };
     }
 
@@ -93,12 +98,13 @@ export class CheckoutService {
       },
     });
 
-    if (!publicKey) {
+    const requiresPublicKey = ['wompi', 'epayco'].includes(integration.paymentProvider);
+    if (requiresPublicKey && !publicKey) {
       return {
         configured: false,
         provider: integration.paymentProvider,
         hasPrivateKey: true,
-        reason: 'Falta la Public Key de Wompi. Guárdala en Integraciones → Pasarela de Pagos.',
+        reason: `Falta la llave pública. Guárdala en Integraciones → Pagos.`,
       };
     }
 
@@ -121,27 +127,44 @@ export class CheckoutService {
 
     try {
       const credentials = await this.getPaymentCredentials(hotelId);
-      const apiBase = this.wompi.resolveApiBase(credentials.private_key);
+      const provider = await this.getPaymentProvider(hotelId);
+      const adapter = this.getProviderAdapter(provider);
 
-      if (!credentials.public_key) {
+      if (provider === 'wompi') {
+        const apiBase = this.wompi.resolveApiBase(credentials.private_key);
+        if (!credentials.public_key) {
+          return {
+            valid: false,
+            reason: 'Falta la Public Key de Wompi. Guárdala en Integraciones → Pasarela de Pagos.',
+            api_base: apiBase,
+          };
+        }
+
+        const response = await fetch(
+          `${apiBase}/merchants/${encodeURIComponent(credentials.public_key)}`,
+          { headers: { Authorization: `Bearer ${credentials.private_key}` } },
+        );
+
+        if (!response.ok) {
+          const body = await response.text();
+          return {
+            valid: false,
+            reason: `Wompi rechazó las llaves (${response.status}): ${body.slice(0, 200)}`,
+            api_base: apiBase,
+          };
+        }
+      } else if (adapter.validateCredentials) {
+        const valid = await adapter.validateCredentials(credentials);
+        if (!valid) {
+          return {
+            valid: false,
+            reason: `Las credenciales de ${this.providerLabel(provider)} no son válidas.`,
+          };
+        }
+      } else if (!credentials.private_key && !credentials.public_key) {
         return {
           valid: false,
-          reason: 'Falta la Public Key de Wompi. Guárdala en Integraciones → Pasarela de Pagos.',
-          api_base: apiBase,
-        };
-      }
-
-      const response = await fetch(
-        `${apiBase}/merchants/${encodeURIComponent(credentials.public_key)}`,
-        { headers: { Authorization: `Bearer ${credentials.private_key}` } },
-      );
-
-      if (!response.ok) {
-        const body = await response.text();
-        return {
-          valid: false,
-          reason: `Wompi rechazó las llaves (${response.status}): ${body.slice(0, 200)}`,
-          api_base: apiBase,
+          reason: 'Faltan credenciales de pago. Guárdalas en Integraciones → Pagos.',
         };
       }
 
@@ -150,7 +173,7 @@ export class CheckoutService {
         data: { paymentConnected: true, lastValidatedAt: new Date() },
       });
 
-      return { valid: true, api_base: apiBase };
+      return { valid: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return { valid: false, reason: message };
@@ -173,7 +196,7 @@ export class CheckoutService {
         paymentReady: false,
         userMessage:
           `⚠️ ${setup.reason ?? 'Pagos no configurados.'}\n\n` +
-          `Tu reserva quedó registrada. Configura Wompi en el panel del hotel e intenta de nuevo escribiendo *pagar*.`,
+          `Tu reserva quedó registrada. Configura la pasarela de pagos en el panel del hotel e intenta de nuevo escribiendo *pagar*.`,
       };
     }
 
@@ -188,7 +211,10 @@ export class CheckoutService {
       });
     }
 
-    const hasValidPaymentLink = reservation.paymentLink?.includes('checkout.wompi.co/l/');
+    const hasValidPaymentLink = this.isValidStoredPaymentLink(
+      setup.provider ?? 'wompi',
+      reservation.paymentLink,
+    );
 
     if (hasValidPaymentLink && reservation.paymentAccessToken) {
       return { reservation, paymentReady: true };
@@ -218,6 +244,11 @@ export class CheckoutService {
           : new Date(Date.now() + 60 * 60 * 1000);
       const expiresAt = holdExpiry.toISOString();
 
+      const hotelRecord = await this.prisma.hotel.findUnique({
+        where: { id: hotelId },
+        select: { name: true },
+      });
+
       const payment = await this.createPaymentLink(hotelId, {
         amount: reservation.totalAmount,
         currency: reservation.currency ?? 'COP',
@@ -229,7 +260,10 @@ export class CheckoutService {
           [reservation.guestFirstName, reservation.guestLastName]
             .filter(Boolean)
             .join(' ') || 'Huésped',
-        metadata: { payment_access_token: accessToken },
+        metadata: {
+          payment_access_token: accessToken,
+          hotel_name: hotelRecord?.name ?? 'Hotel',
+        },
       });
 
       reservation = await this.prisma.reservation.update({
@@ -242,7 +276,7 @@ export class CheckoutService {
       });
 
       if (!reservation.paymentLink) {
-        throw new Error('Wompi no devolvió URL de pago');
+        throw new Error('La pasarela no devolvió URL de pago');
       }
 
       return { reservation, paymentReady: true };
@@ -252,15 +286,18 @@ export class CheckoutService {
         `ensureReservationPayment failed for ${reservationId}: ${message}`,
       );
 
+      const providerLabel = this.providerLabel(
+        (setup.provider ?? 'wompi') as PaymentProvider,
+      );
       let userMessage =
-        '⚠️ No pudimos conectar con Wompi para generar el pago. Revisa las llaves en Integraciones (Public/Private Key).';
+        `⚠️ No pudimos conectar con ${providerLabel} para generar el pago. Revisa las credenciales en Integraciones → Pagos.`;
 
       if (message.includes('401') || message.includes('403')) {
         userMessage =
-          '⚠️ Las llaves de Wompi parecen incorrectas (error de autenticación). Verifica Public Key y Private Key en el panel.';
+          `⚠️ Las credenciales de ${providerLabel} parecen incorrectas (error de autenticación). Verifica las llaves en el panel.`;
       } else if (message.includes('sandbox') || message.includes('test')) {
         userMessage =
-          '⚠️ Estás usando llaves de prueba: configura WOMPI_API_BASE=sandbox en el servidor o usa llaves de producción.';
+          `⚠️ Estás usando llaves de prueba: configura el entorno de pruebas o usa llaves de producción.`;
       }
 
       return { reservation, paymentReady: false, userMessage };
@@ -287,13 +324,57 @@ export class CheckoutService {
       hotel_id: hotelId,
       payment_access_token: accessToken,
       redirect_url: buildPaymentResultUrl(request.reservation_id, accessToken),
+      confirmation_url: `${(process.env.APP_URL ?? 'https://app.bookichat.com').replace(/\/$/, '')}/api/webhooks/epayco`,
       ...request.metadata,
     };
 
-    if (provider === 'wompi') {
-      return this.wompi.createPaymentLink(credentials, request, metadata);
+    return this.getProviderAdapter(provider).createPaymentLink(credentials, request, metadata);
+  }
+
+  private getProviderAdapter(provider: PaymentProvider): PaymentProviderAdapter {
+    switch (provider) {
+      case 'wompi':
+        return this.wompi;
+      case 'stripe':
+        return this.stripe;
+      case 'bold':
+        return this.bold;
+      case 'epayco':
+        return this.epayco;
+      default:
+        throw new NotFoundException(`Proveedor de pagos no soportado: ${provider}`);
     }
-    return this.stripe.createPaymentLink(credentials, request, metadata);
+  }
+
+  private isValidStoredPaymentLink(provider: string, link: string | null | undefined): boolean {
+    if (!link) return false;
+    switch (provider) {
+      case 'wompi':
+        return link.includes('checkout.wompi.co/l/');
+      case 'bold':
+        return link.includes('checkout.bold.co/');
+      case 'epayco':
+        return link.includes('/payment/');
+      case 'stripe':
+        return link.includes('stripe.com') || link.includes('/payment/');
+      default:
+        return link.length > 8;
+    }
+  }
+
+  private providerLabel(provider: PaymentProvider): string {
+    switch (provider) {
+      case 'wompi':
+        return 'Wompi';
+      case 'bold':
+        return 'Bold';
+      case 'epayco':
+        return 'ePayco';
+      case 'stripe':
+        return 'Stripe';
+      default:
+        return provider;
+    }
   }
 
   async enqueueWebhook(payload: PaymentWebhookPayload) {
@@ -670,6 +751,7 @@ export class CheckoutService {
       public_key: decrypted.public_key,
       private_key: decrypted.private_key,
       webhook_secret: decrypted.webhook_secret,
+      customer_id: decrypted.customer_id,
     };
   }
 }

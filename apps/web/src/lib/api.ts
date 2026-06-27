@@ -310,11 +310,22 @@ export interface PaymentConfig {
   has_public_key: boolean;
   has_private_key: boolean;
   has_webhook_secret: boolean;
+  has_customer_id: boolean;
   public_key_hint: string | null;
+  customer_id_hint: string | null;
   webhook_url: string;
+  wompi_webhook_url: string;
+  bold_webhook_url: string;
+  epayco_webhook_url: string;
   stripe_webhook_url: string;
   reservation_recommendations: string;
   setup_steps: string[];
+  webhook_help: string;
+  requires_public_key: boolean;
+  requires_customer_id: boolean;
+  private_key_label: string;
+  public_key_label: string;
+  webhook_secret_label: string;
 }
 
 export interface WhatsAppConfig {

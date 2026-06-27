@@ -22,3 +22,18 @@ export function buildWompiWebhookUrl(appUrl = DEFAULT_APP_URL): string {
   const base = appUrl.replace(/\/$/, '');
   return `${base}/api/webhooks/wompi`;
 }
+
+export function buildBoldWebhookUrl(appUrl = DEFAULT_APP_URL): string {
+  const base = appUrl.replace(/\/$/, '');
+  return `${base}/api/webhooks/bold`;
+}
+
+export function buildEpaycoWebhookUrl(appUrl = DEFAULT_APP_URL): string {
+  const base = appUrl.replace(/\/$/, '');
+  return `${base}/api/webhooks/epayco`;
+}
+
+export function buildStripeWebhookUrl(appUrl = DEFAULT_APP_URL): string {
+  const base = appUrl.replace(/\/$/, '');
+  return `${base}/api/webhooks/stripe`;
+}

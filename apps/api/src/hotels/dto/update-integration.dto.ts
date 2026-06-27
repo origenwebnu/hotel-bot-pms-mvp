@@ -35,5 +35,9 @@ export class UpdateIntegrationDto {
 
   @IsOptional()
   @IsString()
+  payment_customer_id?: string;
+
+  @IsOptional()
+  @IsString()
   reservation_recommendations?: string;
 }
