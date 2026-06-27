@@ -53,18 +53,32 @@ export const api = {
     }),
 
   getProfile: () =>
-    request<{
-      id: string;
-      email: string;
-      name: string;
-      role: string;
-      hotel_id: string | null;
-      hotel_name?: string;
-    }>('/auth/me'),
+    request<UserProfile>('/auth/me'),
+
+  updateProfile: (data: { name: string }) =>
+    request<UserProfile>('/auth/me', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  updatePassword: (data: { current_password: string; new_password: string }) =>
+    request<{ message: string }>('/auth/me/password', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 
   getHotel: () => request<Hotel>('/hotels/me'),
 
+  updateHotel: (data: { name?: string; timezone?: string; currency?: string }) =>
+    request<Pick<Hotel, 'id' | 'name' | 'slug' | 'timezone' | 'currency'>>('/hotels/me', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
   getSubscription: () => request<HotelSubscription>('/hotels/me/subscription'),
+
+  getBillingHistory: () =>
+    request<BillingHistoryResponse>('/hotels/me/billing-history'),
 
   getIntegration: () => request<IntegrationStatus>('/hotels/me/integration'),
 
@@ -233,8 +247,34 @@ export interface Hotel {
   id: string;
   name: string;
   slug: string;
+  timezone?: string;
   currency: string;
   integration?: IntegrationStatus;
+}
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  hotel_id: string | null;
+  hotel_name?: string;
+}
+
+export interface BillingHistoryItem {
+  id: string;
+  period_month: string;
+  amount: number;
+  currency: string;
+  plan_name: string | null;
+  status: 'trial' | 'pending' | 'paid' | 'failed' | 'waived';
+  description: string | null;
+  paid_at: string | null;
+  created_at: string;
+}
+
+export interface BillingHistoryResponse {
+  items: BillingHistoryItem[];
 }
 
 export interface HotelSubscription {

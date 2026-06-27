@@ -15,6 +15,7 @@ import { CoreIntegratorService } from '../core-integrator/core-integrator.servic
 import { CheckoutService } from '../checkout/checkout.service';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { UpdateIntegrationDto } from './dto/update-integration.dto';
+import { UpdateHotelDto } from './dto/update-hotel.dto';
 
 class UpdateWhatsAppDto {
   @IsOptional()
@@ -47,9 +48,22 @@ export class HotelsController {
     return this.hotels.getHotel(req.user.hotelId);
   }
 
+  @Put('me')
+  updateMyHotel(
+    @Request() req: { user: { hotelId: string } },
+    @Body() body: UpdateHotelDto,
+  ) {
+    return this.hotels.updateHotel(req.user.hotelId, body);
+  }
+
   @Get('me/subscription')
   getMySubscription(@Request() req: { user: { hotelId: string } }) {
     return this.subscription.getUsageSnapshot(req.user.hotelId);
+  }
+
+  @Get('me/billing-history')
+  getMyBillingHistory(@Request() req: { user: { hotelId: string } }) {
+    return this.subscription.getBillingHistory(req.user.hotelId);
   }
 
   @Get('me/integration')

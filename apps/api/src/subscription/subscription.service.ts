@@ -392,7 +392,7 @@ export class SubscriptionService {
     const periodMonth = this.getCurrentPeriodMonth();
     const { start, end } = this.getMonthBounds(periodMonth);
 
-    return this.prisma.hotelSubscription.update({
+    const updated = await this.prisma.hotelSubscription.update({
       where: { hotelId },
       data: {
         planId: plan.id,
@@ -403,6 +403,110 @@ export class SubscriptionService {
       },
       include: { plan: true },
     });
+
+    await this.syncBillingRecords(hotelId);
+    await this.prisma.hotelSubscriptionPayment.updateMany({
+      where: { hotelId, periodMonth },
+      data: { status: 'paid', paidAt: new Date() },
+    });
+
+    return updated;
+  }
+
+  async getBillingHistory(hotelId: string) {
+    await this.syncBillingRecords(hotelId);
+
+    const [payments, sub] = await Promise.all([
+      this.prisma.hotelSubscriptionPayment.findMany({
+        where: { hotelId },
+        orderBy: { periodMonth: 'desc' },
+      }),
+      this.prisma.hotelSubscription.findUnique({ where: { hotelId } }),
+    ]);
+
+    const items = payments.map((p) => ({
+      id: p.id,
+      period_month: p.periodMonth,
+      amount: p.amount,
+      currency: p.currency,
+      plan_name: p.planName,
+      status: p.status,
+      description: p.description,
+      paid_at: p.paidAt?.toISOString() ?? null,
+      created_at: p.createdAt.toISOString(),
+    }));
+
+    if (sub) {
+      items.push({
+        id: `trial-${hotelId}`,
+        period_month: 'trial',
+        amount: 0,
+        currency: 'COP',
+        plan_name: 'Periodo de prueba',
+        status: 'trial',
+        description: `Prueba gratuita del ${sub.trialStartedAt.toLocaleDateString('es-CO')} al ${sub.trialEndsAt.toLocaleDateString('es-CO')}`,
+        paid_at: sub.trialStartedAt.toISOString(),
+        created_at: sub.trialStartedAt.toISOString(),
+      });
+    }
+
+    items.sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+    );
+
+    return { items };
+  }
+
+  private async syncBillingRecords(hotelId: string) {
+    const sub = await this.prisma.hotelSubscription.findUnique({
+      where: { hotelId },
+      include: { plan: true },
+    });
+    if (!sub?.plan) return;
+
+    const startMonth = sub.currentPeriodStart
+      ? this.periodMonthFromDate(sub.currentPeriodStart)
+      : this.getCurrentPeriodMonth(sub.updatedAt);
+    const endMonth = this.getCurrentPeriodMonth();
+
+    let month = startMonth;
+    while (month <= endMonth) {
+      await this.prisma.hotelSubscriptionPayment.upsert({
+        where: {
+          hotelId_periodMonth: { hotelId, periodMonth: month },
+        },
+        create: {
+          hotelId,
+          periodMonth: month,
+          amount: sub.plan.priceMonthly,
+          currency: sub.plan.currency,
+          planName: sub.plan.name,
+          status: 'pending',
+          description: `Suscripción ${sub.plan.name} — ${month}`,
+        },
+        update: {},
+      });
+      month = this.addMonths(month, 1);
+    }
+  }
+
+  private periodMonthFromDate(date: Date): string {
+    const formatter = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Bogota',
+      year: 'numeric',
+      month: '2-digit',
+    });
+    const parts = formatter.formatToParts(date);
+    const year = parts.find((p) => p.type === 'year')?.value ?? '2026';
+    const month = parts.find((p) => p.type === 'month')?.value ?? '01';
+    return `${year}-${month}`;
+  }
+
+  private addMonths(periodMonth: string, delta: number): string {
+    const [year, month] = periodMonth.split('-').map(Number);
+    const next = new Date(Date.UTC(year, month - 1 + delta, 1));
+    return `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, '0')}`;
   }
 
   async resetTrialForHotel(hotelId: string) {
