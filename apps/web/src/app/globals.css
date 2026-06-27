@@ -1152,6 +1152,275 @@ input, select, textarea {
   padding: 1rem 0;
 }
 
+/* WhatsApp setup wizard */
+.wa-wizard {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.wa-wizard-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.wa-wizard-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.wa-wizard-step:hover {
+  border-color: rgba(95, 66, 209, 0.35);
+}
+
+.wa-wizard-step.active {
+  border-color: var(--accent);
+  background: rgba(95, 66, 209, 0.1);
+  color: var(--text);
+}
+
+.wa-wizard-step.done {
+  color: var(--success);
+}
+
+.wa-wizard-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  background: var(--bg);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.wa-wizard-step.active .wa-wizard-step-num {
+  background: var(--accent);
+  color: #fff;
+}
+
+.wa-wizard-step.done .wa-wizard-step-num {
+  background: rgba(22, 163, 74, 0.15);
+  color: var(--success);
+}
+
+.wa-wizard-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .wa-wizard-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.wa-wizard-main {
+  min-height: 320px;
+}
+
+.wa-wizard-title {
+  margin: 0 0 0.75rem;
+  font-size: 1.15rem;
+}
+
+.wa-checklist {
+  list-style: none;
+  margin: 0 0 1.25rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.wa-checklist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  cursor: pointer;
+  font-size: 0.92rem;
+  color: var(--text);
+}
+
+.wa-checklist-item input {
+  margin-top: 0.2rem;
+  accent-color: var(--accent);
+}
+
+.wa-external-link {
+  display: inline-block;
+  margin-top: 0.35rem;
+  margin-left: 1.5rem;
+  font-size: 0.82rem;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.wa-external-link:hover {
+  text-decoration: underline;
+}
+
+.wa-docs-link {
+  margin-left: 0;
+  margin-bottom: 1rem;
+}
+
+.wa-webhook-box {
+  margin-top: 0.5rem;
+}
+
+.wa-code-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+}
+
+.wa-code-row code {
+  flex: 1;
+  margin: 0;
+}
+
+.btn-copy {
+  flex-shrink: 0;
+  padding: 0.5rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-copy:hover {
+  border-color: var(--accent);
+}
+
+.wa-instructions {
+  margin: 0 0 1.25rem 1.1rem;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+
+.wa-instructions a {
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.integration-form label.has-error input {
+  border-color: #dc2626;
+}
+
+.field-error {
+  font-size: 0.78rem;
+  color: #dc2626;
+  font-weight: 500;
+}
+
+.wa-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.85rem;
+  margin: 0 0 1.25rem;
+}
+
+.wa-summary div {
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+}
+
+.wa-summary dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.wa-summary dd {
+  margin: 0;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
+.wa-success-box {
+  margin-top: 1rem;
+  padding: 1rem 1.1rem;
+  border-radius: var(--radius-sm);
+  background: rgba(22, 163, 74, 0.1);
+  border: 1px solid rgba(22, 163, 74, 0.25);
+}
+
+.wa-success-box p {
+  margin: 0.35rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.88rem;
+}
+
+.integration-toast.ok {
+  border-color: rgba(22, 163, 74, 0.35);
+  background: rgba(22, 163, 74, 0.08);
+}
+
+.integration-toast.error {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.08);
+}
+
+.wa-wizard-nav {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.wa-wizard-aside {
+  padding: 1.25rem;
+  border-radius: var(--radius-md);
+  position: sticky;
+  top: 1rem;
+}
+
+.wa-wizard-aside h4 {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+}
+
+.wa-aside-checklist {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.7;
+}
+
+.wa-aside-checklist .done {
+  color: var(--success);
+  font-weight: 500;
+}
+
 /* Modal */
 .modal-root {
   position: fixed;
