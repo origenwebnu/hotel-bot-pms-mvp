@@ -632,7 +632,19 @@ export class ConversationService {
     const existing = await this.prisma.reservation.findUnique({
       where: { idempotencyKey },
     });
-    if (existing && ['hold', 'payment_pending', 'confirmed'].includes(existing.status)) {
+    if (existing?.status === 'confirmed') {
+      await this.updateSession(session.id, {
+        state: 'confirmed',
+        reservationId: existing.id,
+      });
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        '✅ Ya tienes una reserva confirmada para esas fechas. Si necesitas ayuda, escribe *menu*.',
+      );
+      return;
+    }
+    if (existing && ['hold', 'payment_pending'].includes(existing.status)) {
       await this.updateSession(session.id, {
         state: 'awaiting_payment',
         reservationId: existing.id,
