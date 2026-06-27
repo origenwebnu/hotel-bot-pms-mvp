@@ -356,17 +356,54 @@ export class CheckoutService {
       return;
     }
 
+    const paymentEvent = await this.prisma.paymentEvent.findUnique({
+      where: {
+        provider_externalId: {
+          provider: payload.provider,
+          externalId: payload.payment_id,
+        },
+      },
+    });
+
+    if (paymentEvent?.processed) {
+      this.logger.log(
+        `Skipping duplicate payment webhook for ${payload.provider}/${payload.payment_id} (already processed)`,
+      );
+      return;
+    }
+
+    const freshReservation = await this.prisma.reservation.findUnique({
+      where: { id: reservation.id },
+      include: {
+        hotel: {
+          select: {
+            name: true,
+            reservationRecommendations: true,
+          },
+        },
+      },
+    });
+
+    if (!freshReservation) return;
+
     if (payload.status === 'approved') {
-      await this.confirmReservation(reservation, payload);
+      if (freshReservation.status === 'confirmed') {
+        await this.markPaymentEventProcessed(payload);
+        this.logger.log(
+          `Reservation ${freshReservation.id} already confirmed; skipping duplicate approval messages`,
+        );
+        return;
+      }
+      await this.confirmReservation(freshReservation, payload);
       return;
     }
 
     if (payload.status === 'declined' || payload.status === 'error') {
       await this.prisma.conversationSession.updateMany({
-        where: { id: reservation.whatsappSessionId },
-        data: { state: 'awaiting_payment', reservationId: reservation.id },
+        where: { id: freshReservation.whatsappSessionId },
+        data: { state: 'awaiting_payment', reservationId: freshReservation.id },
       });
-      await this.notifyPaymentOutcome(reservation, payload);
+      await this.notifyPaymentOutcome(freshReservation, payload);
     }
   }
 
@@ -411,6 +448,11 @@ export class CheckoutService {
     reservation: ReservationWithHotel,
     payload: PaymentWebhookPayload,
   ) {
+    if (reservation.status === 'confirmed') {
+      await this.markPaymentEventProcessed(payload);
+      return;
+    }
+
     if (reservation.pmsReservationId) {
       try {
         const result = await this.pms.confirmReservation(reservation.hotelId, {
@@ -448,13 +490,38 @@ export class CheckoutService {
         where: { id: reservation.id },
         data: { status: 'confirmed' },
       });
+
+      await this.prisma.conversationSession.updateMany({
+        where: { id: reservation.whatsappSessionId },
+        data: { state: 'confirmed' },
+      });
+
       await this.sendWhatsAppPaymentReceipt(reservation, payload);
     }
+  }
 
+  private async markPaymentEventProcessed(payload: PaymentWebhookPayload) {
     await this.prisma.paymentEvent.updateMany({
-      where: { reservationId: reservation.id, externalId: payload.payment_id },
+      where: {
+        provider: payload.provider,
+        externalId: payload.payment_id,
+      },
       data: { processed: true },
     });
+  }
+
+  private async claimPaymentNotification(
+    payload: PaymentWebhookPayload,
+  ): Promise<boolean> {
+    const result = await this.prisma.paymentEvent.updateMany({
+      where: {
+        provider: payload.provider,
+        externalId: payload.payment_id,
+        processed: false,
+      },
+      data: { processed: true },
+    });
+    return result.count > 0;
   }
 
   private async notifyPaymentOutcome(
@@ -469,6 +536,14 @@ export class CheckoutService {
     payload: PaymentWebhookPayload,
     extras?: { confirmationCode?: string; note?: string },
   ) {
+    const claimed = await this.claimPaymentNotification(payload);
+    if (!claimed) {
+      this.logger.log(
+        `Payment WhatsApp already sent for ${payload.provider}/${payload.payment_id}`,
+      );
+      return;
+    }
+
     if (!reservation.guestPhone) {
       this.logger.warn(`No guest phone for reservation ${reservation.id}`);
       return;
@@ -550,11 +625,6 @@ export class CheckoutService {
           `❌ Tu pago no pudo completarse.\n\nTu habitación sigue reservada por ahora. Escribe *pagar* para intentar de nuevo o *menu* para cambiar la reserva.\n\n${paymentPageUrl}`,
         );
       }
-
-      await this.prisma.paymentEvent.updateMany({
-        where: { reservationId: reservation.id, externalId: payload.payment_id },
-        data: { processed: true },
-      });
     }
   }
 
@@ -608,6 +678,7 @@ type ReservationWithHotel = {
   id: string;
   hotelId: string;
   whatsappSessionId: string;
+  status: string;
   pmsReservationId: string | null;
   guestFirstName: string | null;
   guestLastName: string | null;
