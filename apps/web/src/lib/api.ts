@@ -140,6 +140,15 @@ export const api = {
       body: JSON.stringify({ message }),
     }),
 
+  getSimulatorBootstrap: () =>
+    request<SimulatorBootstrap>('/hotels/me/simulator/bootstrap'),
+
+  simulatorChat: (message: string, session?: SimulatorSession) =>
+    request<SimulatorChatResponse>('/hotels/me/simulator/chat', {
+      method: 'POST',
+      body: JSON.stringify({ message, session }),
+    }),
+
   listInventory: () => request<RoomType[]>('/hotels/me/inventory'),
 
   createInventory: (data: {
@@ -562,4 +571,31 @@ export interface RestaurantSettings {
   max_covers_per_slot: number | null;
   advance_booking_days: number;
   min_advance_hours: number;
+}
+
+export interface SimulatorSession {
+  state: string;
+  bookingDate?: string;
+  bookingTime?: string;
+  partySize?: number;
+  selectedDiningZoneId?: string;
+  occasionType?: string;
+  selectedAddOnIds?: string[];
+  guestFirstName?: string;
+  guestLastName?: string;
+  pendingTimeSlots?: string[];
+}
+
+export interface SimulatorBootstrap {
+  business_name: string;
+  business_vertical: string;
+  welcome_message: string;
+  inventory_summary: string;
+  suggestions: string[];
+}
+
+export interface SimulatorChatResponse {
+  replies: string[];
+  session: SimulatorSession;
+  suggestions: string[];
 }
