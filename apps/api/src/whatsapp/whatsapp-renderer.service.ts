@@ -522,16 +522,16 @@ export class WhatsAppRendererService {
   renderWelcomeMenu(business: {
     name: string;
     vertical: BusinessVertical;
-    infoOnlyMode: boolean;
   }): WhatsAppButtonMessage {
-    const { name, vertical, infoOnlyMode } = business;
-    const canTransact = supportsTransactionalFlow(vertical, infoOnlyMode);
+    const { name, vertical } = business;
+    const canTransact = supportsTransactionalFlow(vertical);
 
     if (!canTransact) {
       const typeLabel = BUSINESS_VERTICAL_LABELS[vertical].toLowerCase();
-      const intro = infoOnlyMode
-        ? `Hola, bienvenido a *${name}* 👋\n\nSoy tu asistente virtual. Puedo responder preguntas sobre nuestro ${typeLabel} con la información que tengamos cargada.`
-        : `Hola, bienvenido a *${name}* 👋\n\nPor ahora te ayudo con preguntas e información. Muy pronto podrás reservar o comprar desde este chat.`;
+      const intro =
+        `Hola, bienvenido a *${name}* 👋\n\n` +
+        `Soy tu asistente virtual. Puedo responder preguntas sobre nuestro ${typeLabel}. ` +
+        `Muy pronto también podrás reservar o comprar desde aquí.`;
 
       return {
         type: 'button',

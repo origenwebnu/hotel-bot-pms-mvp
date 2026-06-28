@@ -71,10 +71,7 @@ export class ConversationService {
     const session = await this.getOrCreateSession(hotelId, phone);
     const text = this.extractText(message);
     const business = await this.getBusinessProfile(hotelId);
-    const canTransact = supportsTransactionalFlow(
-      business.vertical,
-      business.infoOnlyMode,
-    );
+    const canTransact = supportsTransactionalFlow(business.vertical);
 
     if (/^(continuar\s+reserva|reservar)$/i.test(text.trim())) {
       if (!canTransact) {
@@ -550,7 +547,7 @@ export class ConversationService {
   ) {
     if (buttonId === WHATSAPP_BUTTON_IDS.MENU_BOOK) {
       const business = await this.getBusinessProfile(hotelId);
-      if (!supportsTransactionalFlow(business.vertical, business.infoOnlyMode)) {
+      if (!supportsTransactionalFlow(business.vertical)) {
         await this.sendTransactionalUnavailable(hotelId, session.whatsappPhone, business);
         return;
       }
@@ -572,7 +569,7 @@ export class ConversationService {
 
     if (buttonId === WHATSAPP_BUTTON_IDS.MENU_RATES) {
       const business = await this.getBusinessProfile(hotelId);
-      if (!supportsTransactionalFlow(business.vertical, business.infoOnlyMode)) {
+      if (!supportsTransactionalFlow(business.vertical)) {
         await this.sendTransactionalUnavailable(hotelId, session.whatsappPhone, business);
         return;
       }
@@ -1014,7 +1011,6 @@ export class ConversationService {
     const msg = this.renderer.renderWelcomeMenu({
       name: business.name,
       vertical: business.vertical,
-      infoOnlyMode: business.infoOnlyMode,
     });
     try {
       await this.whatsapp.sendInteractive(hotelId, phone, msg);
@@ -1023,7 +1019,7 @@ export class ConversationService {
         `Welcome menu interactive failed: ${err instanceof Error ? err.message : err}`,
       );
       const fallback =
-        business.infoOnlyMode || business.vertical !== 'hotel'
+        business.vertical !== 'hotel'
           ? `Hola, bienvenido a *${business.name}* 👋\n\nEscribe tu pregunta o *menu* para volver al inicio.`
           : `Hola, bienvenido a *${business.name}* 👋\n\n` +
             `¿Qué te gustaría hacer?\n` +
@@ -1816,11 +1812,10 @@ export class ConversationService {
   private async getBusinessProfile(hotelId: string): Promise<{
     name: string;
     vertical: BusinessVertical;
-    infoOnlyMode: boolean;
   }> {
     const hotel = await this.prisma.hotel.findUniqueOrThrow({
       where: { id: hotelId },
-      select: { name: true, businessVertical: true, infoOnlyMode: true },
+      select: { name: true, businessVertical: true },
     });
     const vertical = isBusinessVertical(hotel.businessVertical)
       ? hotel.businessVertical
@@ -1828,19 +1823,16 @@ export class ConversationService {
     return {
       name: hotel.name,
       vertical,
-      infoOnlyMode: hotel.infoOnlyMode,
     };
   }
 
   private async sendTransactionalUnavailable(
     hotelId: string,
     phone: string,
-    business: { vertical: BusinessVertical; infoOnlyMode: boolean },
+    business: { vertical: BusinessVertical },
   ) {
     const label = BUSINESS_VERTICAL_LABELS[business.vertical].toLowerCase();
-    const message = business.infoOnlyMode
-      ? `Este chat está configurado solo para responder preguntas sobre nuestro ${label}. Si necesitas reservar o comprar, contáctanos por otro canal.\n\n_Escribe *menu* para volver al inicio._`
-      : `Muy pronto podrás reservar o comprar desde este chat. Por ahora te ayudo con preguntas e información sobre nuestro ${label}.\n\n_Escribe *menu* para volver al inicio._`;
+    const message = `Muy pronto podrás reservar o comprar desde este chat. Por ahora te ayudo con preguntas e información sobre nuestro ${label}.\n\n_Escribe *menu* para volver al inicio._`;
     await this.whatsapp.sendText(hotelId, phone, message);
   }
 

@@ -29,7 +29,6 @@ export const api = {
     name: string;
     hotelName: string;
     businessVertical: string;
-    infoOnlyMode?: boolean;
   }) =>
     request<{ message: string; email: string; expires_in_seconds: number }>(
       '/auth/register/send-code',
@@ -252,7 +251,6 @@ export interface Hotel {
   timezone?: string;
   currency: string;
   businessVertical?: string;
-  infoOnlyMode?: boolean;
   integration?: IntegrationStatus;
 }
 

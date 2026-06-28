@@ -1,5 +1,5 @@
 import { Controller, Post, Body, Get, Put, UseGuards, Req, BadRequestException } from '@nestjs/common';
-import { IsEmail, IsString, MinLength, Matches, IsIn, IsOptional, IsBoolean } from 'class-validator';
+import { IsEmail, IsString, MinLength, Matches, IsIn } from 'class-validator';
 import { BUSINESS_VERTICALS } from '@hotel-bot/shared';
 import { AuthService } from './auth.service';
 import { JwtAuthGuard } from './jwt-auth.guard';
@@ -26,10 +26,6 @@ class SendRegistrationCodeDto {
 
   @IsIn([...BUSINESS_VERTICALS])
   businessVertical!: string;
-
-  @IsOptional()
-  @IsBoolean()
-  infoOnlyMode?: boolean;
 }
 
 class VerifyRegistrationDto {

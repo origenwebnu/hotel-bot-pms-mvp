@@ -25,20 +25,17 @@ export function isBusinessVertical(value: string): value is BusinessVertical {
   return BUSINESS_VERTICALS.includes(value as BusinessVertical);
 }
 
-/** Hotel booking flow (rooms, PMS, inventory) — vertical hotel without info-only. */
-export function supportsHotelBooking(
-  vertical: BusinessVertical,
-  infoOnlyMode: boolean,
-): boolean {
-  return vertical === 'hotel' && !infoOnlyMode;
+/** Full hotel booking flow (rooms, PMS, inventory). */
+export function supportsHotelBooking(vertical: BusinessVertical): boolean {
+  return vertical === 'hotel';
 }
 
-/** Any transactional flow (reservations, orders, appointments). Phase 0: only hotel. */
-export function supportsTransactionalFlow(
-  vertical: BusinessVertical,
-  infoOnlyMode: boolean,
-): boolean {
-  return supportsHotelBooking(vertical, infoOnlyMode);
+/**
+ * Transactional flows (reservations, orders, appointments).
+ * Phase 0: only hotel. Future: enable per vertical/module/plan.
+ */
+export function supportsTransactionalFlow(vertical: BusinessVertical): boolean {
+  return supportsHotelBooking(vertical);
 }
 
 export function businessNameLabel(vertical: BusinessVertical): string {
