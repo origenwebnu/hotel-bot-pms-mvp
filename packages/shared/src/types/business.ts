@@ -34,8 +34,12 @@ export function supportsHotelBooking(vertical: BusinessVertical): boolean {
  * Transactional flows (reservations, orders, appointments).
  * Phase 0: only hotel. Future: enable per vertical/module/plan.
  */
+export function supportsRestaurantBooking(vertical: BusinessVertical): boolean {
+  return vertical === 'restaurant';
+}
+
 export function supportsTransactionalFlow(vertical: BusinessVertical): boolean {
-  return supportsHotelBooking(vertical);
+  return supportsHotelBooking(vertical) || supportsRestaurantBooking(vertical);
 }
 
 export function businessNameLabel(vertical: BusinessVertical): string {

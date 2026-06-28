@@ -198,6 +198,11 @@ export class AuthService {
         slug: `${slug}-${Date.now()}`,
         businessVertical: pending.businessVertical,
         integration: { create: {} },
+        ...(pending.businessVertical === 'restaurant' && {
+          restaurantSettings: {
+            create: {},
+          },
+        }),
         users: {
           create: {
             email: normalized,

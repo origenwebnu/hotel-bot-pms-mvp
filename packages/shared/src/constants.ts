@@ -18,6 +18,8 @@ export const WHATSAPP_BUTTON_IDS = {
   RESUME_BOOKING: 'btn_resume_booking',
   NEW_BOOKING: 'btn_new_booking',
   VIEW_PHOTOS: 'btn_view_photos',
+  REST_SKIP_ADDONS: 'btn_rest_skip_addons',
+  REST_CONFIRM_BOOKING: 'btn_rest_confirm_booking',
 } as const;
 
 export const QUEUE_NAMES = {

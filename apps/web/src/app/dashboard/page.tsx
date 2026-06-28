@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   isBusinessVertical,
   supportsHotelBooking,
+  supportsRestaurantBooking,
   type BusinessVertical,
 } from '@hotel-bot/shared';
 import {
@@ -16,10 +17,10 @@ import {
 } from '@/lib/api';
 import { AppShell } from '@/components/AppShell';
 import {
-  HOTEL_TAB_TITLES,
   buildDashboardNav,
   buildHotelDashboardPath,
   getDashboardOverviewTitle,
+  getDashboardTabTitle,
   isIntegrationTab,
   parseDashboardTab,
   type HotelTab,
@@ -30,6 +31,7 @@ import { PaymentIntegrationPanel } from '@/components/PaymentIntegrationPanel';
 import { KnowledgePanel } from '@/components/KnowledgePanel';
 import { DiscountTiersPanel } from '@/components/DiscountTiersPanel';
 import { InventoryPanel } from '@/components/InventoryPanel';
+import { RestaurantInventoryPanel } from '@/components/RestaurantInventoryPanel';
 import { ChatSimulator } from '@/components/ChatSimulator';
 import { DashboardOverviewPanel } from '@/components/DashboardOverviewPanel';
 import { ReservationsHistoryPanel } from '@/components/ReservationsHistoryPanel';
@@ -120,11 +122,12 @@ function DashboardPageContent() {
 
   const vertical = resolveVertical(hotel);
   const showHotelBooking = supportsHotelBooking(vertical);
+  const showRestaurantBooking = supportsRestaurantBooking(vertical);
   const tab = parseDashboardTab(searchParams.get('tab'), vertical);
   const navItems = buildDashboardNav(vertical);
 
   const panelTitle =
-    tab === 'overview' ? getDashboardOverviewTitle(vertical) : HOTEL_TAB_TITLES[tab] ?? 'Panel';
+    tab === 'overview' ? getDashboardOverviewTitle(vertical) : getDashboardTabTitle(tab, vertical);
 
   const headerExtra = isIntegrationTab(tab) && integration && (
     <div className="status-badges">
@@ -155,19 +158,24 @@ function DashboardPageContent() {
       }}
       headerExtra={headerExtra}
     >
-      {subscription && showHotelBooking && tab !== 'overview' && tab !== 'account' && (
+      {subscription && (showHotelBooking || showRestaurantBooking) && tab !== 'overview' && tab !== 'account' && (
         <SubscriptionBanner subscription={subscription} />
       )}
 
       {tab === 'overview' && (
         <>
-          {subscription && showHotelBooking && <SubscriptionBanner subscription={subscription} />}
+          {subscription && (showHotelBooking || showRestaurantBooking) && (
+            <SubscriptionBanner subscription={subscription} />
+          )}
           <BusinessOnboardingPanel vertical={vertical} />
           {showHotelBooking && <DashboardOverviewPanel loadStats={loadStats} />}
         </>
       )}
-      {tab === 'reservations' && showHotelBooking && (
-        <ReservationsHistoryPanel loadReservations={loadReservations} />
+      {tab === 'reservations' && (showHotelBooking || showRestaurantBooking) && (
+        <ReservationsHistoryPanel
+          title={showRestaurantBooking ? 'Historial de reservas de mesa' : undefined}
+          loadReservations={loadReservations}
+        />
       )}
       {tab === 'integration-whatsapp' && (
         <WhatsAppPanel
@@ -183,6 +191,7 @@ function DashboardPageContent() {
         <PaymentIntegrationPanel integration={integration} onUpdate={setIntegration} />
       )}
       {tab === 'inventory' && showHotelBooking && <InventoryPanel />}
+      {tab === 'inventory' && showRestaurantBooking && <RestaurantInventoryPanel />}
       {tab === 'discounts' && showHotelBooking && <DiscountTiersPanel />}
       {tab === 'knowledge' && <KnowledgePanel />}
       {tab === 'simulator' && <ChatSimulator />}

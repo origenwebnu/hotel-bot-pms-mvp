@@ -33,6 +33,7 @@ import { DiscountTierService } from '../local-inventory/discount-tier.service';
 import { signGalleryToken } from '../utils/gallery-token';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionLimitError } from '../subscription/subscription.errors';
+import { RestaurantBookingFlowService } from '../restaurant/restaurant-booking-flow.service';
 
 @Injectable()
 export class ConversationService {
@@ -47,6 +48,7 @@ export class ConversationService {
     private readonly checkout: CheckoutService,
     private readonly discountTiers: DiscountTierService,
     private readonly subscription: SubscriptionService,
+    private readonly restaurantFlow: RestaurantBookingFlowService,
     @InjectQueue(QUEUE_NAMES.WHATSAPP_INBOUND) private readonly inboundQueue: Queue,
   ) {}
 
@@ -72,6 +74,16 @@ export class ConversationService {
     const text = this.extractText(message);
     const business = await this.getBusinessProfile(hotelId);
     const canTransact = supportsTransactionalFlow(business.vertical);
+
+    if (business.vertical === 'restaurant') {
+      return this.restaurantFlow.processMessage(
+        hotelId,
+        session,
+        message,
+        text,
+        { name: business.name, vertical: 'restaurant' },
+      );
+    }
 
     if (/^(continuar\s+reserva|reservar)$/i.test(text.trim())) {
       if (!canTransact) {

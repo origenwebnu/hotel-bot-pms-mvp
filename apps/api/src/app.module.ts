@@ -14,6 +14,7 @@ import { LocalInventoryModule } from './local-inventory/local-inventory.module';
 import { ReservationsModule } from './reservations/reservations.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
 import { HealthModule } from './health/health.module';
+import { RestaurantModule } from './restaurant/restaurant.module';
 import { QUEUE_NAMES } from '@hotel-bot/shared';
 
 @Module({
@@ -44,6 +45,7 @@ import { QUEUE_NAMES } from '@hotel-bot/shared';
     ReservationsModule,
     SuperAdminModule,
     HealthModule,
+    RestaurantModule,
   ],
 })
 export class AppModule {}

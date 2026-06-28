@@ -460,6 +460,12 @@ export class CheckoutService {
           select: {
             name: true,
             reservationRecommendations: true,
+            restaurantSettings: {
+              select: {
+                postPaymentMessage: true,
+                postPaymentLink: true,
+              },
+            },
           },
         },
       },
@@ -494,6 +500,12 @@ export class CheckoutService {
         select: {
           name: true,
           reservationRecommendations: true,
+          restaurantSettings: {
+            select: {
+              postPaymentMessage: true,
+              postPaymentLink: true,
+            },
+          },
         },
       },
     } as const;
@@ -649,6 +661,80 @@ export class CheckoutService {
         .filter(Boolean)
         .join(' ') || 'Huésped';
 
+    if (reservation.bookingKind === 'restaurant_table') {
+      const occasionLabels: Record<string, string> = {
+        birthday: 'Cumpleaños',
+        anniversary: 'Aniversario',
+        romantic_dinner: 'Cena romántica',
+        business: 'Negocios',
+        celebration: 'Celebración',
+        other: 'Otro',
+      };
+      const occasionLabel =
+        occasionLabels[reservation.occasionType ?? 'other'] ??
+        reservation.occasionType ??
+        'Visita';
+
+      const receipt = this.renderer.renderRestaurantReservationReceipt({
+        businessName: reservation.hotel.name,
+        reservationRef: reservation.id.slice(-8).toUpperCase(),
+        guestName,
+        guestPhone: reservation.guestPhone ?? undefined,
+        zoneName: reservation.diningZoneName ?? 'Mesa',
+        date: reservation.bookingDate ?? '',
+        time: reservation.bookingTime ?? '',
+        partySize: reservation.partySize ?? 1,
+        occasionLabel,
+        amount: reservation.totalAmount ?? payload.amount,
+        currency: reservation.currency ?? payload.currency,
+      });
+
+      await this.whatsapp.sendText(
+        reservation.hotelId,
+        reservation.guestPhone,
+        receipt.text.body,
+      );
+
+      if (payload.status === 'approved') {
+        const settings = reservation.hotel.restaurantSettings;
+        const thanks = this.renderer.renderRestaurantConfirmed({
+          guestName: reservation.guestFirstName ?? 'Cliente',
+          reservationRef: reservation.id.slice(-8).toUpperCase(),
+          date: reservation.bookingDate ?? '',
+          time: reservation.bookingTime ?? '',
+          zoneName: reservation.diningZoneName ?? 'Mesa',
+          partySize: reservation.partySize ?? 1,
+          postPaymentMessage: settings?.postPaymentMessage,
+          postPaymentLink: settings?.postPaymentLink,
+        });
+        await this.whatsapp.sendText(
+          reservation.hotelId,
+          reservation.guestPhone,
+          thanks.text.body,
+        );
+      } else if (payload.status === 'declined' || payload.status === 'error') {
+        const retry = this.renderer.renderPaymentDeclinedActions({
+          guestName: reservation.guestFirstName ?? 'Cliente',
+          paymentPageUrl,
+        });
+        try {
+          await this.whatsapp.sendInteractive(
+            reservation.hotelId,
+            reservation.guestPhone,
+            retry,
+          );
+        } catch (error) {
+          this.logger.warn(`Interactive declined message failed: ${error}`);
+          await this.whatsapp.sendText(
+            reservation.hotelId,
+            reservation.guestPhone,
+            `❌ Tu pago no pudo completarse.\n\nEscribe *pagar* para intentar de nuevo.\n\n${paymentPageUrl}`,
+          );
+        }
+      }
+      return;
+    }
+
     const receipt = this.renderer.renderPaymentStatusReceipt({
       hotelName: reservation.hotel.name,
       reservationRef: reservation.id.slice(-8).toUpperCase(),
@@ -761,12 +847,18 @@ type ReservationWithHotel = {
   hotelId: string;
   whatsappSessionId: string;
   status: string;
+  bookingKind: string;
   pmsReservationId: string | null;
   guestFirstName: string | null;
   guestLastName: string | null;
   guestEmail: string | null;
   guestPhone: string | null;
   roomName: string | null;
+  diningZoneName: string | null;
+  bookingDate: string | null;
+  bookingTime: string | null;
+  partySize: number | null;
+  occasionType: string | null;
   checkIn: string | null;
   checkOut: string | null;
   adults: number | null;
@@ -779,5 +871,9 @@ type ReservationWithHotel = {
   hotel: {
     name: string;
     reservationRecommendations: string | null;
+    restaurantSettings?: {
+      postPaymentMessage: string | null;
+      postPaymentLink: string | null;
+    } | null;
   };
 };
