@@ -9,7 +9,6 @@ import { getOpenAiClient } from '../common/openai.client';
 export type BusinessAssistantProfile = {
   name: string;
   vertical: BusinessVertical;
-  infoOnlyMode: boolean;
 };
 
 @Injectable()
@@ -40,7 +39,7 @@ REGLAS ESTRICTAS:
 - Nunca inventes precios, políticas ni servicios.
 - Responde en el mismo idioma del cliente.
 - Sé conciso (máximo 3 párrafos cortos).
-${business?.infoOnlyMode ? '- Este negocio usa modo informativo: no prometas reservas o ventas online si no están disponibles.' : ''}
+${business && business.vertical !== 'hotel' ? '- Las reservas/ventas online para este tipo de negocio llegarán pronto; no prometas reservar o pagar por chat si el cliente lo pide.' : ''}
 
 CONTEXTO DEL NEGOCIO (Knowledge Base):
 ${ragContext || 'No hay documentos cargados aún.'}

@@ -49,7 +49,6 @@ export class HotelsService {
       timezone: hotel.timezone,
       currency: hotel.currency,
       businessVertical: hotel.businessVertical,
-      infoOnlyMode: hotel.infoOnlyMode,
     };
   }
 

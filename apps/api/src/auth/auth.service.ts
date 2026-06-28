@@ -32,7 +32,6 @@ export class AuthService {
     name: string;
     hotelName: string;
     businessVertical: string;
-    infoOnlyMode?: boolean;
   }) {
     const email = data.email.trim().toLowerCase();
 
@@ -77,7 +76,6 @@ export class AuthService {
         name: data.name.trim(),
         hotelName: data.hotelName.trim(),
         businessVertical: data.businessVertical,
-        infoOnlyMode: Boolean(data.infoOnlyMode),
         passwordHash,
         expiresAt,
       },
@@ -86,7 +84,6 @@ export class AuthService {
         name: data.name.trim(),
         hotelName: data.hotelName.trim(),
         businessVertical: data.businessVertical,
-        infoOnlyMode: Boolean(data.infoOnlyMode),
         passwordHash,
         expiresAt,
         createdAt: new Date(),
@@ -200,7 +197,6 @@ export class AuthService {
         name: pending.hotelName,
         slug: `${slug}-${Date.now()}`,
         businessVertical: pending.businessVertical,
-        infoOnlyMode: pending.infoOnlyMode,
         integration: { create: {} },
         users: {
           create: {

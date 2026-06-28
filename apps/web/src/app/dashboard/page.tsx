@@ -106,10 +106,9 @@ function DashboardPageContent() {
   useEffect(() => {
     if (!hotel) return;
     const vertical = resolveVertical(hotel);
-    const infoOnlyMode = hotel.infoOnlyMode ?? false;
     const requested = searchParams.get('tab');
     if (!requested) return;
-    const allowed = parseDashboardTab(requested, vertical, infoOnlyMode);
+    const allowed = parseDashboardTab(requested, vertical);
     if (requested !== allowed) {
       router.replace(buildHotelDashboardPath(allowed), { scroll: false });
     }
@@ -120,15 +119,12 @@ function DashboardPageContent() {
   }
 
   const vertical = resolveVertical(hotel);
-  const infoOnlyMode = hotel.infoOnlyMode ?? false;
-  const showHotelBooking = supportsHotelBooking(vertical, infoOnlyMode);
-  const tab = parseDashboardTab(searchParams.get('tab'), vertical, infoOnlyMode);
-  const navItems = buildDashboardNav(vertical, infoOnlyMode);
+  const showHotelBooking = supportsHotelBooking(vertical);
+  const tab = parseDashboardTab(searchParams.get('tab'), vertical);
+  const navItems = buildDashboardNav(vertical);
 
   const panelTitle =
-    tab === 'overview'
-      ? getDashboardOverviewTitle(vertical, infoOnlyMode)
-      : HOTEL_TAB_TITLES[tab] ?? 'Panel';
+    tab === 'overview' ? getDashboardOverviewTitle(vertical) : HOTEL_TAB_TITLES[tab] ?? 'Panel';
 
   const headerExtra = isIntegrationTab(tab) && integration && (
     <div className="status-badges">
@@ -140,11 +136,9 @@ function DashboardPageContent() {
           PMS {integration.pms_connected ? '✓' : '○'}
         </span>
       )}
-      {!infoOnlyMode && (
-        <span className={`badge ${integration.payment_connected ? 'ok' : 'warn'}`}>
-          Pagos {integration.payment_connected ? '✓' : '○'}
-        </span>
-      )}
+      <span className={`badge ${integration.payment_connected ? 'ok' : 'warn'}`}>
+        Pagos {integration.payment_connected ? '✓' : '○'}
+      </span>
     </div>
   );
 
@@ -168,7 +162,7 @@ function DashboardPageContent() {
       {tab === 'overview' && (
         <>
           {subscription && showHotelBooking && <SubscriptionBanner subscription={subscription} />}
-          <BusinessOnboardingPanel vertical={vertical} infoOnlyMode={infoOnlyMode} />
+          <BusinessOnboardingPanel vertical={vertical} />
           {showHotelBooking && <DashboardOverviewPanel loadStats={loadStats} />}
         </>
       )}
@@ -185,7 +179,7 @@ function DashboardPageContent() {
       {tab === 'integration-pms' && showHotelBooking && (
         <PmsIntegrationPanel integration={integration} onUpdate={setIntegration} />
       )}
-      {tab === 'integration-payments' && !infoOnlyMode && (
+      {tab === 'integration-payments' && (
         <PaymentIntegrationPanel integration={integration} onUpdate={setIntegration} />
       )}
       {tab === 'inventory' && showHotelBooking && <InventoryPanel />}

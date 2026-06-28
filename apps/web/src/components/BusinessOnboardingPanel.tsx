@@ -1,50 +1,33 @@
 'use client';
 
-import {
-  BUSINESS_VERTICAL_LABELS,
-  type BusinessVertical,
-} from '@hotel-bot/shared';
+import { BUSINESS_VERTICAL_LABELS, type BusinessVertical } from '@hotel-bot/shared';
 
 interface Props {
   vertical: BusinessVertical;
-  infoOnlyMode: boolean;
 }
 
-export function BusinessOnboardingPanel({ vertical, infoOnlyMode }: Props) {
+export function BusinessOnboardingPanel({ vertical }: Props) {
   const label = BUSINESS_VERTICAL_LABELS[vertical];
 
-  if (vertical === 'hotel' && !infoOnlyMode) {
+  if (vertical === 'hotel') {
     return null;
   }
 
-  const steps = infoOnlyMode
-    ? [
-        'Conecta WhatsApp en Integraciones.',
-        'Carga documentos en Entrenamiento AI (menú, servicios, horarios, políticas).',
-        'Prueba respuestas en Simulador IA.',
-        'Cuando quieras vender o reservar, contáctanos para activar ese módulo.',
-      ]
-    : [
-        'Conecta WhatsApp en Integraciones.',
-        'Entrena tu asistente en Entrenamiento AI.',
-        `Estamos preparando reservas/ventas para ${label.toLowerCase()} — por ahora tu bot responde preguntas.`,
-        'Configura pagos cuando el módulo de tu vertical esté disponible.',
-      ];
+  const steps = [
+    'Conecta WhatsApp en Integraciones.',
+    'Carga menú, horarios y políticas en Entrenamiento AI.',
+    'Prueba respuestas en Simulador IA — ya puedes atender preguntas por WhatsApp.',
+    'Configura pagos cuando actives reservas o ventas (módulo en desarrollo para tu vertical).',
+  ];
 
   return (
     <section className="business-onboarding glass-panel">
-      <p className="business-onboarding-eyebrow">
-        {infoOnlyMode ? 'Modo informativo activo' : `Configuración ${label}`}
-      </p>
-      <h2>
-        {infoOnlyMode
-          ? 'Tu asistente de preguntas y respuestas'
-          : `Próximamente reservas para ${label}`}
-      </h2>
+      <p className="business-onboarding-eyebrow">Configuración {label}</p>
+      <h2>Empieza con preguntas y respuestas por WhatsApp</h2>
       <p className="business-onboarding-lead">
-        {infoOnlyMode
-          ? 'BookiChat responderá dudas de tus clientes por WhatsApp usando la información que cargues. No necesitas inventario ni pagos para empezar.'
-          : `Tu cuenta está registrada como ${label}. Mientras lanzamos el flujo de reservas/ventas, puedes usar el asistente informativo por WhatsApp.`}
+        Puedes usar BookiChat hoy para responder dudas de tus clientes. Cuando esté listo el
+        módulo de reservas/ventas para {label.toLowerCase()}, lo activarás desde el mismo panel
+        (incluyendo pagos si lo necesitas).
       </p>
       <ol>
         {steps.map((step) => (

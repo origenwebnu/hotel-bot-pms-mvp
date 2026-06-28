@@ -26,7 +26,6 @@ export default function RegistroPage() {
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
   const [businessVertical, setBusinessVertical] = useState<BusinessVertical>('hotel');
-  const [infoOnlyMode, setInfoOnlyMode] = useState(false);
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -74,7 +73,6 @@ export default function RegistroPage() {
       const res = await api.sendRegistrationCode({
         ...form,
         businessVertical,
-        infoOnlyMode,
       });
       setExpiresAt(Date.now() + res.expires_in_seconds * 1000);
       setStep('verify');
@@ -221,18 +219,6 @@ export default function RegistroPage() {
             ))}
           </div>
 
-          <label className="checkbox-row">
-            <input
-              type="checkbox"
-              checked={infoOnlyMode}
-              onChange={(e) => setInfoOnlyMode(e.target.checked)}
-            />
-            <span>
-              Solo quiero un asistente informativo (preguntas y respuestas, sin reservas ni ventas
-              por ahora)
-            </span>
-          </label>
-
           {error && <div className="error-banner">{error}</div>}
 
           <button type="submit" className="btn-primary">
@@ -280,18 +266,6 @@ export default function RegistroPage() {
             box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.35);
             background: rgba(99, 102, 241, 0.04);
           }
-          .checkbox-row {
-            display: flex;
-            gap: 0.65rem;
-            align-items: flex-start;
-            font-size: 0.88rem;
-            color: #475569;
-            line-height: 1.4;
-            margin-bottom: 0.5rem;
-          }
-          .checkbox-row input {
-            margin-top: 0.2rem;
-          }
         `}</style>
       </AuthLayout>
     );
@@ -300,11 +274,7 @@ export default function RegistroPage() {
   return (
     <AuthLayout
       title={`Registra tu ${BUSINESS_VERTICAL_LABELS[businessVertical].toLowerCase()}`}
-      subtitle={
-        infoOnlyMode
-          ? 'Activa tu asistente informativo por WhatsApp'
-          : 'Activa reservas y atención por WhatsApp'
-      }
+      subtitle="Activa tu asistente por WhatsApp — preguntas, reservas y pagos según tu plan"
       footer={
         <p>
           <button type="button" className="link-btn" onClick={() => setStep('vertical')}>
