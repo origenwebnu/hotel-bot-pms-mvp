@@ -3,6 +3,7 @@ import {
   type BusinessVertical,
   BUSINESS_VERTICAL_LABELS,
   supportsHotelBooking,
+  supportsRestaurantBooking,
 } from '@hotel-bot/shared';
 
 export const HOTEL_INTEGRATION_ITEMS = [
@@ -90,6 +91,26 @@ export function buildDashboardNav(vertical: BusinessVertical): AppNavItem[] {
     return HOTEL_NAV;
   }
 
+  if (supportsRestaurantBooking(vertical)) {
+    return [
+      { id: 'overview', label: 'Resumen', icon: '/icons/modules/overview.svg' },
+      { id: 'reservations', label: 'Reservas', icon: '/icons/modules/reservations.svg' },
+      {
+        id: 'integrations',
+        label: 'Integraciones',
+        icon: '/icons/modules/integrations.svg',
+        children: [
+          { id: 'integration-whatsapp', label: 'WhatsApp' },
+          { id: 'integration-payments', label: 'Pagos / Recaudo' },
+        ],
+      },
+      { id: 'inventory', label: 'Inventario', icon: '/icons/modules/inventory.svg' },
+      { id: 'knowledge', label: 'Entrenamiento AI', icon: '/icons/modules/knowledge.svg' },
+      { id: 'simulator', label: 'Simulador IA', icon: '/icons/modules/simulator.svg' },
+      { id: 'account', label: 'Mi cuenta', icon: '/icons/modules/mi-cuenta.svg' },
+    ];
+  }
+
   const integrationChildren: Array<{ id: string; label: string }> = [
     { id: 'integration-whatsapp', label: 'WhatsApp' },
     { id: 'integration-payments', label: 'Pagos / Recaudo' },
@@ -139,7 +160,27 @@ export function getDashboardOverviewTitle(vertical: BusinessVertical): string {
   if (vertical === 'hotel') {
     return HOTEL_TAB_TITLES.overview;
   }
+  if (vertical === 'restaurant') {
+    return 'Resumen del restaurante';
+  }
   return `Resumen — ${label}`;
+}
+
+export function getDashboardTabTitle(tab: string, vertical: BusinessVertical): string {
+  if (vertical === 'restaurant') {
+    const titles: Record<string, string> = {
+      overview: 'Resumen del restaurante',
+      reservations: 'Historial de reservas',
+      'integration-whatsapp': 'WhatsApp Business',
+      'integration-payments': 'Pagos / Recaudo',
+      inventory: 'Inventario y tarifas',
+      knowledge: 'Entrenamiento AI',
+      simulator: 'Simulador de Chat',
+      account: 'Mi cuenta',
+    };
+    if (titles[tab]) return titles[tab];
+  }
+  return HOTEL_TAB_TITLES[tab] ?? 'Panel';
 }
 
 export const SUPER_ADMIN_NAV: AppNavItem[] = [

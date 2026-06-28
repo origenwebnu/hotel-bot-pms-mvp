@@ -242,6 +242,101 @@ export const api = {
     const suffix = query.toString() ? `?${query.toString()}` : '';
     return request<ReservationHistoryResponse>(`/hotels/me/reservations${suffix}`);
   },
+
+  getRestaurantSettings: () =>
+    request<RestaurantSettings>('/hotels/me/restaurant/settings'),
+
+  updateRestaurantSettings: (data: Partial<RestaurantSettings>) =>
+    request<RestaurantSettings>('/hotels/me/restaurant/settings', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  listRestaurantZones: () => request<DiningZone[]>('/hotels/me/restaurant/zones'),
+
+  createRestaurantZone: (data: {
+    name: string;
+    description?: string;
+    min_party_size?: number;
+    max_party_size: number;
+    capacity_per_slot?: number;
+    base_reservation_fee?: number;
+    base_price_per_guest?: number;
+  }) =>
+    request<DiningZone>('/hotels/me/restaurant/zones', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateRestaurantZone: (
+    id: string,
+    data: Partial<{
+      name: string;
+      description: string;
+      min_party_size: number;
+      max_party_size: number;
+      capacity_per_slot: number;
+      base_reservation_fee: number;
+      base_price_per_guest: number;
+      is_active: boolean;
+    }>,
+  ) =>
+    request<DiningZone>(`/hotels/me/restaurant/zones/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteRestaurantZone: (id: string) =>
+    request<void>(`/hotels/me/restaurant/zones/${id}`, { method: 'DELETE' }),
+
+  listRestaurantAddOns: () => request<RestaurantAddOn[]>('/hotels/me/restaurant/addons'),
+
+  createRestaurantAddOn: (data: {
+    name: string;
+    description?: string;
+    price: number;
+    max_quantity?: number;
+  }) =>
+    request<RestaurantAddOn>('/hotels/me/restaurant/addons', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  updateRestaurantAddOn: (
+    id: string,
+    data: Partial<{
+      name: string;
+      description: string;
+      price: number;
+      max_quantity: number;
+      is_active: boolean;
+    }>,
+  ) =>
+    request<RestaurantAddOn>(`/hotels/me/restaurant/addons/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  deleteRestaurantAddOn: (id: string) =>
+    request<void>(`/hotels/me/restaurant/addons/${id}`, { method: 'DELETE' }),
+
+  listRestaurantCalendar: (params: { from: string; to: string }) => {
+    const query = new URLSearchParams({ from: params.from, to: params.to });
+    return request<RestaurantDateRate[]>(`/hotels/me/restaurant/calendar?${query.toString()}`);
+  },
+
+  upsertRestaurantCalendar: (data: {
+    date: string;
+    dining_zone_id?: string | null;
+    closed?: boolean;
+    label?: string;
+    reservation_fee_override?: number | null;
+    price_per_guest_override?: number | null;
+  }) =>
+    request<RestaurantDateRate>('/hotels/me/restaurant/calendar', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
 };
 
 export interface Hotel {
@@ -420,4 +515,51 @@ export interface ReservationHistoryResponse {
     total: number;
     total_pages: number;
   };
+}
+
+export interface DiningZone {
+  id: string;
+  name: string;
+  description: string | null;
+  min_party_size: number;
+  max_party_size: number;
+  capacity_per_slot: number;
+  base_reservation_fee: number;
+  base_price_per_guest: number;
+  currency: string;
+  is_active: boolean;
+  sort_order: number;
+}
+
+export interface RestaurantAddOn {
+  id: string;
+  name: string;
+  description: string | null;
+  price: number;
+  currency: string;
+  max_quantity: number;
+  is_active: boolean;
+  sort_order: number;
+}
+
+export interface RestaurantDateRate {
+  id: string;
+  date: string;
+  dining_zone_id: string | null;
+  dining_zone_name: string | null;
+  closed: boolean;
+  label: string | null;
+  reservation_fee_override: number | null;
+  price_per_guest_override: number | null;
+}
+
+export interface RestaurantSettings {
+  require_payment: boolean;
+  post_payment_message: string;
+  post_payment_link: string;
+  slot_interval_minutes: number;
+  default_duration_minutes: number;
+  max_covers_per_slot: number | null;
+  advance_booking_days: number;
+  min_advance_hours: number;
 }

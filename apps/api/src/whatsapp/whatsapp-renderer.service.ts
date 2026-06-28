@@ -547,6 +547,30 @@ export class WhatsAppRendererService {
       };
     }
 
+    if (vertical === 'restaurant') {
+      return {
+        type: 'button',
+        body: {
+          text:
+            `Hola, bienvenido a *${name}* 👋\n\n` +
+            `Reserva tu mesa o pregúntanos lo que necesites, todo desde este chat.\n\n` +
+            `¿Qué te gustaría hacer?`,
+        },
+        action: {
+          buttons: [
+            {
+              type: 'reply',
+              reply: { id: WHATSAPP_BUTTON_IDS.MENU_BOOK, title: 'Reservar mesa' },
+            },
+            {
+              type: 'reply',
+              reply: { id: WHATSAPP_BUTTON_IDS.MENU_FAQ, title: 'Hacer una pregunta' },
+            },
+          ],
+        },
+      };
+    }
+
     return {
       type: 'button',
       body: {
@@ -601,5 +625,247 @@ export class WhatsAppRendererService {
           `Para reservar, escribe *menu* y elige *Reservar habitación*, o indica fechas y huéspedes (ej: *2 personas del 28 al 29 de junio*).`,
       },
     };
+  }
+
+  renderRestaurantTimeList(date: string, slots: string[]): WhatsAppListMessage | WhatsAppTextMessage {
+    if (!slots.length) {
+      return {
+        type: 'text',
+        text: {
+          body: `No hay horarios disponibles para el *${formatDisplayDate(date)}*. Prueba otra fecha.`,
+        },
+      };
+    }
+    return {
+      type: 'list',
+      header: { type: 'text', text: 'Horarios disponibles' },
+      body: { text: `Elige la hora para el *${formatDisplayDate(date)}*:` },
+      action: {
+        button: 'Ver horarios',
+        sections: [
+          {
+            title: 'Horarios',
+            rows: slots.slice(0, MAX_LIST_MESSAGE_ROWS).map((t) => ({
+              id: `rest_time_${t.replace(':', '')}`,
+              title: t,
+              description: 'Disponible',
+            })),
+          },
+        ],
+      },
+    };
+  }
+
+  renderRestaurantZoneList(
+    zones: Array<{
+      id: string;
+      name: string;
+      quote: { total: number; currency: string };
+    }>,
+  ): WhatsAppListMessage | WhatsAppTextMessage {
+    if (!zones.length) {
+      return {
+        type: 'text',
+        text: {
+          body: 'No hay zonas disponibles para ese horario y número de personas. Prueba otro horario o fecha.',
+        },
+      };
+    }
+    return {
+      type: 'list',
+      header: { type: 'text', text: 'Zonas disponibles' },
+      body: { text: 'Selecciona la zona o ambiente que prefieres:' },
+      action: {
+        button: 'Ver zonas',
+        sections: [
+          {
+            title: 'Ambientes',
+            rows: zones.map((z) => ({
+              id: `rest_zone_${z.id}`,
+              title: sanitizeWhatsAppText(z.name, 24),
+              description: `${z.quote.currency} ${z.quote.total.toLocaleString('es-CO')}`.slice(
+                0,
+                72,
+              ),
+            })),
+          },
+        ],
+      },
+    };
+  }
+
+  renderRestaurantOccasionButtons(): WhatsAppListMessage {
+    return {
+      type: 'list',
+      header: { type: 'text', text: 'Motivo de la reserva' },
+      body: { text: '¿Cuál es el motivo de tu visita?' },
+      action: {
+        button: 'Elegir motivo',
+        sections: [
+          {
+            title: 'Ocasiones',
+            rows: [
+              { id: 'rest_occ_birthday', title: 'Cumpleaños', description: 'Celebración especial' },
+              { id: 'rest_occ_anniversary', title: 'Aniversario', description: 'Pareja' },
+              { id: 'rest_occ_romantic_dinner', title: 'Cena romántica', description: 'En pareja' },
+              { id: 'rest_occ_business', title: 'Negocios', description: 'Reunión o trabajo' },
+              { id: 'rest_occ_celebration', title: 'Celebración', description: 'Fiesta o brindis' },
+              { id: 'rest_occ_other', title: 'Otro', description: 'Visita general' },
+            ],
+          },
+        ],
+      },
+    };
+  }
+
+  renderRestaurantAddOnList(
+    addons: Array<{ id: string; name: string; price: number; currency: string }>,
+  ): WhatsAppButtonMessage | WhatsAppTextMessage {
+    if (!addons.length) {
+      return {
+        type: 'text',
+        text: { body: 'Continuemos con tus datos para confirmar la reserva.' },
+      };
+    }
+    const lines = addons
+      .slice(0, 5)
+      .map((a) => `• ${a.name} — ${a.currency} ${a.price.toLocaleString('es-CO')}`)
+      .join('\n');
+    return {
+      type: 'button',
+      body: {
+        text:
+          `¿Deseas agregar algo especial?\n\n${lines}\n\n` +
+          `Responde con el nombre del adicional o pulsa *Continuar sin extras*.`,
+      },
+      action: {
+        buttons: [
+          {
+            type: 'reply',
+            reply: { id: WHATSAPP_BUTTON_IDS.REST_SKIP_ADDONS, title: 'Continuar sin extras' },
+          },
+        ],
+      },
+    };
+  }
+
+  renderRestaurantConfirmSummary(data: {
+    businessName: string;
+    date: string;
+    time: string;
+    zoneName: string;
+    partySize: number;
+    occasionLabel: string;
+    addonsSummary: string;
+    guestName: string;
+    total: number;
+    currency: string;
+    requiresPayment: boolean;
+  }): WhatsAppButtonMessage {
+    let body =
+      `📋 *Resumen de tu reserva*\n\n` +
+      `🍽 *${data.businessName}*\n` +
+      `📅 ${formatDisplayDate(data.date)} · 🕐 ${data.time}\n` +
+      `📍 ${data.zoneName}\n` +
+      `👥 ${data.partySize} persona${data.partySize > 1 ? 's' : ''}\n` +
+      `🎉 ${data.occasionLabel}\n` +
+      `👤 ${data.guestName}\n`;
+
+    if (data.addonsSummary) {
+      body += `\n✨ *Extras:* ${data.addonsSummary}\n`;
+    }
+
+    body += `\n💰 *Total:* ${data.currency} ${data.total.toLocaleString('es-CO')}`;
+
+    if (!data.requiresPayment || data.total <= 0) {
+      body += `\n\n✅ Esta reserva *no requiere pago* anticipado.`;
+    } else {
+      body += `\n\n💳 Al confirmar, recibirás el link de pago.`;
+    }
+
+    return {
+      type: 'button',
+      body: { text: body },
+      action: {
+        buttons: [
+          {
+            type: 'reply',
+            reply: { id: WHATSAPP_BUTTON_IDS.REST_CONFIRM_BOOKING, title: 'Confirmar reserva' },
+          },
+        ],
+      },
+    };
+  }
+
+  renderRestaurantReservationReceipt(data: {
+    businessName: string;
+    reservationRef: string;
+    guestName: string;
+    guestPhone?: string;
+    zoneName: string;
+    date: string;
+    time: string;
+    partySize: number;
+    occasionLabel: string;
+    amount: number;
+    currency: string;
+    holdMinutes?: number;
+  }): WhatsAppTextMessage {
+    let body =
+      `🧾 *RECIBO DE RESERVA*\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🍽 *${data.businessName}*\n` +
+      `🔖 Ref: *${data.reservationRef}*\n\n` +
+      `👤 *Cliente:* ${data.guestName}\n`;
+
+    if (data.guestPhone) {
+      body += `📱 *WhatsApp:* ${data.guestPhone}\n`;
+    }
+
+    body +=
+      `\n📍 *Zona:* ${data.zoneName}\n` +
+      `📅 *Fecha:* ${formatDisplayDate(data.date)}\n` +
+      `🕐 *Hora:* ${data.time}\n` +
+      `👥 *Personas:* ${data.partySize}\n` +
+      `🎉 *Motivo:* ${data.occasionLabel}\n\n` +
+      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `💰 *TOTAL A PAGAR:* ${data.currency} ${data.amount.toLocaleString('es-CO')}\n` +
+      `━━━━━━━━━━━━━━━━━━━━`;
+
+    if (data.holdMinutes) {
+      body += `\n\n⏱ Tienes *${data.holdMinutes} min* para completar el pago.`;
+    }
+
+    return { type: 'text', text: { body } };
+  }
+
+  renderRestaurantConfirmed(data: {
+    guestName: string;
+    reservationRef: string;
+    date: string;
+    time: string;
+    zoneName: string;
+    partySize: number;
+    postPaymentMessage?: string | null;
+    postPaymentLink?: string | null;
+  }): WhatsAppTextMessage {
+    let body =
+      `🎉 *¡Reserva confirmada, ${data.guestName}!*\n\n` +
+      `📍 ${data.zoneName}\n` +
+      `📅 ${formatDisplayDate(data.date)} · 🕐 ${data.time}\n` +
+      `👥 ${data.partySize} persona${data.partySize > 1 ? 's' : ''}\n` +
+      `🔖 Ref: *${data.reservationRef}*`;
+
+    if (data.postPaymentMessage?.trim()) {
+      body += `\n\n📋 *Indicaciones:*\n${data.postPaymentMessage.trim()}`;
+    }
+
+    if (data.postPaymentLink?.trim()) {
+      body += `\n\n🔗 ${data.postPaymentLink.trim()}`;
+    }
+
+    body += `\n\nTe esperamos. Si necesitas algo más, escríbenos.`;
+
+    return { type: 'text', text: { body } };
   }
 }

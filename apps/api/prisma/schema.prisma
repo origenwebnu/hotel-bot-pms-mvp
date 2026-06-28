@@ -35,6 +35,10 @@ model Hotel {
   discountTiers HotelDiscountTier[]
   subscription  HotelSubscription?
   subscriptionPayments HotelSubscriptionPayment[]
+  restaurantSettings RestaurantSettings?
+  diningZones   DiningZone[]
+  restaurantDateRates RestaurantDateRate[]
+  restaurantAddOns RestaurantAddOn[]
 
   @@map("hotels")
 }
@@ -181,6 +185,12 @@ model ConversationSession {
   adults             Int?
   children           Int?
   selectedRoomTypeId String?  @map("selected_room_type_id")
+  bookingDate        String?  @map("booking_date")
+  bookingTime        String?  @map("booking_time")
+  partySize          Int?     @map("party_size")
+  selectedDiningZoneId String? @map("selected_dining_zone_id")
+  occasionType       String?  @map("occasion_type")
+  selectedAddOnsJson Json?    @map("selected_addons_json")
   reservationId      String?  @map("reservation_id")
   contextJson        Json?    @map("context_json")
   lastMessageAt      DateTime @default(now()) @map("last_message_at")
@@ -200,8 +210,18 @@ model Reservation {
   whatsappSessionId  String    @map("whatsapp_session_id")
   idempotencyKey     String    @unique @map("idempotency_key")
   status             String    @default("inquiry")
+  bookingKind        String    @default("hotel_stay") @map("booking_kind")
   roomTypeId         String?   @map("room_type_id")
   roomName           String?   @map("room_name")
+  diningZoneId       String?   @map("dining_zone_id")
+  diningZoneName     String?   @map("dining_zone_name")
+  bookingDate        String?   @map("booking_date")
+  bookingTime        String?   @map("booking_time")
+  partySize          Int?      @map("party_size")
+  occasionType       String?   @map("occasion_type")
+  guestCountryCode   String?   @map("guest_country_code")
+  specialRequests    String?   @map("special_requests") @db.Text
+  addOnsJson         Json?     @map("addons_json")
   checkIn            String?   @map("check_in")
   checkOut           String?   @map("check_out")
   adults             Int?
@@ -227,7 +247,91 @@ model Reservation {
   hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 
   @@index([hotelId, createdAt(sort: Desc)])
+  @@index([hotelId, bookingDate, bookingTime])
   @@map("reservations")
+}
+
+model RestaurantSettings {
+  id                      String   @id @default(cuid())
+  hotelId                 String   @unique @map("hotel_id")
+  requirePayment          Boolean  @default(true) @map("require_payment")
+  postPaymentMessage      String?  @map("post_payment_message") @db.Text
+  postPaymentLink         String?  @map("post_payment_link")
+  slotIntervalMinutes     Int      @default(30) @map("slot_interval_minutes")
+  defaultDurationMinutes  Int      @default(90) @map("default_duration_minutes")
+  maxCoversPerSlot        Int?     @map("max_covers_per_slot")
+  advanceBookingDays      Int      @default(60) @map("advance_booking_days")
+  minAdvanceHours         Int      @default(2) @map("min_advance_hours")
+  serviceHoursJson        Json?    @map("service_hours_json")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@map("restaurant_settings")
+}
+
+model DiningZone {
+  id                 String   @id @default(cuid())
+  hotelId            String   @map("hotel_id")
+  name               String
+  description        String?  @db.Text
+  minPartySize       Int      @default(1) @map("min_party_size")
+  maxPartySize       Int      @map("max_party_size")
+  capacityPerSlot    Int      @default(1) @map("capacity_per_slot")
+  baseReservationFee Float    @default(0) @map("base_reservation_fee")
+  basePricePerGuest  Float    @default(0) @map("base_price_per_guest")
+  currency           String   @default("COP")
+  photoUrls          String[] @default([]) @map("photo_urls")
+  isActive           Boolean  @default(true) @map("is_active")
+  sortOrder          Int      @default(0) @map("sort_order")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  hotel      Hotel                  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  dateRates  RestaurantDateRate[]
+
+  @@index([hotelId])
+  @@map("dining_zones")
+}
+
+model RestaurantDateRate {
+  id                    String   @id @default(cuid())
+  hotelId               String   @map("hotel_id")
+  diningZoneId          String?  @map("dining_zone_id")
+  date                  DateTime @db.Date
+  closed                Boolean  @default(false)
+  label                 String?
+  reservationFeeOverride Float?  @map("reservation_fee_override")
+  pricePerGuestOverride  Float?  @map("price_per_guest_override")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  hotel      Hotel       @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  diningZone DiningZone? @relation(fields: [diningZoneId], references: [id], onDelete: Cascade)
+
+  @@unique([hotelId, diningZoneId, date])
+  @@index([hotelId, date])
+  @@map("restaurant_date_rates")
+}
+
+model RestaurantAddOn {
+  id          String   @id @default(cuid())
+  hotelId     String   @map("hotel_id")
+  name        String
+  description String?  @db.Text
+  price       Float
+  currency    String   @default("COP")
+  maxQuantity Int      @default(1) @map("max_quantity")
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId])
+  @@map("restaurant_addons")
 }
 
 model PaymentEvent {
