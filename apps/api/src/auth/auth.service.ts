@@ -8,6 +8,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomInt, timingSafeEqual } from 'crypto';
+import { isBusinessVertical } from '@hotel-bot/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
 import { SubscriptionService } from '../subscription/subscription.service';
@@ -30,8 +31,14 @@ export class AuthService {
     passwordConfirm: string;
     name: string;
     hotelName: string;
+    businessVertical: string;
+    infoOnlyMode?: boolean;
   }) {
     const email = data.email.trim().toLowerCase();
+
+    if (!isBusinessVertical(data.businessVertical)) {
+      throw new BadRequestException('Tipo de negocio inválido');
+    }
 
     if (data.password !== data.passwordConfirm) {
       throw new BadRequestException('Las contraseñas no coinciden');
@@ -69,6 +76,8 @@ export class AuthService {
         codeHash: this.hashCode(code),
         name: data.name.trim(),
         hotelName: data.hotelName.trim(),
+        businessVertical: data.businessVertical,
+        infoOnlyMode: Boolean(data.infoOnlyMode),
         passwordHash,
         expiresAt,
       },
@@ -76,6 +85,8 @@ export class AuthService {
         codeHash: this.hashCode(code),
         name: data.name.trim(),
         hotelName: data.hotelName.trim(),
+        businessVertical: data.businessVertical,
+        infoOnlyMode: Boolean(data.infoOnlyMode),
         passwordHash,
         expiresAt,
         createdAt: new Date(),
@@ -188,6 +199,8 @@ export class AuthService {
       data: {
         name: pending.hotelName,
         slug: `${slug}-${Date.now()}`,
+        businessVertical: pending.businessVertical,
+        infoOnlyMode: pending.infoOnlyMode,
         integration: { create: {} },
         users: {
           create: {

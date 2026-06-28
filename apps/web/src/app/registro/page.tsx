@@ -3,21 +3,30 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import {
+  BUSINESS_VERTICALS,
+  BUSINESS_VERTICAL_LABELS,
+  BUSINESS_VERTICAL_DESCRIPTIONS,
+  businessNameLabel,
+  type BusinessVertical,
+} from '@hotel-bot/shared';
 import { api, saveAuthSession, getPostLoginPath } from '@/lib/api';
 import { AuthLayout } from '@/components/AuthLayout';
 import { PasswordInput } from '@/components/PasswordInput';
 
-type Step = 'form' | 'verify';
+type Step = 'vertical' | 'form' | 'verify';
 
 export default function RegistroPage() {
   const router = useRouter();
-  const [step, setStep] = useState<Step>('form');
+  const [step, setStep] = useState<Step>('vertical');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [code, setCode] = useState('');
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(0);
+  const [businessVertical, setBusinessVertical] = useState<BusinessVertical>('hotel');
+  const [infoOnlyMode, setInfoOnlyMode] = useState(false);
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -43,6 +52,12 @@ export default function RegistroPage() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   }, []);
 
+  function handleContinueFromVertical(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setStep('form');
+  }
+
   async function handleSendCode(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -56,7 +71,11 @@ export default function RegistroPage() {
     }
 
     try {
-      const res = await api.sendRegistrationCode(form);
+      const res = await api.sendRegistrationCode({
+        ...form,
+        businessVertical,
+        infoOnlyMode,
+      });
       setExpiresAt(Date.now() + res.expires_in_seconds * 1000);
       setStep('verify');
       setInfo(`Enviamos un código de 6 dígitos a ${res.email}`);
@@ -137,7 +156,9 @@ export default function RegistroPage() {
           {expiresAt && (
             <p className="timer-text">
               {secondsLeft > 0 ? (
-                <>Expira en <strong>{formatTime(secondsLeft)}</strong></>
+                <>
+                  Expira en <strong>{formatTime(secondsLeft)}</strong>
+                </>
               ) : (
                 <span className="expired">Código expirado — solicita uno nuevo</span>
               )}
@@ -167,12 +188,129 @@ export default function RegistroPage() {
     );
   }
 
+  if (step === 'vertical') {
+    return (
+      <AuthLayout
+        title="Crea tu cuenta BookiChat"
+        subtitle="Elige el tipo de negocio y activa tu asistente por WhatsApp"
+        footer={
+          <p>
+            ¿Ya tienes cuenta? <Link href="/">Inicia sesión</Link>
+          </p>
+        }
+      >
+        <form onSubmit={handleContinueFromVertical} className="auth-form">
+          <p className="auth-lead">¿Qué tipo de negocio eres?</p>
+
+          <div className="vertical-grid">
+            {BUSINESS_VERTICALS.map((vertical) => (
+              <label
+                key={vertical}
+                className={`vertical-card ${businessVertical === vertical ? 'selected' : ''}`}
+              >
+                <input
+                  type="radio"
+                  name="businessVertical"
+                  value={vertical}
+                  checked={businessVertical === vertical}
+                  onChange={() => setBusinessVertical(vertical)}
+                />
+                <strong>{BUSINESS_VERTICAL_LABELS[vertical]}</strong>
+                <span>{BUSINESS_VERTICAL_DESCRIPTIONS[vertical]}</span>
+              </label>
+            ))}
+          </div>
+
+          <label className="checkbox-row">
+            <input
+              type="checkbox"
+              checked={infoOnlyMode}
+              onChange={(e) => setInfoOnlyMode(e.target.checked)}
+            />
+            <span>
+              Solo quiero un asistente informativo (preguntas y respuestas, sin reservas ni ventas
+              por ahora)
+            </span>
+          </label>
+
+          {error && <div className="error-banner">{error}</div>}
+
+          <button type="submit" className="btn-primary">
+            Continuar
+          </button>
+        </form>
+
+        <style jsx>{`
+          .auth-lead {
+            color: #475569;
+            font-size: 0.92rem;
+            margin-bottom: 0.75rem;
+          }
+          .vertical-grid {
+            display: grid;
+            gap: 0.65rem;
+            margin-bottom: 1rem;
+          }
+          .vertical-card {
+            display: grid;
+            gap: 0.2rem;
+            padding: 0.85rem 1rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            cursor: pointer;
+            background: #fff;
+            transition: border-color 0.15s, box-shadow 0.15s;
+          }
+          .vertical-card input {
+            position: absolute;
+            opacity: 0;
+            pointer-events: none;
+          }
+          .vertical-card strong {
+            color: #0f172a;
+            font-size: 0.98rem;
+          }
+          .vertical-card span {
+            color: #64748b;
+            font-size: 0.82rem;
+            line-height: 1.35;
+          }
+          .vertical-card.selected {
+            border-color: #6366f1;
+            box-shadow: 0 0 0 1px rgba(99, 102, 241, 0.35);
+            background: rgba(99, 102, 241, 0.04);
+          }
+          .checkbox-row {
+            display: flex;
+            gap: 0.65rem;
+            align-items: flex-start;
+            font-size: 0.88rem;
+            color: #475569;
+            line-height: 1.4;
+            margin-bottom: 0.5rem;
+          }
+          .checkbox-row input {
+            margin-top: 0.2rem;
+          }
+        `}</style>
+      </AuthLayout>
+    );
+  }
+
   return (
     <AuthLayout
-      title="Registra tu hotel"
-      subtitle="Activa tu chatbot de reservas en WhatsApp"
+      title={`Registra tu ${BUSINESS_VERTICAL_LABELS[businessVertical].toLowerCase()}`}
+      subtitle={
+        infoOnlyMode
+          ? 'Activa tu asistente informativo por WhatsApp'
+          : 'Activa reservas y atención por WhatsApp'
+      }
       footer={
         <p>
+          <button type="button" className="link-btn" onClick={() => setStep('vertical')}>
+            ← Cambiar tipo de negocio
+          </button>
+          {' · '}
           ¿Ya tienes cuenta? <Link href="/">Inicia sesión</Link>
         </p>
       }
@@ -189,13 +327,19 @@ export default function RegistroPage() {
           />
         </label>
         <label>
-          Nombre del hotel
+          {businessNameLabel(businessVertical)}
           <input
             type="text"
             required
             value={form.hotelName}
             onChange={(e) => setForm({ ...form, hotelName: e.target.value })}
-            placeholder="Hotel Paraíso"
+            placeholder={
+              businessVertical === 'hotel'
+                ? 'Hotel Paraíso'
+                : businessVertical === 'restaurant'
+                  ? 'Restaurante La Terraza'
+                  : 'Mi negocio'
+            }
           />
         </label>
         <label>
@@ -206,7 +350,7 @@ export default function RegistroPage() {
             autoComplete="email"
             value={form.email}
             onChange={(e) => setForm({ ...form, email: e.target.value })}
-            placeholder="admin@hotel.com"
+            placeholder="admin@minegocio.com"
           />
         </label>
         <PasswordInput

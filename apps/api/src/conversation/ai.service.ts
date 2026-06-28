@@ -1,6 +1,16 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import {
+  BUSINESS_VERTICAL_LABELS,
+  type BusinessVertical,
+} from '@hotel-bot/shared';
 import { KnowledgeService } from '../knowledge/knowledge.service';
 import { getOpenAiClient } from '../common/openai.client';
+
+export type BusinessAssistantProfile = {
+  name: string;
+  vertical: BusinessVertical;
+  infoOnlyMode: boolean;
+};
 
 @Injectable()
 export class AiService {
@@ -15,18 +25,24 @@ export class AiService {
     hotelId: string,
     userMessage: string,
     systemContext: string,
+    business?: BusinessAssistantProfile,
   ): Promise<string> {
     const ragContext = await this.knowledge.searchSimilar(hotelId, userMessage, 5);
+    const businessLabel = business
+      ? BUSINESS_VERTICAL_LABELS[business.vertical]
+      : 'Hotel';
+    const businessName = business?.name ?? 'el negocio';
 
-    const systemPrompt = `Eres el asistente virtual de un hotel. Responde con un tono cálido y profesional.
+    const systemPrompt = `Eres el asistente virtual de *${businessName}* (${businessLabel}). Responde con un tono cálido y profesional.
 REGLAS ESTRICTAS:
-- Solo responde con información verificada del hotel (contexto RAG abajo).
-- Si no tienes la información, di amablemente que no la tienes y ofrece contactar recepción.
+- Solo responde con información verificada del negocio (contexto RAG abajo).
+- Si no tienes la información, di amablemente que no la tienes y ofrece contactar al equipo del negocio.
 - Nunca inventes precios, políticas ni servicios.
-- Responde en el mismo idioma del huésped.
+- Responde en el mismo idioma del cliente.
 - Sé conciso (máximo 3 párrafos cortos).
+${business?.infoOnlyMode ? '- Este negocio usa modo informativo: no prometas reservas o ventas online si no están disponibles.' : ''}
 
-CONTEXTO DEL HOTEL (Knowledge Base):
+CONTEXTO DEL NEGOCIO (Knowledge Base):
 ${ragContext || 'No hay documentos cargados aún.'}
 
 CONTEXTO DE LA CONVERSACIÓN:

@@ -3,6 +3,7 @@ export * from './types/reservation';
 export * from './types/whatsapp';
 export * from './types/payment';
 export * from './types/hotel';
+export * from './types/business';
 export * from './constants';
 export * from './utils/display-date';
 export * from './utils/payment-url';

@@ -48,6 +48,8 @@ export class HotelsService {
       slug: hotel.slug,
       timezone: hotel.timezone,
       currency: hotel.currency,
+      businessVertical: hotel.businessVertical,
+      infoOnlyMode: hotel.infoOnlyMode,
     };
   }
 

@@ -3,6 +3,11 @@
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
+  isBusinessVertical,
+  supportsHotelBooking,
+  type BusinessVertical,
+} from '@hotel-bot/shared';
+import {
   api,
   type Hotel,
   type IntegrationStatus,
@@ -11,11 +16,12 @@ import {
 } from '@/lib/api';
 import { AppShell } from '@/components/AppShell';
 import {
-  HOTEL_NAV,
   HOTEL_TAB_TITLES,
+  buildDashboardNav,
   buildHotelDashboardPath,
+  getDashboardOverviewTitle,
   isIntegrationTab,
-  parseHotelTab,
+  parseDashboardTab,
   type HotelTab,
 } from '@/lib/app-shell-nav';
 import { WhatsAppPanel } from '@/components/WhatsAppPanel';
@@ -28,8 +34,16 @@ import { ChatSimulator } from '@/components/ChatSimulator';
 import { DashboardOverviewPanel } from '@/components/DashboardOverviewPanel';
 import { ReservationsHistoryPanel } from '@/components/ReservationsHistoryPanel';
 import { MyAccountPanel } from '@/components/MyAccountPanel';
+import { BusinessOnboardingPanel } from '@/components/BusinessOnboardingPanel';
 
 const DEFAULT_INTEGRATION_TAB: HotelTab = 'integration-whatsapp';
+
+function resolveVertical(hotel: Hotel): BusinessVertical {
+  if (hotel.businessVertical && isBusinessVertical(hotel.businessVertical)) {
+    return hotel.businessVertical;
+  }
+  return 'hotel';
+}
 
 export default function DashboardPage() {
   return (
@@ -42,7 +56,6 @@ export default function DashboardPage() {
 function DashboardPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const tab = parseHotelTab(searchParams.get('tab'));
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [integration, setIntegration] = useState<IntegrationStatus | null>(null);
   const [subscription, setSubscription] = useState<HotelSubscription | null>(null);
@@ -90,29 +103,56 @@ function DashboardPageContent() {
     router.replace(buildHotelDashboardPath(nextTab), { scroll: false });
   }
 
+  useEffect(() => {
+    if (!hotel) return;
+    const vertical = resolveVertical(hotel);
+    const infoOnlyMode = hotel.infoOnlyMode ?? false;
+    const requested = searchParams.get('tab');
+    if (!requested) return;
+    const allowed = parseDashboardTab(requested, vertical, infoOnlyMode);
+    if (requested !== allowed) {
+      router.replace(buildHotelDashboardPath(allowed), { scroll: false });
+    }
+  }, [hotel, searchParams, router]);
+
   if (!hotel) {
     return <div className="loading">Cargando panel...</div>;
   }
+
+  const vertical = resolveVertical(hotel);
+  const infoOnlyMode = hotel.infoOnlyMode ?? false;
+  const showHotelBooking = supportsHotelBooking(vertical, infoOnlyMode);
+  const tab = parseDashboardTab(searchParams.get('tab'), vertical, infoOnlyMode);
+  const navItems = buildDashboardNav(vertical, infoOnlyMode);
+
+  const panelTitle =
+    tab === 'overview'
+      ? getDashboardOverviewTitle(vertical, infoOnlyMode)
+      : HOTEL_TAB_TITLES[tab] ?? 'Panel';
 
   const headerExtra = isIntegrationTab(tab) && integration && (
     <div className="status-badges">
       <span className={`badge ${integration.whatsapp_connected ? 'ok' : 'warn'}`}>
         WhatsApp {integration.whatsapp_connected ? '✓' : '○'}
       </span>
-      <span className={`badge ${integration.pms_connected ? 'ok' : 'warn'}`}>
-        PMS {integration.pms_connected ? '✓' : '○'}
-      </span>
-      <span className={`badge ${integration.payment_connected ? 'ok' : 'warn'}`}>
-        Pagos {integration.payment_connected ? '✓' : '○'}
-      </span>
+      {showHotelBooking && (
+        <span className={`badge ${integration.pms_connected ? 'ok' : 'warn'}`}>
+          PMS {integration.pms_connected ? '✓' : '○'}
+        </span>
+      )}
+      {!infoOnlyMode && (
+        <span className={`badge ${integration.payment_connected ? 'ok' : 'warn'}`}>
+          Pagos {integration.payment_connected ? '✓' : '○'}
+        </span>
+      )}
     </div>
   );
 
   return (
     <AppShell
-      title={HOTEL_TAB_TITLES[tab] ?? 'Panel'}
+      title={panelTitle}
       subtitle={hotel.name}
-      navItems={HOTEL_NAV}
+      navItems={navItems}
       activeId={tab}
       onNavigate={handleNavigate}
       onLogout={() => {
@@ -121,17 +161,18 @@ function DashboardPageContent() {
       }}
       headerExtra={headerExtra}
     >
-      {subscription && tab !== 'overview' && tab !== 'account' && (
+      {subscription && showHotelBooking && tab !== 'overview' && tab !== 'account' && (
         <SubscriptionBanner subscription={subscription} />
       )}
 
       {tab === 'overview' && (
         <>
-          {subscription && <SubscriptionBanner subscription={subscription} />}
-          <DashboardOverviewPanel loadStats={loadStats} />
+          {subscription && showHotelBooking && <SubscriptionBanner subscription={subscription} />}
+          <BusinessOnboardingPanel vertical={vertical} infoOnlyMode={infoOnlyMode} />
+          {showHotelBooking && <DashboardOverviewPanel loadStats={loadStats} />}
         </>
       )}
-      {tab === 'reservations' && (
+      {tab === 'reservations' && showHotelBooking && (
         <ReservationsHistoryPanel loadReservations={loadReservations} />
       )}
       {tab === 'integration-whatsapp' && (
@@ -141,14 +182,14 @@ function DashboardPageContent() {
           }
         />
       )}
-      {tab === 'integration-pms' && (
+      {tab === 'integration-pms' && showHotelBooking && (
         <PmsIntegrationPanel integration={integration} onUpdate={setIntegration} />
       )}
-      {tab === 'integration-payments' && (
+      {tab === 'integration-payments' && !infoOnlyMode && (
         <PaymentIntegrationPanel integration={integration} onUpdate={setIntegration} />
       )}
-      {tab === 'inventory' && <InventoryPanel />}
-      {tab === 'discounts' && <DiscountTiersPanel />}
+      {tab === 'inventory' && showHotelBooking && <InventoryPanel />}
+      {tab === 'discounts' && showHotelBooking && <DiscountTiersPanel />}
       {tab === 'knowledge' && <KnowledgePanel />}
       {tab === 'simulator' && <ChatSimulator />}
       {tab === 'account' && (
