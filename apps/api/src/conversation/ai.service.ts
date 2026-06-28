@@ -1,6 +1,7 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import {
   BUSINESS_VERTICAL_LABELS,
+  supportsTransactionalFlow,
   type BusinessVertical,
 } from '@hotel-bot/shared';
 import { KnowledgeService } from '../knowledge/knowledge.service';
@@ -32,16 +33,26 @@ export class AiService {
       : 'Hotel';
     const businessName = business?.name ?? 'el negocio';
 
+    const transactionalHint = business
+      ? supportsTransactionalFlow(business.vertical)
+        ? business.vertical === 'restaurant'
+          ? '- El cliente puede reservar mesa escribiendo *menu* y eligiendo *Reservar mesa*, o escribiendo *reservar*.'
+          : business.vertical === 'hotel'
+            ? '- El cliente puede reservar habitación escribiendo *menu* o indicando fechas y huéspedes.'
+            : ''
+        : '- Las reservas o compras online por chat para este tipo de negocio llegarán pronto; no prometas reservar o pagar si el cliente lo pide.'
+      : '';
+
     const systemPrompt = `Eres el asistente virtual de *${businessName}* (${businessLabel}). Responde con un tono cálido y profesional.
 REGLAS ESTRICTAS:
-- Solo responde con información verificada del negocio (contexto RAG abajo).
+- Usa primero los DATOS OPERATIVOS y el contexto RAG. No digas que no tienes precios si aparecen en esos datos.
 - Si no tienes la información, di amablemente que no la tienes y ofrece contactar al equipo del negocio.
-- Nunca inventes precios, políticas ni servicios.
+- Nunca inventes precios, políticas ni servicios que no estén en el contexto.
 - Responde en el mismo idioma del cliente.
 - Sé conciso (máximo 3 párrafos cortos).
-${business && business.vertical !== 'hotel' ? '- Las reservas/ventas online para este tipo de negocio llegarán pronto; no prometas reservar o pagar por chat si el cliente lo pide.' : ''}
+${transactionalHint}
 
-CONTEXTO DEL NEGOCIO (Knowledge Base):
+CONTEXTO DEL NEGOCIO (Knowledge Base / RAG):
 ${ragContext || 'No hay documentos cargados aún.'}
 
 CONTEXTO DE LA CONVERSACIÓN:

@@ -15,6 +15,7 @@ import { ReservationsModule } from './reservations/reservations.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
 import { HealthModule } from './health/health.module';
 import { RestaurantModule } from './restaurant/restaurant.module';
+import { SimulatorModule } from './simulator/simulator.module';
 import { QUEUE_NAMES } from '@hotel-bot/shared';
 
 @Module({
@@ -46,6 +47,7 @@ import { QUEUE_NAMES } from '@hotel-bot/shared';
     SuperAdminModule,
     HealthModule,
     RestaurantModule,
+    SimulatorModule,
   ],
 })
 export class AppModule {}
