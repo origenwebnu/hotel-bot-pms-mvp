@@ -1,4 +1,9 @@
 import type { AppNavItem } from '@/components/AppShell';
+import {
+  type BusinessVertical,
+  BUSINESS_VERTICAL_LABELS,
+  supportsHotelBooking,
+} from '@hotel-bot/shared';
 
 export const HOTEL_INTEGRATION_ITEMS = [
   { id: 'integration-whatsapp', label: 'WhatsApp' },
@@ -78,6 +83,94 @@ export function parseHotelTab(tabParam: string | null): HotelTab {
 export function buildHotelDashboardPath(tab: HotelTab): string {
   if (tab === 'overview') return '/dashboard';
   return `/dashboard?tab=${encodeURIComponent(tab)}`;
+}
+
+export function buildDashboardNav(
+  vertical: BusinessVertical,
+  infoOnlyMode: boolean,
+): AppNavItem[] {
+  if (supportsHotelBooking(vertical, infoOnlyMode)) {
+    return HOTEL_NAV;
+  }
+
+  const integrationChildren: Array<{ id: string; label: string }> = [
+    { id: 'integration-whatsapp', label: 'WhatsApp' },
+  ];
+
+  if (!infoOnlyMode) {
+    integrationChildren.push({ id: 'integration-payments', label: 'Pagos / Recaudo' });
+  }
+
+  const nav: AppNavItem[] = [
+    { id: 'overview', label: 'Resumen', icon: '/icons/modules/overview.svg' },
+    {
+      id: 'integrations',
+      label: 'Integraciones',
+      icon: '/icons/modules/integrations.svg',
+      children: integrationChildren,
+    },
+    { id: 'knowledge', label: 'Entrenamiento AI', icon: '/icons/modules/knowledge.svg' },
+    { id: 'simulator', label: 'Simulador IA', icon: '/icons/modules/simulator.svg' },
+    { id: 'account', label: 'Mi cuenta', icon: '/icons/modules/mi-cuenta.svg' },
+  ];
+
+  return nav;
+}
+
+export function getDashboardTabIds(
+  vertical: BusinessVertical,
+  infoOnlyMode: boolean,
+): Set<string> {
+  const nav = buildDashboardNav(vertical, infoOnlyMode);
+  const ids = new Set<string>();
+  for (const item of nav) {
+    ids.add(item.id);
+    if (item.children) {
+      for (const child of item.children) {
+        ids.add(child.id);
+      }
+    }
+  }
+  return ids;
+}
+
+export function parseDashboardTab(
+  tabParam: string | null,
+  vertical: BusinessVertical,
+  infoOnlyMode: boolean,
+): HotelTab {
+  const allowed = getDashboardTabIds(vertical, infoOnlyMode);
+  if (tabParam && allowed.has(tabParam)) {
+    return tabParam as HotelTab;
+  }
+  return 'overview';
+}
+
+export function getDashboardOverviewTitle(
+  vertical: BusinessVertical,
+  infoOnlyMode: boolean,
+): string {
+  const label = BUSINESS_VERTICAL_LABELS[vertical];
+  if (infoOnlyMode) {
+    return `Resumen — asistente ${label}`;
+  }
+  if (vertical === 'hotel') {
+    return HOTEL_TAB_TITLES.overview;
+  }
+  return `Resumen — ${label}`;
+}
+
+export function getDashboardSubtitle(
+  vertical: BusinessVertical,
+  infoOnlyMode: boolean,
+): string {
+  if (infoOnlyMode) {
+    return 'Modo informativo: responde preguntas por WhatsApp con IA';
+  }
+  if (vertical !== 'hotel') {
+    return 'Próximamente: reservas y ventas para tu vertical';
+  }
+  return '';
 }
 
 export const SUPER_ADMIN_NAV: AppNavItem[] = [

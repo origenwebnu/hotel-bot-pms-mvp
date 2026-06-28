@@ -8,6 +8,10 @@ import {
   JOB_NAMES,
   QUEUE_NAMES,
   WHATSAPP_BUTTON_IDS,
+  supportsTransactionalFlow,
+  isBusinessVertical,
+  BUSINESS_VERTICAL_LABELS,
+  type BusinessVertical,
   countNights,
   filterValidMediaUrls,
   formatDisplayDateRange,
@@ -66,8 +70,17 @@ export class ConversationService {
     const phone = message.from;
     const session = await this.getOrCreateSession(hotelId, phone);
     const text = this.extractText(message);
+    const business = await this.getBusinessProfile(hotelId);
+    const canTransact = supportsTransactionalFlow(
+      business.vertical,
+      business.infoOnlyMode,
+    );
 
     if (/^(continuar\s+reserva|reservar)$/i.test(text.trim())) {
+      if (!canTransact) {
+        await this.sendTransactionalUnavailable(hotelId, phone, business);
+        return;
+      }
       await this.proceedToGuestInfo(hotelId, session, phone);
       return;
     }
@@ -96,9 +109,17 @@ export class ConversationService {
           if (await this.tryOfferDiscount(hotelId, session.id, phone, text, intent)) return;
         }
         if (this.wantsNewBooking(text, intent) && !this.isPriceSensitivityQuery(text, intent)) {
+          if (!canTransact) {
+            await this.sendTransactionalUnavailable(hotelId, phone, business);
+            return;
+          }
           if (await this.maybeOfferResumeBooking(hotelId, session.id, phone)) return;
         }
         if (this.shouldStartBooking(text, intent) && !this.isPriceSensitivityQuery(text, intent)) {
+          if (!canTransact) {
+            await this.sendTransactionalUnavailable(hotelId, phone, business);
+            return;
+          }
           if (await this.advanceBookingFlow(hotelId, session.id, phone, text, intent)) {
             return;
           }
@@ -112,8 +133,8 @@ export class ConversationService {
           return;
         }
         {
-          const context = `Estado: ${session.state}. Fechas: ${session.checkIn ?? 'N/A'} - ${session.checkOut ?? 'N/A'}`;
-          const reply = await this.ai.generateResponse(hotelId, text, context);
+          const context = `Estado: ${session.state}. Fechas: ${session.checkIn ?? 'N/A'} - ${session.checkOut ?? 'N/A'}. Tipo de negocio: ${BUSINESS_VERTICAL_LABELS[business.vertical]}.`;
+          const reply = await this.ai.generateResponse(hotelId, text, context, business);
           await this.whatsapp.sendText(
             hotelId,
             phone,
@@ -245,8 +266,8 @@ export class ConversationService {
           return;
         }
         {
-          const context = `Estado: ${session.state}`;
-          const reply = await this.ai.generateResponse(hotelId, text, context);
+          const context = `Estado: ${session.state}. Tipo de negocio: ${BUSINESS_VERTICAL_LABELS[business.vertical]}.`;
+          const reply = await this.ai.generateResponse(hotelId, text, context, business);
           await this.whatsapp.sendText(
             hotelId,
             phone,
@@ -528,21 +549,33 @@ export class ConversationService {
     buttonId: string,
   ) {
     if (buttonId === WHATSAPP_BUTTON_IDS.MENU_BOOK) {
+      const business = await this.getBusinessProfile(hotelId);
+      if (!supportsTransactionalFlow(business.vertical, business.infoOnlyMode)) {
+        await this.sendTransactionalUnavailable(hotelId, session.whatsappPhone, business);
+        return;
+      }
       await this.startBookingFlow(hotelId, session.id, session.whatsappPhone);
       return;
     }
 
     if (buttonId === WHATSAPP_BUTTON_IDS.MENU_FAQ) {
       await this.updateSession(session.id, { state: 'faq' });
+      const business = await this.getBusinessProfile(hotelId);
+      const about = BUSINESS_VERTICAL_LABELS[business.vertical].toLowerCase();
       await this.whatsapp.sendText(
         hotelId,
         session.whatsappPhone,
-        '¡Con gusto! 🤝 Cuéntame tu duda sobre el hotel y te respondo enseguida.\n\n_Escribe *menu* para volver al inicio._',
+        `¡Con gusto! 🤝 Cuéntame tu duda sobre nuestro ${about} y te respondo enseguida.\n\n_Escribe *menu* para volver al inicio._`,
       );
       return;
     }
 
     if (buttonId === WHATSAPP_BUTTON_IDS.MENU_RATES) {
+      const business = await this.getBusinessProfile(hotelId);
+      if (!supportsTransactionalFlow(business.vertical, business.infoOnlyMode)) {
+        await this.sendTransactionalUnavailable(hotelId, session.whatsappPhone, business);
+        return;
+      }
       await this.sendRatesOverview(hotelId, session.whatsappPhone);
       return;
     }
@@ -977,27 +1010,27 @@ export class ConversationService {
     sessionId: string,
     phone: string,
   ) {
-    const hotel = await this.prisma.hotel.findUniqueOrThrow({
-      where: { id: hotelId },
-      select: { name: true },
+    const business = await this.getBusinessProfile(hotelId);
+    const msg = this.renderer.renderWelcomeMenu({
+      name: business.name,
+      vertical: business.vertical,
+      infoOnlyMode: business.infoOnlyMode,
     });
-
-    const msg = this.renderer.renderWelcomeMenu(hotel.name);
     try {
       await this.whatsapp.sendInteractive(hotelId, phone, msg);
     } catch (err) {
       this.logger.warn(
         `Welcome menu interactive failed: ${err instanceof Error ? err.message : err}`,
       );
-      await this.whatsapp.sendText(
-        hotelId,
-        phone,
-        `Hola, bienvenido a *${hotel.name}* 👋\n\n` +
-          `¿Qué te gustaría hacer?\n` +
-          `• Escribe *reservar* para reservar habitación\n` +
-          `• Escribe *tarifas* para conocer precios\n` +
-          `• Escribe *dudas* para resolver preguntas`,
-      );
+      const fallback =
+        business.infoOnlyMode || business.vertical !== 'hotel'
+          ? `Hola, bienvenido a *${business.name}* 👋\n\nEscribe tu pregunta o *menu* para volver al inicio.`
+          : `Hola, bienvenido a *${business.name}* 👋\n\n` +
+            `¿Qué te gustaría hacer?\n` +
+            `• Escribe *reservar* para reservar habitación\n` +
+            `• Escribe *tarifas* para conocer precios\n` +
+            `• Escribe *dudas* para resolver preguntas`;
+      await this.whatsapp.sendText(hotelId, phone, fallback);
     }
 
     await this.prisma.conversationSession.update({
@@ -1778,6 +1811,37 @@ export class ConversationService {
       create: { hotelId, whatsappPhone: phone, state: 'idle' },
       update: { lastMessageAt: new Date() },
     });
+  }
+
+  private async getBusinessProfile(hotelId: string): Promise<{
+    name: string;
+    vertical: BusinessVertical;
+    infoOnlyMode: boolean;
+  }> {
+    const hotel = await this.prisma.hotel.findUniqueOrThrow({
+      where: { id: hotelId },
+      select: { name: true, businessVertical: true, infoOnlyMode: true },
+    });
+    const vertical = isBusinessVertical(hotel.businessVertical)
+      ? hotel.businessVertical
+      : 'hotel';
+    return {
+      name: hotel.name,
+      vertical,
+      infoOnlyMode: hotel.infoOnlyMode,
+    };
+  }
+
+  private async sendTransactionalUnavailable(
+    hotelId: string,
+    phone: string,
+    business: { vertical: BusinessVertical; infoOnlyMode: boolean },
+  ) {
+    const label = BUSINESS_VERTICAL_LABELS[business.vertical].toLowerCase();
+    const message = business.infoOnlyMode
+      ? `Este chat está configurado solo para responder preguntas sobre nuestro ${label}. Si necesitas reservar o comprar, contáctanos por otro canal.\n\n_Escribe *menu* para volver al inicio._`
+      : `Muy pronto podrás reservar o comprar desde este chat. Por ahora te ayudo con preguntas e información sobre nuestro ${label}.\n\n_Escribe *menu* para volver al inicio._`;
+    await this.whatsapp.sendText(hotelId, phone, message);
   }
 
   private async getSession(id: string) {

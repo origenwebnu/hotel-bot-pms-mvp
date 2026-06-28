@@ -2,10 +2,13 @@ import { Injectable } from '@nestjs/common';
 import {
   MAX_LIST_MESSAGE_ROWS,
   WHATSAPP_BUTTON_IDS,
+  BUSINESS_VERTICAL_LABELS,
+  supportsTransactionalFlow,
   filterValidMediaUrls,
   formatDisplayDate,
   formatDisplayDateRange,
   sanitizeWhatsAppText,
+  type BusinessVertical,
   type StandardRoomAvailability,
   type WhatsAppListMessage,
   type WhatsAppButtonMessage,
@@ -516,12 +519,39 @@ export class WhatsAppRendererService {
     };
   }
 
-  renderWelcomeMenu(hotelName: string): WhatsAppButtonMessage {
+  renderWelcomeMenu(business: {
+    name: string;
+    vertical: BusinessVertical;
+    infoOnlyMode: boolean;
+  }): WhatsAppButtonMessage {
+    const { name, vertical, infoOnlyMode } = business;
+    const canTransact = supportsTransactionalFlow(vertical, infoOnlyMode);
+
+    if (!canTransact) {
+      const typeLabel = BUSINESS_VERTICAL_LABELS[vertical].toLowerCase();
+      const intro = infoOnlyMode
+        ? `Hola, bienvenido a *${name}* 👋\n\nSoy tu asistente virtual. Puedo responder preguntas sobre nuestro ${typeLabel} con la información que tengamos cargada.`
+        : `Hola, bienvenido a *${name}* 👋\n\nPor ahora te ayudo con preguntas e información. Muy pronto podrás reservar o comprar desde este chat.`;
+
+      return {
+        type: 'button',
+        body: { text: `${intro}\n\n¿En qué te puedo ayudar?` },
+        action: {
+          buttons: [
+            {
+              type: 'reply',
+              reply: { id: WHATSAPP_BUTTON_IDS.MENU_FAQ, title: 'Hacer una pregunta' },
+            },
+          ],
+        },
+      };
+    }
+
     return {
       type: 'button',
       body: {
         text:
-          `Hola, bienvenido a *${hotelName}* 👋\n\n` +
+          `Hola, bienvenido a *${name}* 👋\n\n` +
           `Te ayudaré con tu reserva de forma ágil y todo desde este chat.\n\n` +
           `¿Qué te gustaría hacer?`,
       },
