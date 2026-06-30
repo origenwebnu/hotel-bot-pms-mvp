@@ -93,6 +93,16 @@ export class RestaurantController {
     return this.restaurant.upsertDateRate(req.user.hotelId, body);
   }
 
+  @Put('calendar/bulk')
+  bulkUpsertCalendar(@Req() req: { user: { hotelId: string } }, @Body() body: never) {
+    return this.restaurant.bulkUpsertDateRates(req.user.hotelId, body);
+  }
+
+  @Delete('calendar/bulk')
+  bulkClearCalendar(@Req() req: { user: { hotelId: string } }, @Body() body: never) {
+    return this.restaurant.bulkClearDateRates(req.user.hotelId, body);
+  }
+
   @Delete('calendar/:id')
   deleteCalendar(@Req() req: { user: { hotelId: string } }, @Param('id') id: string) {
     return this.restaurant.deleteDateRate(req.user.hotelId, id);

@@ -553,6 +553,14 @@ export class SimulatorService {
     const date = parseRestaurantBookingDate(text);
     let header = '*Tarifas de reserva de mesa*\n\n';
 
+    const defaultFee = settings.default_reservation_fee ?? 0;
+    const defaultPerGuest = settings.default_price_per_guest ?? 0;
+    if (defaultFee > 0 || defaultPerGuest > 0) {
+      header +=
+        `*Tarifas generales:* fee ${defaultFee.toLocaleString('es-CO')} + ${defaultPerGuest.toLocaleString('es-CO')}/persona\n` +
+        `(Ejemplo 4 personas: ~${(defaultFee + defaultPerGuest * 4).toLocaleString('es-CO')})\n\n`;
+    }
+
     if (date) {
       header = `*Tarifas para ${date}*\n\n`;
       try {
@@ -566,9 +574,16 @@ export class SimulatorService {
     }
 
     const lines = zones.map((z) => {
-      const fee = z.base_reservation_fee.toLocaleString('es-CO');
-      const perGuest = z.base_price_per_guest.toLocaleString('es-CO');
-      const example = z.base_reservation_fee + z.base_price_per_guest * 4;
+      const fee = (z.base_reservation_fee > 0 ? z.base_reservation_fee : defaultFee).toLocaleString(
+        'es-CO',
+      );
+      const perGuest = (
+        z.base_price_per_guest > 0 ? z.base_price_per_guest : defaultPerGuest
+      ).toLocaleString('es-CO');
+      const effectiveFee = z.base_reservation_fee > 0 ? z.base_reservation_fee : defaultFee;
+      const effectivePerGuest =
+        z.base_price_per_guest > 0 ? z.base_price_per_guest : defaultPerGuest;
+      const example = effectiveFee + effectivePerGuest * 4;
       return (
         `• *${z.name}* (${z.min_party_size}–${z.max_party_size} pax)\n` +
         `  Fee reserva: ${z.currency} ${fee} + ${z.currency} ${perGuest}/persona\n` +
@@ -633,6 +648,7 @@ export class SimulatorService {
       return [
         `Tipo: Restaurante`,
         `Requiere pago al reservar: ${settings.require_payment ? 'sí' : 'no'}`,
+        `Tarifas generales: fee ${settings.default_reservation_fee ?? 0}, ${settings.default_price_per_guest ?? 0}/persona`,
         `Antelación mínima: ${settings.min_advance_hours} horas`,
         `Reserva hasta: ${settings.advance_booking_days} días adelante`,
         `Intervalo de horarios: ${settings.slot_interval_minutes} minutos`,

@@ -346,6 +346,25 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify(data),
     }),
+
+  bulkUpsertRestaurantCalendar: (data: {
+    dates: string[];
+    dining_zone_id?: string | null;
+    closed?: boolean;
+    label?: string;
+    reservation_fee_override?: number | null;
+    price_per_guest_override?: number | null;
+  }) =>
+    request<{ updated: number; rates: RestaurantDateRate[] }>('/hotels/me/restaurant/calendar/bulk', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  bulkClearRestaurantCalendar: (data: { dates: string[]; dining_zone_id?: string | null }) =>
+    request<{ deleted: number }>('/hotels/me/restaurant/calendar/bulk', {
+      method: 'DELETE',
+      body: JSON.stringify(data),
+    }),
 };
 
 export interface Hotel {
@@ -571,6 +590,8 @@ export interface RestaurantSettings {
   max_covers_per_slot: number | null;
   advance_booking_days: number;
   min_advance_hours: number;
+  default_reservation_fee: number;
+  default_price_per_guest: number;
 }
 
 export interface SimulatorSession {

@@ -42,6 +42,8 @@ export class RestaurantInventoryService {
       max_covers_per_slot: number | null;
       advance_booking_days: number;
       min_advance_hours: number;
+      default_reservation_fee: number;
+      default_price_per_guest: number;
       service_hours_json: ServiceHoursMap;
     }>,
   ) {
@@ -72,6 +74,12 @@ export class RestaurantInventoryService {
         }),
         ...(data.min_advance_hours !== undefined && {
           minAdvanceHours: data.min_advance_hours,
+        }),
+        ...(data.default_reservation_fee !== undefined && {
+          defaultReservationFee: data.default_reservation_fee,
+        }),
+        ...(data.default_price_per_guest !== undefined && {
+          defaultPricePerGuest: data.default_price_per_guest,
         }),
         ...(data.service_hours_json !== undefined && {
           serviceHoursJson: data.service_hours_json as object,
@@ -267,6 +275,60 @@ export class RestaurantInventoryService {
     return this.formatDateRate(rate);
   }
 
+  async bulkUpsertDateRates(
+    hotelId: string,
+    body: {
+      dates: string[];
+      dining_zone_id?: string | null;
+      closed?: boolean;
+      label?: string;
+      reservation_fee_override?: number | null;
+      price_per_guest_override?: number | null;
+    },
+  ) {
+    if (!body.dates?.length) {
+      throw new BadRequestException('Debes seleccionar al menos una fecha');
+    }
+
+    const uniqueDates = [...new Set(body.dates)].sort();
+    const results = [];
+    for (const date of uniqueDates) {
+      results.push(
+        await this.upsertDateRate(hotelId, {
+          date,
+          dining_zone_id: body.dining_zone_id,
+          closed: body.closed,
+          label: body.label,
+          reservation_fee_override: body.reservation_fee_override,
+          price_per_guest_override: body.price_per_guest_override,
+        }),
+      );
+    }
+    return { updated: results.length, rates: results };
+  }
+
+  async bulkClearDateRates(
+    hotelId: string,
+    body: { dates: string[]; dining_zone_id?: string | null },
+  ) {
+    if (!body.dates?.length) {
+      throw new BadRequestException('Debes seleccionar al menos una fecha');
+    }
+
+    const diningZoneId = body.dining_zone_id ?? null;
+    const dateObjects = [...new Set(body.dates)].map((d) => new Date(`${d}T00:00:00.000Z`));
+
+    const result = await this.prisma.restaurantDateRate.deleteMany({
+      where: {
+        hotelId,
+        diningZoneId,
+        date: { in: dateObjects },
+      },
+    });
+
+    return { deleted: result.count };
+  }
+
   async deleteDateRate(hotelId: string, id: string) {
     await this.prisma.restaurantDateRate.deleteMany({ where: { id, hotelId } });
     return { ok: true };
@@ -312,6 +374,9 @@ export class RestaurantInventoryService {
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
 
+    const settings = await this.ensureSettings(hotelId);
+    const defaults = this.getDefaultPricing(settings);
+
     const result = [];
     for (const zone of zones) {
       if (partySize < zone.minPartySize || partySize > zone.maxPartySize) continue;
@@ -323,7 +388,7 @@ export class RestaurantInventoryService {
       const booked = await this.countZoneBookings(hotelId, date, time, zone.id);
       if (booked >= zone.capacityPerSlot) continue;
 
-      const pricing = this.resolvePricing(zone, globalRate, zoneRate);
+      const pricing = this.resolvePricing(zone, globalRate, zoneRate, defaults);
       result.push({
         ...this.formatZone(zone),
         quote: buildRestaurantQuote({
@@ -354,9 +419,11 @@ export class RestaurantInventoryService {
     });
     if (!zone) throw new NotFoundException('Zona no encontrada');
 
+    const settings = await this.ensureSettings(hotelId);
+    const defaults = this.getDefaultPricing(settings);
     const globalRate = await this.getDateRate(hotelId, params.date, null);
     const zoneRate = await this.getDateRate(hotelId, params.date, zone.id);
-    const pricing = this.resolvePricing(zone, globalRate, zoneRate);
+    const pricing = this.resolvePricing(zone, globalRate, zoneRate, defaults);
     const addons = await this.resolveAddOns(hotelId, params.addon_ids ?? []);
 
     return buildRestaurantQuote({
@@ -450,17 +517,28 @@ export class RestaurantInventoryService {
     zone: { baseReservationFee: number; basePricePerGuest: number },
     globalRate: Awaited<ReturnType<typeof this.getDateRate>>,
     zoneRate: Awaited<ReturnType<typeof this.getDateRate>>,
+    defaults: { reservationFee: number; pricePerGuest: number },
   ) {
     const reservationFee =
       zoneRate?.reservationFeeOverride ??
       globalRate?.reservationFeeOverride ??
-      zone.baseReservationFee;
+      (zone.baseReservationFee > 0 ? zone.baseReservationFee : defaults.reservationFee);
     const pricePerGuest =
       zoneRate?.pricePerGuestOverride ??
       globalRate?.pricePerGuestOverride ??
-      zone.basePricePerGuest;
+      (zone.basePricePerGuest > 0 ? zone.basePricePerGuest : defaults.pricePerGuest);
     const label = zoneRate?.label ?? globalRate?.label ?? null;
     return { reservationFee, pricePerGuest, label };
+  }
+
+  private getDefaultPricing(settings: {
+    defaultReservationFee: number;
+    defaultPricePerGuest: number;
+  }) {
+    return {
+      reservationFee: settings.defaultReservationFee,
+      pricePerGuest: settings.defaultPricePerGuest,
+    };
   }
 
   private async resolveAddOns(hotelId: string, ids: string[]) {
@@ -502,6 +580,8 @@ export class RestaurantInventoryService {
     maxCoversPerSlot: number | null;
     advanceBookingDays: number;
     minAdvanceHours: number;
+    defaultReservationFee: number;
+    defaultPricePerGuest: number;
     serviceHoursJson: unknown;
   }) {
     return {
@@ -513,6 +593,8 @@ export class RestaurantInventoryService {
       max_covers_per_slot: s.maxCoversPerSlot,
       advance_booking_days: s.advanceBookingDays,
       min_advance_hours: s.minAdvanceHours,
+      default_reservation_fee: s.defaultReservationFee,
+      default_price_per_guest: s.defaultPricePerGuest,
       service_hours_json: (s.serviceHoursJson as ServiceHoursMap) ?? DEFAULT_SERVICE_HOURS,
     };
   }
