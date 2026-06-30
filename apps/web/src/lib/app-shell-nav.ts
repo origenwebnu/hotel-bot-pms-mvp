@@ -170,7 +170,7 @@ export function getDashboardTabTitle(tab: string, vertical: BusinessVertical): s
   if (vertical === 'restaurant') {
     const titles: Record<string, string> = {
       overview: 'Resumen del restaurante',
-      reservations: 'Historial de reservas',
+      reservations: 'Calendario de reservas',
       'integration-whatsapp': 'WhatsApp Business',
       'integration-payments': 'Pagos / Recaudo',
       inventory: 'Inventario y tarifas',

@@ -14,6 +14,9 @@ export class ReservationsController {
     @Query('outcome') outcome?: ReservationOutcome,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('booking_from') bookingFrom?: string,
+    @Query('booking_to') bookingTo?: string,
+    @Query('booking_kind') bookingKind?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
@@ -21,6 +24,9 @@ export class ReservationsController {
       outcome,
       from,
       to,
+      booking_from: bookingFrom,
+      booking_to: bookingTo,
+      booking_kind: bookingKind,
       page: page ? parseInt(page, 10) : undefined,
       limit: limit ? parseInt(limit, 10) : undefined,
     });

@@ -11,11 +11,16 @@ import type { ReservationHistoryItem, ReservationOutcome } from '@/lib/api';
 
 interface ReservationsHistoryPanelProps {
   title?: string;
+  restaurantMode?: boolean;
   loadReservations: (params: {
     outcome?: ReservationOutcome;
     from?: string;
     to?: string;
+    booking_from?: string;
+    booking_to?: string;
+    booking_kind?: string;
     page?: number;
+    limit?: number;
   }) => Promise<{
     items: ReservationHistoryItem[];
     pagination: {
@@ -35,6 +40,7 @@ const OUTCOME_LABELS: Record<ReservationOutcome, string> = {
 
 export function ReservationsHistoryPanel({
   title = 'Historial de reservas',
+  restaurantMode = false,
   loadReservations,
 }: ReservationsHistoryPanelProps) {
   const [preset, setPreset] = useState<DateRangePreset>('this_month');
@@ -156,7 +162,7 @@ export function ReservationsHistoryPanel({
                 <th>Fecha</th>
                 <th>Huésped</th>
                 <th>Contacto</th>
-                <th>Estadía</th>
+                <th>{restaurantMode ? 'Reserva' : 'Estadía'}</th>
                 <th>Monto</th>
                 <th>Estado</th>
               </tr>
@@ -165,21 +171,44 @@ export function ReservationsHistoryPanel({
               {items.map((item) => (
                 <tr key={item.id}>
                   <td>
-                    {new Date(item.created_at).toLocaleString('es-CO', {
-                      dateStyle: 'short',
-                      timeStyle: 'short',
-                    })}
+                    {restaurantMode && item.booking_date ? (
+                      <>
+                        {item.booking_date}
+                        {item.booking_time && (
+                          <small>{item.booking_time}</small>
+                        )}
+                      </>
+                    ) : (
+                      new Date(item.created_at).toLocaleString('es-CO', {
+                        dateStyle: 'short',
+                        timeStyle: 'short',
+                      })
+                    )}
                   </td>
                   <td>
                     <strong>{item.guest.full_name ?? 'Sin nombre'}</strong>
-                    {item.room_name && <small>{item.room_name}</small>}
+                    {restaurantMode && item.dining_zone_name && (
+                      <small>{item.dining_zone_name}</small>
+                    )}
+                    {!restaurantMode && item.room_name && <small>{item.room_name}</small>}
                   </td>
                   <td>
                     <div>{item.guest.email ?? '—'}</div>
                     <small>{item.guest.whatsapp ?? '—'}</small>
                   </td>
                   <td>
-                    {item.check_in && item.check_out ? (
+                    {restaurantMode ? (
+                      item.party_size != null ? (
+                        <>
+                          {item.party_size} persona{item.party_size !== 1 ? 's' : ''}
+                          {item.occasion_type && (
+                            <small>{item.occasion_type}</small>
+                          )}
+                        </>
+                      ) : (
+                        '—'
+                      )
+                    ) : item.check_in && item.check_out ? (
                       <>
                         {item.check_in} → {item.check_out}
                         {item.adults != null && (
