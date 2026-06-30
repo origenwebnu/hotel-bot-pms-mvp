@@ -1,13 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   api,
   type DiningZone,
   type RestaurantAddOn,
-  type RestaurantDateRate,
   type RestaurantSettings,
 } from '@/lib/api';
+import { RestaurantCalendarPanel } from '@/components/RestaurantCalendarPanel';
 
 type Section = 'zones' | 'calendar' | 'addons' | 'settings';
 
@@ -36,34 +36,6 @@ function formatCop(amount: number) {
   }).format(amount);
 }
 
-function monthRange(date: Date): { from: string; to: string; label: string } {
-  const year = date.getFullYear();
-  const month = date.getMonth();
-  const from = new Date(year, month, 1);
-  const to = new Date(year, month + 1, 0);
-  const label = from.toLocaleDateString('es-CO', { month: 'long', year: 'numeric' });
-  return {
-    from: from.toISOString().slice(0, 10),
-    to: to.toISOString().slice(0, 10),
-    label,
-  };
-}
-
-function buildCalendarDays(monthDate: Date): Array<{ date: string; day: number } | null> {
-  const year = monthDate.getFullYear();
-  const month = monthDate.getMonth();
-  const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const cells: Array<{ date: string; day: number } | null> = [];
-
-  for (let i = 0; i < firstDay; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) {
-    const date = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    cells.push({ date, day: d });
-  }
-  return cells;
-}
-
 export function RestaurantInventoryPanel() {
   const [section, setSection] = useState<Section>('zones');
   const [message, setMessage] = useState('');
@@ -72,17 +44,6 @@ export function RestaurantInventoryPanel() {
   const [zones, setZones] = useState<DiningZone[]>([]);
   const [addons, setAddons] = useState<RestaurantAddOn[]>([]);
   const [settings, setSettings] = useState<RestaurantSettings | null>(null);
-  const [rates, setRates] = useState<RestaurantDateRate[]>([]);
-
-  const [monthDate, setMonthDate] = useState(() => new Date());
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [rateForm, setRateForm] = useState({
-    closed: false,
-    label: '',
-    reservation_fee_override: '',
-    price_per_guest_override: '',
-    dining_zone_id: '',
-  });
 
   const [zoneForm, setZoneForm] = useState(emptyZone);
   const [editingZoneId, setEditingZoneId] = useState<string | null>(null);
@@ -99,31 +60,17 @@ export function RestaurantInventoryPanel() {
     max_covers_per_slot: '',
   });
 
-  const monthMeta = useMemo(() => monthRange(monthDate), [monthDate]);
-  const calendarDays = useMemo(() => buildCalendarDays(monthDate), [monthDate]);
-  const ratesByDate = useMemo(() => {
-    const map = new Map<string, RestaurantDateRate[]>();
-    for (const rate of rates) {
-      const list = map.get(rate.date) ?? [];
-      list.push(rate);
-      map.set(rate.date, list);
-    }
-    return map;
-  }, [rates]);
-
   const loadAll = useCallback(async () => {
     setLoading(true);
     try {
-      const [z, a, s, c] = await Promise.all([
+      const [z, a, s] = await Promise.all([
         api.listRestaurantZones(),
         api.listRestaurantAddOns(),
         api.getRestaurantSettings(),
-        api.listRestaurantCalendar({ from: monthMeta.from, to: monthMeta.to }),
       ]);
       setZones(z);
       setAddons(a);
       setSettings(s);
-      setRates(c);
       setSettingsForm({
         require_payment: s.require_payment,
         post_payment_message: s.post_payment_message,
@@ -138,11 +85,20 @@ export function RestaurantInventoryPanel() {
     } finally {
       setLoading(false);
     }
-  }, [monthMeta.from, monthMeta.to]);
+  }, []);
 
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  const refreshSettings = useCallback(async () => {
+    try {
+      const s = await api.getRestaurantSettings();
+      setSettings(s);
+    } catch {
+      setMessage('Error actualizando configuración');
+    }
+  }, []);
 
   async function saveZone(e: React.FormEvent) {
     e.preventDefault();
@@ -217,50 +173,6 @@ export function RestaurantInventoryPanel() {
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Error al guardar configuración');
     }
-  }
-
-  async function saveDateRate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!selectedDate) return;
-    setMessage('');
-    try {
-      await api.upsertRestaurantCalendar({
-        date: selectedDate,
-        dining_zone_id: rateForm.dining_zone_id || null,
-        closed: rateForm.closed,
-        label: rateForm.label || undefined,
-        reservation_fee_override: rateForm.reservation_fee_override
-          ? Number(rateForm.reservation_fee_override)
-          : null,
-        price_per_guest_override: rateForm.price_per_guest_override
-          ? Number(rateForm.price_per_guest_override)
-          : null,
-      });
-      setMessage(`Tarifa guardada para ${selectedDate}.`);
-      await loadAll();
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Error al guardar tarifa');
-    }
-  }
-
-  function openDateEditor(date: string) {
-    setSelectedDate(date);
-    const dayRates = ratesByDate.get(date) ?? [];
-    const global = dayRates.find((r) => !r.dining_zone_id);
-    setRateForm({
-      closed: global?.closed ?? false,
-      label: global?.label ?? '',
-      reservation_fee_override:
-        global?.reservation_fee_override != null
-          ? String(global.reservation_fee_override)
-          : '',
-      price_per_guest_override:
-        global?.price_per_guest_override != null
-          ? String(global.price_per_guest_override)
-          : '',
-      dining_zone_id: '',
-    });
-    setSection('calendar');
   }
 
   if (loading && !settings) {
@@ -471,152 +383,13 @@ export function RestaurantInventoryPanel() {
         </>
       )}
 
-      {section === 'calendar' && (
-        <div className="panel">
-          <div className="panel-header-row">
-            <h3>Calendario de tarifas — {monthMeta.label}</h3>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() =>
-                  setMonthDate(new Date(monthDate.getFullYear(), monthDate.getMonth() - 1, 1))
-                }
-              >
-                ← Anterior
-              </button>
-              <button
-                type="button"
-                className="btn-secondary"
-                onClick={() =>
-                  setMonthDate(new Date(monthDate.getFullYear(), monthDate.getMonth() + 1, 1))
-                }
-              >
-                Siguiente →
-              </button>
-            </div>
-          </div>
-          <p className="muted">
-            Haz clic en un día para definir tarifas especiales, cerrar el servicio o marcar
-            temporadas altas. Sin override se usan las tarifas base de cada zona.
-          </p>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(7, 1fr)',
-              gap: '0.35rem',
-              marginTop: '1rem',
-            }}
-          >
-            {['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'].map((d) => (
-              <div key={d} className="muted" style={{ textAlign: 'center', fontSize: '0.8rem' }}>
-                {d}
-              </div>
-            ))}
-            {calendarDays.map((cell, idx) => {
-              if (!cell) return <div key={`empty-${idx}`} />;
-              const dayRates = ratesByDate.get(cell.date) ?? [];
-              const global = dayRates.find((r) => !r.dining_zone_id);
-              const isSelected = selectedDate === cell.date;
-              return (
-                <button
-                  key={cell.date}
-                  type="button"
-                  onClick={() => openDateEditor(cell.date)}
-                  style={{
-                    minHeight: '72px',
-                    padding: '0.35rem',
-                    border: isSelected ? '2px solid var(--accent, #2563eb)' : '1px solid #ddd',
-                    borderRadius: '8px',
-                    background: global?.closed ? '#fee2e2' : global ? '#fef9c3' : '#fff',
-                    cursor: 'pointer',
-                    textAlign: 'left',
-                  }}
-                >
-                  <div style={{ fontWeight: 600 }}>{cell.day}</div>
-                  {global?.label && (
-                    <div style={{ fontSize: '0.7rem', color: '#854d0e' }}>{global.label}</div>
-                  )}
-                  {global?.price_per_guest_override != null && (
-                    <div style={{ fontSize: '0.7rem' }}>
-                      {formatCop(global.price_per_guest_override)}/pax
-                    </div>
-                  )}
-                  {global?.closed && (
-                    <div style={{ fontSize: '0.7rem', color: '#b91c1c' }}>Cerrado</div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          {selectedDate && (
-            <form className="form-panel" onSubmit={saveDateRate} style={{ marginTop: '1.5rem' }}>
-              <h4>Tarifa para {selectedDate}</h4>
-              <label>
-                Alcance
-                <select
-                  value={rateForm.dining_zone_id}
-                  onChange={(e) => setRateForm({ ...rateForm, dining_zone_id: e.target.value })}
-                >
-                  <option value="">Todo el restaurante</option>
-                  {zones.map((z) => (
-                    <option key={z.id} value={z.id}>
-                      {z.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <input
-                  type="checkbox"
-                  checked={rateForm.closed}
-                  onChange={(e) => setRateForm({ ...rateForm, closed: e.target.checked })}
-                />
-                Cerrado este día
-              </label>
-              {!rateForm.closed && (
-                <>
-                  <label>
-                    Etiqueta (ej: Temporada alta)
-                    <input
-                      value={rateForm.label}
-                      onChange={(e) => setRateForm({ ...rateForm, label: e.target.value })}
-                    />
-                  </label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    <label>
-                      Fee reserva override (COP)
-                      <input
-                        type="number"
-                        min={0}
-                        value={rateForm.reservation_fee_override}
-                        onChange={(e) =>
-                          setRateForm({ ...rateForm, reservation_fee_override: e.target.value })
-                        }
-                      />
-                    </label>
-                    <label>
-                      Precio / persona override (COP)
-                      <input
-                        type="number"
-                        min={0}
-                        value={rateForm.price_per_guest_override}
-                        onChange={(e) =>
-                          setRateForm({ ...rateForm, price_per_guest_override: e.target.value })
-                        }
-                      />
-                    </label>
-                  </div>
-                </>
-              )}
-              <button type="submit" className="btn-primary">
-                Guardar día
-              </button>
-            </form>
-          )}
-        </div>
+      {section === 'calendar' && settings && (
+        <RestaurantCalendarPanel
+          zones={zones}
+          settings={settings}
+          onSettingsSaved={refreshSettings}
+          onMessage={(msg, isError) => setMessage(isError ? `Error: ${msg}` : msg)}
+        />
       )}
 
       {section === 'addons' && (

@@ -262,6 +262,8 @@ model RestaurantSettings {
   maxCoversPerSlot        Int?     @map("max_covers_per_slot")
   advanceBookingDays      Int      @default(60) @map("advance_booking_days")
   minAdvanceHours         Int      @default(2) @map("min_advance_hours")
+  defaultReservationFee   Float    @default(0) @map("default_reservation_fee")
+  defaultPricePerGuest    Float    @default(0) @map("default_price_per_guest")
   serviceHoursJson        Json?    @map("service_hours_json")
   createdAt               DateTime @default(now()) @map("created_at")
   updatedAt               DateTime @updatedAt @map("updated_at")
