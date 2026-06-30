@@ -11,6 +11,9 @@ export interface ReservationListFilters {
   outcome?: ReservationOutcome;
   from?: string;
   to?: string;
+  booking_from?: string;
+  booking_to?: string;
+  booking_kind?: string;
   page?: number;
   limit?: number;
 }
@@ -40,8 +43,16 @@ export class ReservationsService {
     hotelId: string;
     whatsappSessionId: string;
     status: string;
+    bookingKind: string;
     roomTypeId: string | null;
     roomName: string | null;
+    diningZoneId: string | null;
+    diningZoneName: string | null;
+    bookingDate: string | null;
+    bookingTime: string | null;
+    partySize: number | null;
+    occasionType: string | null;
+    specialRequests: string | null;
     checkIn: string | null;
     checkOut: string | null;
     adults: number | null;
@@ -63,8 +74,16 @@ export class ReservationsService {
       whatsapp_session_id: row.whatsappSessionId,
       status: row.status,
       outcome,
+      booking_kind: row.bookingKind,
       room_type_id: row.roomTypeId,
       room_name: row.roomName,
+      dining_zone_id: row.diningZoneId,
+      dining_zone_name: row.diningZoneName,
+      booking_date: row.bookingDate,
+      booking_time: row.bookingTime,
+      party_size: row.partySize,
+      occasion_type: row.occasionType,
+      special_requests: row.specialRequests,
       check_in: row.checkIn,
       check_out: row.checkOut,
       adults: row.adults,
@@ -84,6 +103,13 @@ export class ReservationsService {
     };
   }
 
+  private parseBookingDateRange(from?: string, to?: string): Prisma.StringFilter | undefined {
+    const filter: Prisma.StringFilter = {};
+    if (from && /^\d{4}-\d{2}-\d{2}$/.test(from)) filter.gte = from;
+    if (to && /^\d{4}-\d{2}-\d{2}$/.test(to)) filter.lte = to;
+    return Object.keys(filter).length ? filter : undefined;
+  }
+
   async listForHotel(hotelId: string, filters: ReservationListFilters = {}) {
     await this.assertHotelExists(hotelId);
 
@@ -92,16 +118,23 @@ export class ReservationsService {
     const skip = (page - 1) * limit;
 
     const createdAt = this.parseDateRange(filters.from, filters.to);
+    const bookingDate = this.parseBookingDateRange(filters.booking_from, filters.booking_to);
     const where: Prisma.ReservationWhereInput = {
       hotelId,
       ...(createdAt && { createdAt }),
+      ...(bookingDate && { bookingDate }),
+      ...(filters.booking_kind && { bookingKind: filters.booking_kind }),
       ...(filters.outcome && buildOutcomeFilter(filters.outcome)),
     };
+
+    const orderBy = bookingDate
+      ? [{ bookingDate: 'asc' as const }, { bookingTime: 'asc' as const }]
+      : [{ createdAt: 'desc' as const }];
 
     const [rows, total] = await Promise.all([
       this.prisma.reservation.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy,
         skip,
         take: limit,
       }),

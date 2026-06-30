@@ -239,6 +239,9 @@ export const api = {
     outcome?: ReservationOutcome;
     from?: string;
     to?: string;
+    booking_from?: string;
+    booking_to?: string;
+    booking_kind?: string;
     page?: number;
     limit?: number;
   }) => {
@@ -246,6 +249,9 @@ export const api = {
     if (params?.outcome) query.set('outcome', params.outcome);
     if (params?.from) query.set('from', params.from);
     if (params?.to) query.set('to', params.to);
+    if (params?.booking_from) query.set('booking_from', params.booking_from);
+    if (params?.booking_to) query.set('booking_to', params.booking_to);
+    if (params?.booking_kind) query.set('booking_kind', params.booking_kind);
     if (params?.page) query.set('page', String(params.page));
     if (params?.limit) query.set('limit', String(params.limit));
     const suffix = query.toString() ? `?${query.toString()}` : '';
@@ -363,6 +369,57 @@ export const api = {
   bulkClearRestaurantCalendar: (data: { dates: string[]; dining_zone_id?: string | null }) =>
     request<{ deleted: number }>('/hotels/me/restaurant/calendar/bulk', {
       method: 'DELETE',
+      body: JSON.stringify(data),
+    }),
+
+  listRestaurantAvailabilitySlots: (date: string, forManual = true) => {
+    const query = new URLSearchParams({ date, for_manual: forManual ? 'true' : 'false' });
+    return request<string[]>(`/hotels/me/restaurant/availability/slots?${query.toString()}`);
+  },
+
+  listRestaurantAvailabilityZones: (params: {
+    date: string;
+    time: string;
+    party_size: number;
+    for_manual?: boolean;
+  }) => {
+    const query = new URLSearchParams({
+      date: params.date,
+      time: params.time,
+      party_size: String(params.party_size),
+      for_manual: params.for_manual === false ? 'false' : 'true',
+    });
+    return request<Array<DiningZone & { quote: RestaurantQuote }>>(
+      `/hotels/me/restaurant/availability/zones?${query.toString()}`,
+    );
+  },
+
+  buildRestaurantQuote: (data: {
+    dining_zone_id: string;
+    date: string;
+    time: string;
+    party_size: number;
+    addon_ids?: string[];
+  }) =>
+    request<RestaurantQuote>('/hotels/me/restaurant/quote', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  createManualRestaurantReservation: (data: {
+    booking_date: string;
+    booking_time: string;
+    party_size: number;
+    dining_zone_id: string;
+    occasion_type: string;
+    guest_first_name: string;
+    guest_last_name?: string;
+    guest_phone?: string;
+    special_requests?: string;
+    addon_ids?: string[];
+  }) =>
+    request<ManualRestaurantReservationResult>('/hotels/me/restaurant/reservations', {
+      method: 'POST',
       body: JSON.stringify(data),
     }),
 };
@@ -515,8 +572,16 @@ export interface ReservationHistoryItem {
   whatsapp_session_id: string;
   status: string;
   outcome: ReservationOutcome;
+  booking_kind?: string;
   room_type_id: string | null;
   room_name: string | null;
+  dining_zone_id?: string | null;
+  dining_zone_name?: string | null;
+  booking_date?: string | null;
+  booking_time?: string | null;
+  party_size?: number | null;
+  occasion_type?: string | null;
+  special_requests?: string | null;
   check_in: string | null;
   check_out: string | null;
   adults: number | null;
@@ -533,6 +598,34 @@ export interface ReservationHistoryItem {
   };
   created_at: string;
   updated_at: string;
+}
+
+export interface RestaurantQuote {
+  reservation_fee: number;
+  price_per_guest: number;
+  party_size: number;
+  addons_total: number;
+  total: number;
+  currency: string;
+  rate_label?: string | null;
+}
+
+export interface ManualRestaurantReservationResult {
+  id: string;
+  status: string;
+  outcome: ReservationOutcome;
+  booking_date: string | null;
+  booking_time: string | null;
+  party_size: number | null;
+  dining_zone_name: string | null;
+  guest: {
+    first_name: string | null;
+    last_name: string | null;
+    full_name: string | null;
+    whatsapp: string | null;
+  };
+  total_amount: number | null;
+  currency: string | null;
 }
 
 export interface ReservationHistoryResponse {

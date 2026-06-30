@@ -12,11 +12,15 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RestaurantInventoryService } from './restaurant-inventory.service';
+import { RestaurantReservationService } from './restaurant-reservation.service';
 
 @Controller('hotels/me/restaurant')
 @UseGuards(JwtAuthGuard)
 export class RestaurantController {
-  constructor(private readonly restaurant: RestaurantInventoryService) {}
+  constructor(
+    private readonly restaurant: RestaurantInventoryService,
+    private readonly reservations: RestaurantReservationService,
+  ) {}
 
   @Get('settings')
   getSettings(@Req() req: { user: { hotelId: string } }) {
@@ -106,5 +110,46 @@ export class RestaurantController {
   @Delete('calendar/:id')
   deleteCalendar(@Req() req: { user: { hotelId: string } }, @Param('id') id: string) {
     return this.restaurant.deleteDateRate(req.user.hotelId, id);
+  }
+
+  @Get('availability/slots')
+  listAvailabilitySlots(
+    @Req() req: { user: { hotelId: string } },
+    @Query('date') date: string,
+    @Query('for_manual') forManual?: string,
+  ) {
+    return this.restaurant.getAvailableTimeSlots(req.user.hotelId, date, {
+      forManual: forManual === 'true' || forManual === '1',
+    });
+  }
+
+  @Get('availability/zones')
+  listAvailabilityZones(
+    @Req() req: { user: { hotelId: string } },
+    @Query('date') date: string,
+    @Query('time') time: string,
+    @Query('party_size') partySize: string,
+    @Query('for_manual') forManual?: string,
+  ) {
+    return this.restaurant.getAvailableZones(
+      req.user.hotelId,
+      date,
+      time,
+      parseInt(partySize, 10),
+      { forManual: forManual === 'true' || forManual === '1' },
+    );
+  }
+
+  @Post('quote')
+  buildQuote(@Req() req: { user: { hotelId: string } }, @Body() body: never) {
+    return this.restaurant.buildQuote(req.user.hotelId, body);
+  }
+
+  @Post('reservations')
+  createManualReservation(
+    @Req() req: { user: { hotelId: string } },
+    @Body() body: never,
+  ) {
+    return this.reservations.createManualReservation(req.user.hotelId, body);
   }
 }

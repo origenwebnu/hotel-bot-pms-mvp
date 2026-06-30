@@ -334,9 +334,11 @@ export class RestaurantInventoryService {
     return { ok: true };
   }
 
-  async getAvailableTimeSlots(hotelId: string, date: string) {
+  async getAvailableTimeSlots(hotelId: string, date: string, options?: { forManual?: boolean }) {
     const settings = await this.ensureSettings(hotelId);
-    this.assertBookableDate(settings, date);
+    if (!options?.forManual) {
+      this.assertBookableDate(settings, date);
+    }
 
     const hours = getServiceHoursForDate(
       date,
@@ -356,8 +358,8 @@ export class RestaurantInventoryService {
 
     const available: string[] = [];
     for (const time of allSlots) {
-      if (await this.isSlotOpen(hotelId, date, time, settings)) {
-        available.push(time);
+      if (await this.isSlotOpen(hotelId, date, time, settings, options?.forManual)) {
+        available.push(time);(time);
       }
     }
     return available;
@@ -368,6 +370,7 @@ export class RestaurantInventoryService {
     date: string,
     time: string,
     partySize: number,
+    options?: { forManual?: boolean },
   ) {
     const zones = await this.prisma.diningZone.findMany({
       where: { hotelId, isActive: true },
@@ -442,8 +445,9 @@ export class RestaurantInventoryService {
     date: string,
     time: string,
     partySize: number,
+    options?: { forManual?: boolean },
   ) {
-    const zones = await this.getAvailableZones(hotelId, date, time, partySize);
+    const zones = await this.getAvailableZones(hotelId, date, time, partySize, options);
     if (!zones.some((z) => z.id === zoneId)) {
       throw new BadRequestException('No hay disponibilidad para esa zona y horario');
     }
@@ -454,11 +458,14 @@ export class RestaurantInventoryService {
     date: string,
     time: string,
     settings: Awaited<ReturnType<typeof this.ensureSettings>>,
+    forManual = false,
   ) {
     const now = new Date();
     const slotStart = new Date(`${date}T${time}:00`);
-    const minAdvanceMs = settings.minAdvanceHours * 60 * 60 * 1000;
-    if (slotStart.getTime() - now.getTime() < minAdvanceMs) return false;
+    if (!forManual) {
+      const minAdvanceMs = settings.minAdvanceHours * 60 * 60 * 1000;
+      if (slotStart.getTime() - now.getTime() < minAdvanceMs) return false;
+    }
 
     if (settings.maxCoversPerSlot != null) {
       const covers = await this.sumCoversInSlot(hotelId, date, time);

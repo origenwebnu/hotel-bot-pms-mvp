@@ -35,6 +35,7 @@ import { RestaurantInventoryPanel } from '@/components/RestaurantInventoryPanel'
 import { ChatSimulator } from '@/components/ChatSimulator';
 import { DashboardOverviewPanel } from '@/components/DashboardOverviewPanel';
 import { ReservationsHistoryPanel } from '@/components/ReservationsHistoryPanel';
+import { RestaurantReservationsPanel } from '@/components/RestaurantReservationsPanel';
 import { MyAccountPanel } from '@/components/MyAccountPanel';
 import { BusinessOnboardingPanel } from '@/components/BusinessOnboardingPanel';
 
@@ -94,7 +95,11 @@ function DashboardPageContent() {
       outcome?: 'approved' | 'rejected' | 'pending';
       from?: string;
       to?: string;
+      booking_from?: string;
+      booking_to?: string;
+      booking_kind?: string;
       page?: number;
+      limit?: number;
     }) => api.listReservations(params),
     [],
   );
@@ -171,11 +176,11 @@ function DashboardPageContent() {
           {showHotelBooking && <DashboardOverviewPanel loadStats={loadStats} />}
         </>
       )}
-      {tab === 'reservations' && (showHotelBooking || showRestaurantBooking) && (
-        <ReservationsHistoryPanel
-          title={showRestaurantBooking ? 'Historial de reservas de mesa' : undefined}
-          loadReservations={loadReservations}
-        />
+      {tab === 'reservations' && showHotelBooking && (
+        <ReservationsHistoryPanel loadReservations={loadReservations} />
+      )}
+      {tab === 'reservations' && showRestaurantBooking && (
+        <RestaurantReservationsPanel loadReservations={loadReservations} />
       )}
       {tab === 'integration-whatsapp' && (
         <WhatsAppPanel
