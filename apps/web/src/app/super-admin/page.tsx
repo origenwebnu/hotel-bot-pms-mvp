@@ -12,6 +12,7 @@ import {
 } from '@/lib/super-admin-api';
 import { clearAuthSession } from '@/lib/api-core';
 import { SuperAdminReservationsPanel } from '@/components/SuperAdminReservationsPanel';
+import { SubscriptionBillingAdminPanel } from '@/components/SubscriptionBillingAdminPanel';
 import { AppShell } from '@/components/AppShell';
 import { SUPER_ADMIN_NAV, SUPER_ADMIN_TAB_TITLES, buildSuperAdminPath, parseSuperAdminTab, type SuperAdminTab } from '@/lib/app-shell-nav';
 
@@ -119,7 +120,10 @@ function SuperAdminPageContent() {
         <AdminsPanel admins={admins} onRefresh={() => loadData('admins')} />
       )}
       {tab === 'settings' && (
-        <SettingsPanel settings={settings} onSaved={(s) => setSettings(s)} />
+        <div className="admin-content">
+          <SettingsPanel settings={settings} onSaved={(s) => setSettings(s)} />
+          <SubscriptionBillingAdminPanel />
+        </div>
       )}
 
       <style jsx>{`

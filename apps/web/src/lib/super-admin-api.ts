@@ -109,6 +109,24 @@ export const superAdminApi = {
       body: JSON.stringify({ reset_trial: true }),
     }),
 
+  getBillingConfig: () =>
+    request<PlatformBillingConfig>('/super-admin/billing/config'),
+
+  updateBillingConfig: (data: {
+    mercadopago_access_token?: string;
+    mercadopago_public_key?: string;
+  }) =>
+    request<PlatformBillingConfig>('/super-admin/billing/config', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  validateBillingConfig: () =>
+    request<{ valid: boolean; reason?: string; user_id?: string }>(
+      '/super-admin/billing/config/validate',
+      { method: 'POST' },
+    ),
+
   getHotelReservationStats: (
     hotelId: string,
     params?: { from?: string; to?: string },
@@ -250,4 +268,14 @@ export interface PlatformAdminUser {
   role: string;
   is_active: boolean;
   created_at: string;
+}
+
+export interface PlatformBillingConfig {
+  provider: 'mercadopago';
+  configured: boolean;
+  has_access_token: boolean;
+  has_public_key: boolean;
+  access_token_hint: string | null;
+  public_key_hint: string | null;
+  webhook_url: string;
 }
