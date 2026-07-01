@@ -15,6 +15,7 @@ export interface PaymentReceiptContext {
   booking_date_label?: string | null;
   booking_time?: string | null;
   party_size?: number | null;
+  special_requests?: string | null;
 }
 
 function resolveVertical(
@@ -52,6 +53,9 @@ export function buildPaymentSummaryRows(
     }
     if (ctx.dining_zone_name) {
       rows.push({ label: 'Mesa / zona', value: ctx.dining_zone_name });
+    }
+    if (ctx.special_requests?.trim()) {
+      rows.push({ label: 'Petición especial', value: ctx.special_requests.trim() });
     }
     return rows;
   }

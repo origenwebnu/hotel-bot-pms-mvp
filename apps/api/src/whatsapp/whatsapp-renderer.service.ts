@@ -636,24 +636,73 @@ export class WhatsAppRendererService {
         },
       };
     }
+
+    const sections = this.buildTimeSlotSections(slots);
+
     return {
       type: 'list',
       header: { type: 'text', text: 'Horarios disponibles' },
-      body: { text: `Elige la hora para el *${formatDisplayDate(date)}*:` },
+      body: {
+        text:
+          `Elige la hora para el *${formatDisplayDate(date)}*:\n` +
+          `(${slots.length} horario${slots.length !== 1 ? 's' : ''} disponible${slots.length !== 1 ? 's' : ''})`,
+      },
       action: {
         button: 'Ver horarios',
-        sections: [
-          {
-            title: 'Horarios',
-            rows: slots.slice(0, MAX_LIST_MESSAGE_ROWS).map((t) => ({
-              id: `rest_time_${t.replace(':', '')}`,
-              title: t,
-              description: 'Disponible',
-            })),
-          },
-        ],
+        sections,
       },
     };
+  }
+
+  private buildTimeSlotSections(slots: string[]) {
+    const maxPerSection = MAX_LIST_MESSAGE_ROWS;
+    const buckets: Array<{ title: string; slots: string[] }> = [
+      { title: 'Mañana', slots: [] },
+      { title: 'Tarde', slots: [] },
+      { title: 'Noche', slots: [] },
+    ];
+
+    for (const time of slots) {
+      const [h] = time.split(':').map(Number);
+      if (h < 12) buckets[0].slots.push(time);
+      else if (h < 17) buckets[1].slots.push(time);
+      else buckets[2].slots.push(time);
+    }
+
+    const sections: WhatsAppListMessage['action']['sections'] = [];
+    for (const bucket of buckets) {
+      if (!bucket.slots.length) continue;
+      for (let i = 0; i < bucket.slots.length; i += maxPerSection) {
+        const chunk = bucket.slots.slice(i, i + maxPerSection);
+        const pageSuffix =
+          bucket.slots.length > maxPerSection
+            ? ` (${Math.floor(i / maxPerSection) + 1})`
+            : '';
+        sections.push({
+          title: `${bucket.title}${pageSuffix}`.slice(0, 24),
+          rows: chunk.map((t) => ({
+            id: `rest_time_${t.replace(':', '')}`,
+            title: t,
+            description: 'Disponible',
+          })),
+        });
+      }
+    }
+
+    if (!sections.length) {
+      return [
+        {
+          title: 'Horarios',
+          rows: slots.slice(0, maxPerSection).map((t) => ({
+            id: `rest_time_${t.replace(':', '')}`,
+            title: t,
+            description: 'Disponible',
+          })),
+        },
+      ];
+    }
+
+    return sections.slice(0, 10);
   }
 
   renderRestaurantZoneList(
@@ -784,6 +833,7 @@ export class WhatsAppRendererService {
     total: number;
     currency: string;
     requiresPayment: boolean;
+    specialRequests?: string | null;
     summaryFooterMessage?: string;
     summaryFooterLink?: string;
   }): WhatsAppButtonMessage {
@@ -795,6 +845,10 @@ export class WhatsAppRendererService {
       `👥 ${data.partySize} persona${data.partySize > 1 ? 's' : ''}\n` +
       `🎉 ${data.occasionLabel}\n` +
       `👤 ${data.guestName}\n`;
+
+    if (data.specialRequests?.trim()) {
+      body += `\n📝 *Petición:* ${data.specialRequests.trim()}\n`;
+    }
 
     body += `\n💵 *Valor reserva:* ${data.currency} ${data.reservationTotal.toLocaleString('es-CO')}`;
 
@@ -844,6 +898,7 @@ export class WhatsAppRendererService {
     amount: number;
     currency: string;
     holdMinutes?: number;
+    specialRequests?: string | null;
   }): WhatsAppTextMessage {
     let body =
       `🧾 *RECIBO DE RESERVA*\n` +
@@ -861,8 +916,14 @@ export class WhatsAppRendererService {
       `📅 *Fecha:* ${formatDisplayDate(data.date)}\n` +
       `🕐 *Hora:* ${data.time}\n` +
       `👥 *Personas:* ${data.partySize}\n` +
-      `🎉 *Motivo:* ${data.occasionLabel}\n\n` +
-      `━━━━━━━━━━━━━━━━━━━━\n` +
+      `🎉 *Motivo:* ${data.occasionLabel}\n`;
+
+    if (data.specialRequests?.trim()) {
+      body += `\n📝 *Petición especial:* ${data.specialRequests.trim()}\n`;
+    }
+
+    body +=
+      `\n━━━━━━━━━━━━━━━━━━━━\n` +
       `💰 *TOTAL A PAGAR:* ${data.currency} ${data.amount.toLocaleString('es-CO')}\n` +
       `━━━━━━━━━━━━━━━━━━━━`;
 
@@ -882,6 +943,7 @@ export class WhatsAppRendererService {
     partySize: number;
     postPaymentMessage?: string | null;
     postPaymentLink?: string | null;
+    specialRequests?: string | null;
   }): WhatsAppTextMessage {
     let body =
       `🎉 *¡Reserva confirmada, ${data.guestName}!*\n\n` +
@@ -889,6 +951,10 @@ export class WhatsAppRendererService {
       `📅 ${formatDisplayDate(data.date)} · 🕐 ${data.time}\n` +
       `👥 ${data.partySize} persona${data.partySize > 1 ? 's' : ''}\n` +
       `🔖 Ref: *${data.reservationRef}*`;
+
+    if (data.specialRequests?.trim()) {
+      body += `\n\n📝 *Petición:* ${data.specialRequests.trim()}`;
+    }
 
     if (data.postPaymentMessage?.trim()) {
       body += `\n\n📋 *Indicaciones:*\n${data.postPaymentMessage.trim()}`;

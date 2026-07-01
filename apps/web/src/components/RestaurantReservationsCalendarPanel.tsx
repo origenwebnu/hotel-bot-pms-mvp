@@ -421,6 +421,9 @@ export function RestaurantReservationsCalendarPanel() {
                 <div className="res-card-meta">
                   {r.party_size} pax · {r.dining_zone_name ?? 'Mesa'}
                 </div>
+                {r.special_requests && (
+                  <div className="res-card-requests">{r.special_requests}</div>
+                )}
                 {r.total_amount != null && (
                   <div className="res-card-total">
                     {formatCop(r.total_amount, r.currency ?? 'COP')}
@@ -692,6 +695,12 @@ export function RestaurantReservationsCalendarPanel() {
           font-size: 0.85rem;
           color: var(--text-muted);
           margin-top: 0.15rem;
+        }
+        .res-card-requests {
+          margin-top: 0.35rem;
+          font-size: 0.82rem;
+          color: #0369a1;
+          line-height: 1.35;
         }
         .res-card-total {
           font-size: 0.85rem;

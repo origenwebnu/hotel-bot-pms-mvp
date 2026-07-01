@@ -5,10 +5,13 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import {
+  RESTAURANT_OCCASION_LABELS,
   RESTAURANT_OCCASIONS,
+  formatDisplayDate,
   type RestaurantAddOnSelection,
   type RestaurantOccasion,
 } from '@hotel-bot/shared';
+import { EmailService } from '../email/email.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionLimitError } from '../subscription/subscription.errors';
@@ -35,6 +38,7 @@ export class RestaurantReservationService {
     private readonly prisma: PrismaService,
     private readonly inventory: RestaurantInventoryService,
     private readonly subscription: SubscriptionService,
+    private readonly email: EmailService,
   ) {}
 
   async createManualReservation(hotelId: string, body: CreateManualReservationInput) {
@@ -118,6 +122,35 @@ export class RestaurantReservationService {
     });
 
     await this.subscription.recordBillableReservation(hotelId, reservation.id);
+
+    const settings = await this.inventory.getSettings(hotelId);
+    const emailTo = settings.notification_email?.trim();
+    if (emailTo) {
+      const hotel = await this.prisma.hotel.findUnique({
+        where: { id: hotelId },
+        select: { name: true },
+      });
+      const occasion =
+        RESTAURANT_OCCASION_LABELS[body.occasion_type as RestaurantOccasion] ??
+        body.occasion_type;
+      await this.email.sendRestaurantReservationNotification(emailTo, {
+        restaurantName: hotel?.name ?? 'Restaurante',
+        guestName: [reservation.guestFirstName, reservation.guestLastName]
+          .filter(Boolean)
+          .join(' '),
+        guestPhone: reservation.guestPhone,
+        dateLabel: reservation.bookingDate
+          ? formatDisplayDate(reservation.bookingDate)
+          : body.booking_date,
+        time: reservation.bookingTime ?? body.booking_time,
+        partySize: reservation.partySize ?? body.party_size,
+        zoneName: reservation.diningZoneName ?? zone.name,
+        occasionLabel: occasion,
+        totalLabel: `${reservation.currency ?? 'COP'} ${(reservation.totalAmount ?? 0).toLocaleString('es-CO')}`,
+        specialRequests: reservation.specialRequests,
+        receiptUrl: null,
+      });
+    }
 
     return {
       id: reservation.id,

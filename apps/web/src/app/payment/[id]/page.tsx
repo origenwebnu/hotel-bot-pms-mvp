@@ -28,6 +28,7 @@ type CheckoutData = {
   currency: string | null;
   guest_name: string;
   guest_email: string | null;
+  special_requests?: string | null;
   payment_provider: string;
   payment_provider_url: string | null;
   epayco_session_id: string | null;
@@ -154,6 +155,7 @@ function PaymentCheckoutContent() {
             booking_date_label: data.booking_date_label,
             booking_time: data.booking_time,
             party_size: data.party_size,
+            special_requests: data.special_requests,
           }}
         >
           {data.discount_percent && data.original_amount ? (

@@ -126,6 +126,7 @@ export class PublicPaymentController {
         : null,
       guest_name: guestName,
       guest_email: reservation.guestEmail,
+      special_requests: reservation.specialRequests,
       guests: (reservation.adults ?? 0) + (reservation.children ?? 0),
       original_amount: reservation.originalAmount,
       discount_percent: reservation.discountPercent,
