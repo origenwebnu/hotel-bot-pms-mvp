@@ -4,8 +4,12 @@ import {
   DEFAULT_ROOM_HOLD_TTL_MINUTES,
   RESTAURANT_OCCASION_LABELS,
   WHATSAPP_BUTTON_IDS,
+  matchTimeToAvailableSlot,
   parseGuestCountryCode,
+  parsePartySizeFromText,
   parseRestaurantBookingDate,
+  parseRestaurantBookingIntent,
+  parseRestaurantBookingTime,
   wantsWhatsAppSessionReset,
   type RestaurantAddOnSelection,
   type RestaurantOccasion,
@@ -110,15 +114,10 @@ export class RestaurantBookingFlowService {
         return;
 
       case 'rest_collecting_date':
-        return this.handleDateInput(hotelId, session, text);
+        return this.handleDateInput(hotelId, session, text, business);
 
       case 'rest_collecting_time':
-        await this.whatsapp.sendText(
-          hotelId,
-          session.whatsappPhone,
-          'Elige un horario de la lista que te enviamos, o escribe *menu* para cancelar.',
-        );
-        return;
+        return this.handleTimeInput(hotelId, session, text, business);
 
       case 'rest_collecting_party':
         return this.handlePartyInput(hotelId, session, text);
@@ -360,7 +359,7 @@ export class RestaurantBookingFlowService {
     sessionId: string,
     phone: string,
     initialText?: string,
-  ) {
+  ): Promise<void> {
     const zones = await this.inventory.listZones(hotelId);
     const activeZones = zones.filter((z) => z.is_active);
     if (!activeZones.length) {
@@ -374,33 +373,34 @@ export class RestaurantBookingFlowService {
 
     await this.resetRestaurantSession(sessionId);
 
-    const embeddedDate = initialText ? parseRestaurantBookingDate(initialText) : undefined;
-    const embeddedParty = initialText ? this.parsePartySize(initialText) : undefined;
+    const intent = initialText ? parseRestaurantBookingIntent(initialText) : {};
 
-    if (embeddedDate) {
-      await this.updateSession(sessionId, { state: 'rest_collecting_date' });
-      return this.handleDateInput(hotelId, { id: sessionId, whatsappPhone: phone }, embeddedDate);
+    if (intent.date || intent.time || intent.partySize) {
+      await this.updateSession(sessionId, {
+        state: 'rest_collecting_date',
+        ...(intent.partySize ? { partySize: intent.partySize } : {}),
+      });
+      if (intent.date) {
+        return this.handleDateInput(
+          hotelId,
+          { id: sessionId, whatsappPhone: phone },
+          initialText!,
+        );
+      }
+      if (intent.partySize) {
+        await this.whatsapp.sendText(
+          hotelId,
+          phone,
+          `¡Perfecto! 📅 Anoté *${intent.partySize}* persona${intent.partySize > 1 ? 's' : ''}. ` +
+            '¿Para qué *fecha* y a qué *hora*?\n\n' +
+            'Ejemplo: *domingo 8pm* o *28 de junio 20:00*',
+        );
+        return;
+      }
     }
 
-    await this.updateSession(sessionId, {
-      state: embeddedParty ? 'rest_collecting_party' : 'rest_collecting_date',
-      ...(embeddedParty ? { partySize: embeddedParty } : {}),
-    });
-
-    if (embeddedParty) {
-      await this.whatsapp.sendText(
-        hotelId,
-        phone,
-        `¡Perfecto! 📅 Anoté *${embeddedParty}* persona${embeddedParty > 1 ? 's' : ''}. ¿Para qué *fecha* quieres reservar?\n\nEjemplos: *28 de junio*, *2026-06-28* o *mañana*`,
-      );
-      return;
-    }
-
-    await this.whatsapp.sendText(
-      hotelId,
-      phone,
-      '¡Perfecto! 📅 ¿Para qué *fecha* quieres reservar?\n\nEjemplos: *28 de junio*, *2026-06-28* o *mañana*',
-    );
+    await this.updateSession(sessionId, { state: 'rest_collecting_date' });
+    await this.whatsapp.sendText(hotelId, phone, this.buildCombinedBookingPrompt());
   }
 
   private async handleRatesQuery(hotelId: string, phone: string, text: string) {
@@ -488,17 +488,78 @@ export class RestaurantBookingFlowService {
     return date.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
   }
 
+  private buildCombinedBookingPrompt(): string {
+    return (
+      '¡Perfecto! 📅 Cuéntame los detalles de tu reserva (puedes enviarlos en *un solo mensaje*):\n\n' +
+      '• *Fecha* — ej: domingo, 28 de junio, mañana\n' +
+      '• *Hora* — ej: 20:00, 8pm\n' +
+      '• *Personas* — ej: 4 personas\n\n' +
+      'Ejemplo: *domingo 8pm 4 personas*'
+    );
+  }
+
+  private buildTimePrompt(slots: string[]): string {
+    if (!slots.length) return 'No hay horarios disponibles.';
+    const first = slots[0];
+    const last = slots[slots.length - 1];
+    const examples =
+      slots.length <= 3
+        ? slots.join(', ')
+        : `${slots[0]}, ${slots[Math.floor(slots.length / 2)]}, ${slots[slots.length - 1]}`;
+    return (
+      `¿A qué *hora*?\n\n` +
+      `Horarios disponibles: *${first}* – *${last}*\n` +
+      `Ejemplos: ${examples}`
+    );
+  }
+
+  private async resolveTimeInput(
+    hotelId: string,
+    date: string,
+    text: string,
+  ): Promise<{ time: string; snapped: boolean } | { error: string }> {
+    const slots = await this.inventory.getAvailableTimeSlots(hotelId, date);
+    if (!slots.length) {
+      return {
+        error: `No hay horarios disponibles para el *${this.formatDisplayDate(date)}*.`,
+      };
+    }
+
+    const requested = parseRestaurantBookingTime(text);
+    if (!requested) {
+      return {
+        error:
+          `No entendí la hora.\n\n${this.buildTimePrompt(slots)}\n\n` +
+          'También puedes incluir fecha y personas: *domingo 8pm 4 personas*',
+      };
+    }
+
+    const { slot, snapped } = matchTimeToAvailableSlot(requested, slots);
+    if (!slot) {
+      return {
+        error:
+          `El horario *${requested}* no está disponible.\n\n${this.buildTimePrompt(slots)}`,
+      };
+    }
+
+    return { time: slot, snapped };
+  }
+
   private async handleDateInput(
     hotelId: string,
     session: { id: string; whatsappPhone: string },
     text: string,
-  ) {
-    const date = parseRestaurantBookingDate(text);
+    business: { name: string; vertical: 'restaurant' } = { name: '', vertical: 'restaurant' },
+  ): Promise<void> {
+    const intent = parseRestaurantBookingIntent(text);
+    const date = intent.date;
+
     if (!date) {
       await this.whatsapp.sendText(
         hotelId,
         session.whatsappPhone,
-        'No entendí la fecha. Prueba: *domingo*, *28 de junio*, *2026-06-28* o *mañana*',
+        'No entendí la fecha. Prueba: *domingo*, *28 de junio*, *mañana*\n\n' +
+          'También puedes escribir todo junto: *domingo 8pm 4 personas*',
       );
       return;
     }
@@ -509,24 +570,153 @@ export class RestaurantBookingFlowService {
         await this.whatsapp.sendText(
           hotelId,
           session.whatsappPhone,
-          `No hay disponibilidad para el *${date}*. Prueba otra fecha.`,
+          `No hay disponibilidad para el *${this.formatDisplayDate(date)}*. Prueba otra fecha.`,
+        );
+        return;
+      }
+
+      const sessionPatch: {
+        bookingDate: string;
+        bookingTime?: string;
+        partySize?: number;
+        state?: RestaurantState;
+      } = { bookingDate: date };
+
+      if (intent.partySize) {
+        sessionPatch.partySize = intent.partySize;
+      }
+
+      if (intent.time) {
+        const { slot, snapped } = matchTimeToAvailableSlot(intent.time, slots);
+        if (!slot) {
+          await this.updateSession(session.id, {
+            ...sessionPatch,
+            state: 'rest_collecting_time',
+          });
+          const partyNote = intent.partySize
+            ? ` Anoté *${intent.partySize}* persona${intent.partySize > 1 ? 's' : ''}.`
+            : '';
+          await this.whatsapp.sendText(
+            hotelId,
+            session.whatsappPhone,
+            `Fecha *${this.formatDisplayDate(date)}* anotada.${partyNote} El horario *${intent.time}* no está disponible.\n\n${this.buildTimePrompt(slots)}`,
+          );
+          return;
+        }
+
+        sessionPatch.bookingTime = slot;
+        await this.updateSession(session.id, sessionPatch);
+
+        if (snapped) {
+          await this.whatsapp.sendText(
+            hotelId,
+            session.whatsappPhone,
+            `Usamos *${slot}* (el horario disponible más cercano a ${intent.time}).`,
+          );
+        } else {
+          const parts = [`Fecha *${this.formatDisplayDate(date)}*`, `horario *${slot}*`];
+          if (intent.partySize) {
+            parts.push(`*${intent.partySize}* persona${intent.partySize > 1 ? 's' : ''}`);
+          }
+          await this.whatsapp.sendText(
+            hotelId,
+            session.whatsappPhone,
+            `¡Perfecto! ${parts.join(', ')} anotado${intent.partySize ? 's' : ''}.`,
+          );
+        }
+
+        if (intent.partySize) {
+          return this.proceedToZoneSelection(hotelId, session, business);
+        }
+
+        await this.updateSession(session.id, { state: 'rest_collecting_party' });
+        await this.whatsapp.sendText(
+          hotelId,
+          session.whatsappPhone,
+          `Horario *${slot}* seleccionado. ¿Cuántas *personas* serán? (ej: *4* o *4 personas*)`,
         );
         return;
       }
 
       await this.updateSession(session.id, {
-        bookingDate: date,
+        ...sessionPatch,
         state: 'rest_collecting_time',
       });
 
-      const msg = this.renderer.renderRestaurantTimeList(date, slots);
-      if (msg.type === 'text') {
-        await this.whatsapp.sendText(hotelId, session.whatsappPhone, msg.text.body);
-      } else {
-        await this.whatsapp.sendInteractive(hotelId, session.whatsappPhone, msg);
-      }
+      const intro = intent.partySize
+        ? `¡Perfecto! Fecha *${this.formatDisplayDate(date)}* y *${intent.partySize}* persona${intent.partySize > 1 ? 's' : ''} anotado${intent.partySize > 1 ? 's' : ''}.`
+        : `Fecha *${this.formatDisplayDate(date)}* anotada.`;
+
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        `${intro}\n\n${this.buildTimePrompt(slots)}`,
+      );
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Fecha no válida';
+      await this.whatsapp.sendText(hotelId, session.whatsappPhone, message);
+    }
+  }
+
+  private async handleTimeInput(
+    hotelId: string,
+    session: { id: string; whatsappPhone: string },
+    text: string,
+    business: { name: string; vertical: 'restaurant' } = { name: '', vertical: 'restaurant' },
+  ): Promise<void> {
+    const full = await this.getSession(session.id);
+    if (!full.bookingDate) {
+      await this.updateSession(session.id, { state: 'rest_collecting_date' });
+      return this.handleDateInput(hotelId, session, text, business);
+    }
+
+    const intent = parseRestaurantBookingIntent(text);
+    if (intent.date && intent.date !== full.bookingDate) {
+      return this.handleDateInput(hotelId, session, text, business);
+    }
+
+    try {
+      const resolved = await this.resolveTimeInput(hotelId, full.bookingDate, text);
+      if ('error' in resolved) {
+        await this.whatsapp.sendText(hotelId, session.whatsappPhone, resolved.error);
+        return;
+      }
+
+      const { time, snapped } = resolved;
+      const sessionPatch: { bookingTime: string; partySize?: number } = { bookingTime: time };
+      if (intent.partySize) {
+        sessionPatch.partySize = intent.partySize;
+      }
+
+      await this.updateSession(session.id, sessionPatch);
+
+      if (snapped) {
+        await this.whatsapp.sendText(
+          hotelId,
+          session.whatsappPhone,
+          `Usamos *${time}* (el horario disponible más cercano).`,
+        );
+      } else {
+        await this.whatsapp.sendText(
+          hotelId,
+          session.whatsappPhone,
+          `Horario *${time}* seleccionado.`,
+        );
+      }
+
+      const updated = await this.getSession(session.id);
+      if (updated.partySize) {
+        return this.proceedToZoneSelection(hotelId, session, business);
+      }
+
+      await this.updateSession(session.id, { state: 'rest_collecting_party' });
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        '¿Cuántas *personas* serán? (ej: *4* o *4 personas*)',
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Horario no válido';
       await this.whatsapp.sendText(hotelId, session.whatsappPhone, message);
     }
   }
@@ -633,6 +823,10 @@ export class RestaurantBookingFlowService {
     }
 
     if (/\b(horario|hora)\b/.test(normalized)) {
+      const parsedTime = parseRestaurantBookingTime(text);
+      if (parsedTime) {
+        return this.applyBookingTimeValue(hotelId, session, parsedTime, business);
+      }
       return this.applyBookingTimeChange(hotelId, session);
     }
 
@@ -668,6 +862,14 @@ export class RestaurantBookingFlowService {
       return this.applyBookingDateChange(hotelId, session, parsedDate);
     }
 
+    const parsedTime = parseRestaurantBookingTime(text);
+    if (parsedTime) {
+      const full = await this.getSession(session.id);
+      if (full.bookingDate) {
+        return this.applyBookingTimeValue(hotelId, session, parsedTime, business);
+      }
+    }
+
     if (this.wantsBookingChange(normalized)) {
       await this.whatsapp.sendText(
         hotelId,
@@ -675,7 +877,7 @@ export class RestaurantBookingFlowService {
         '¿Qué deseas modificar?\n\n' +
           '• *Fecha* — escribe la nueva fecha (ej: *domingo*)\n' +
           '• *Personas* — escribe la cantidad (ej: *4 personas*)\n' +
-          '• *Horario* — escribe *horario*\n' +
+          '• *Horario* — escribe la hora (ej: *20:00* o *8pm*)\n' +
           '• *Extras* — escribe *extras*\n' +
           '• *Zona* — escribe *zona*\n' +
           '• *Quitar extras* — escribe *quitar extras*\n\n' +
@@ -732,17 +934,11 @@ export class RestaurantBookingFlowService {
         state: 'rest_collecting_time',
       });
 
-      const msg = this.renderer.renderRestaurantTimeList(date, slots);
       await this.whatsapp.sendText(
         hotelId,
         session.whatsappPhone,
-        `Actualizamos la fecha a *${this.formatDisplayDate(date)}*. Elige un nuevo horario:`,
+        `Actualizamos la fecha a *${this.formatDisplayDate(date)}*.\n\n${this.buildTimePrompt(slots)}`,
       );
-      if (msg.type === 'text') {
-        await this.whatsapp.sendText(hotelId, session.whatsappPhone, msg.text.body);
-      } else {
-        await this.whatsapp.sendInteractive(hotelId, session.whatsappPhone, msg);
-      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Fecha no válida';
       await this.whatsapp.sendText(hotelId, session.whatsappPhone, message);
@@ -780,16 +976,117 @@ export class RestaurantBookingFlowService {
       state: 'rest_collecting_time',
     });
 
-    const msg = this.renderer.renderRestaurantTimeList(full.bookingDate, slots);
     await this.whatsapp.sendText(
       hotelId,
       session.whatsappPhone,
-      'Elige un nuevo *horario* para tu reserva:',
+      `Escribe el nuevo *horario* para *${this.formatDisplayDate(full.bookingDate)}*:\n\n${this.buildTimePrompt(slots)}`,
     );
-    if (msg.type === 'text') {
-      await this.whatsapp.sendText(hotelId, session.whatsappPhone, msg.text.body);
-    } else {
-      await this.whatsapp.sendInteractive(hotelId, session.whatsappPhone, msg);
+  }
+
+  private async applyBookingTimeValue(
+    hotelId: string,
+    session: { id: string; whatsappPhone: string },
+    requestedTime: string,
+    business: { name: string; vertical: 'restaurant' },
+  ) {
+    const full = await this.getSession(session.id);
+    if (!full.bookingDate) {
+      return this.applyBookingTimeChange(hotelId, session);
+    }
+
+    try {
+      const slots = await this.inventory.getAvailableTimeSlots(hotelId, full.bookingDate);
+      const { slot, snapped } = matchTimeToAvailableSlot(requestedTime, slots);
+      if (!slot) {
+        await this.whatsapp.sendText(
+          hotelId,
+          session.whatsappPhone,
+          `El horario *${requestedTime}* no está disponible.\n\n${this.buildTimePrompt(slots)}`,
+        );
+        return;
+      }
+
+      if (full.partySize) {
+        const zones = await this.inventory.getAvailableZones(
+          hotelId,
+          full.bookingDate,
+          slot,
+          full.partySize,
+        );
+
+        if (!zones.length) {
+          await this.whatsapp.sendText(
+            hotelId,
+            session.whatsappPhone,
+            `No hay disponibilidad para *${full.partySize}* persona${full.partySize > 1 ? 's' : ''} a las *${slot}*. Prueba otro horario.`,
+          );
+          return;
+        }
+
+        const zoneStillValid =
+          full.selectedDiningZoneId &&
+          zones.some((z) => z.id === full.selectedDiningZoneId);
+
+        await this.updateSession(session.id, {
+          bookingTime: slot,
+          selectedDiningZoneId: zoneStillValid ? full.selectedDiningZoneId : null,
+          state: zoneStillValid ? 'rest_confirming' : 'rest_selecting_zone',
+        });
+
+        if (snapped) {
+          await this.whatsapp.sendText(
+            hotelId,
+            session.whatsappPhone,
+            `Usamos *${slot}* (el horario disponible más cercano a ${requestedTime}).`,
+          );
+        }
+
+        if (zoneStillValid) {
+          await this.whatsapp.sendText(
+            hotelId,
+            session.whatsappPhone,
+            'Actualizamos el horario. Revisa el resumen:',
+          );
+          await this.sendConfirmSummary(hotelId, session.id, session.whatsappPhone, business.name);
+          return;
+        }
+
+        const msg = this.renderer.renderRestaurantZoneList(zones);
+        await this.whatsapp.sendText(
+          hotelId,
+          session.whatsappPhone,
+          `Horario *${slot}* actualizado. Elige la zona:`,
+        );
+        if (msg.type === 'text') {
+          await this.whatsapp.sendText(hotelId, session.whatsappPhone, msg.text.body);
+        } else {
+          await this.whatsapp.sendInteractive(hotelId, session.whatsappPhone, msg);
+        }
+        return;
+      }
+
+      await this.updateSession(session.id, { bookingTime: slot, state: 'rest_collecting_party' });
+      if (snapped) {
+        await this.whatsapp.sendText(
+          hotelId,
+          session.whatsappPhone,
+          `Usamos *${slot}* (el horario disponible más cercano).`,
+        );
+      } else {
+        await this.whatsapp.sendText(
+          hotelId,
+          session.whatsappPhone,
+          `Horario *${slot}* actualizado.`,
+        );
+      }
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        '¿Cuántas *personas* serán? (ej: *4* o *4 personas*)',
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Horario no válido';
+      await this.whatsapp.sendText(hotelId, session.whatsappPhone, message);
     }
   }
 
@@ -1006,7 +1303,7 @@ export class RestaurantBookingFlowService {
     hotelId: string,
     session: { id: string; whatsappPhone: string },
     business: { name: string; vertical: 'restaurant' },
-  ) {
+  ): Promise<void> {
     const full = await this.getSession(session.id);
     if (!full.bookingDate || !full.bookingTime || !full.partySize) {
       return this.startBooking(hotelId, session.id, session.whatsappPhone);
@@ -1594,22 +1891,13 @@ export class RestaurantBookingFlowService {
   }
 
   private parsePartySize(text: string): number | undefined {
+    const fromText = parsePartySizeFromText(text);
+    if (fromText) return fromText;
     const bare = text.trim().match(/^(\d+)$/);
     if (bare) {
       const n = parseInt(bare[1], 10);
       if (n > 0 && n < 100) return n;
     }
-    const paraMatch = text.match(/(?:para|de)\s+(\d+)(?:\s*(?:personas?|pax|comensales?))?/i);
-    if (paraMatch) {
-      const n = parseInt(paraMatch[1], 10);
-      if (n > 0 && n < 100) return n;
-    }
-    const match = text.match(/(\d+)\s*(?:personas?|pax|comensales?)/i);
-    if (match) {
-      const n = parseInt(match[1], 10);
-      if (n > 0 && n < 100) return n;
-    }
-    if (/pareja/i.test(text)) return 2;
     return undefined;
   }
 
