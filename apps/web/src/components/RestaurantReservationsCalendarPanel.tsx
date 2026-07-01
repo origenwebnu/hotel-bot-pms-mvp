@@ -21,6 +21,17 @@ function formatCop(amount: number, currency = 'COP') {
   }).format(amount);
 }
 
+function formatPhone(phone: string) {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length === 10) {
+    return `+57 ${digits.slice(0, 3)} ${digits.slice(3, 6)} ${digits.slice(6)}`;
+  }
+  if (digits.length > 10) {
+    return `+${digits}`;
+  }
+  return phone;
+}
+
 function monthRange(date: Date) {
   const year = date.getFullYear();
   const month = date.getMonth();
@@ -404,6 +415,9 @@ export function RestaurantReservationsCalendarPanel() {
               <div key={r.id} className="res-card">
                 <div className="res-card-time">{r.booking_time}</div>
                 <div className="res-card-guest">{r.guest.full_name ?? 'Sin nombre'}</div>
+                {r.guest.whatsapp && (
+                  <div className="res-card-phone">{formatPhone(r.guest.whatsapp)}</div>
+                )}
                 <div className="res-card-meta">
                   {r.party_size} pax · {r.dining_zone_name ?? 'Mesa'}
                 </div>
@@ -668,6 +682,11 @@ export function RestaurantReservationsCalendarPanel() {
         .res-card-guest {
           font-weight: 600;
           margin-top: 0.15rem;
+        }
+        .res-card-phone {
+          font-size: 0.85rem;
+          color: var(--text-muted);
+          margin-top: 0.1rem;
         }
         .res-card-meta {
           font-size: 0.85rem;
