@@ -718,31 +718,53 @@ export class WhatsAppRendererService {
     };
   }
 
-  renderRestaurantAddOnList(
-    addons: Array<{ id: string; name: string; price: number; currency: string }>,
-  ): WhatsAppButtonMessage | WhatsAppTextMessage {
-    if (!addons.length) {
-      return {
-        type: 'text',
-        text: { body: 'Continuemos con tus datos para confirmar la reserva.' },
-      };
-    }
-    const lines = addons
-      .slice(0, 5)
-      .map((a) => `• ${a.name} — ${a.currency} ${a.price.toLocaleString('es-CO')}`)
-      .join('\n');
+  renderRestaurantAddOnPrompt(): WhatsAppButtonMessage {
     return {
       type: 'button',
       body: {
         text:
-          `¿Deseas agregar algo especial?\n\n${lines}\n\n` +
-          `Responde con el nombre del adicional o pulsa *Continuar sin extras*.`,
+          '¿Deseas agregar algo especial a tu reserva?\n\n' +
+          'Puedes elegir un adicional de la lista o continuar sin extras.',
       },
       action: {
         buttons: [
           {
             type: 'reply',
-            reply: { id: WHATSAPP_BUTTON_IDS.REST_SKIP_ADDONS, title: 'Continuar sin extras' },
+            reply: { id: WHATSAPP_BUTTON_IDS.REST_WANT_ADDONS, title: 'Quiero adicionales' },
+          },
+          {
+            type: 'reply',
+            reply: { id: WHATSAPP_BUTTON_IDS.REST_SKIP_ADDONS, title: 'Reservar' },
+          },
+        ],
+      },
+    };
+  }
+
+  renderRestaurantAddOnPickerList(
+    addons: Array<{ id: string; name: string; price: number; currency: string }>,
+  ): WhatsAppListMessage | WhatsAppTextMessage {
+    if (!addons.length) {
+      return {
+        type: 'text',
+        text: { body: 'No hay adicionales disponibles. Continuemos con tus datos.' },
+      };
+    }
+
+    return {
+      type: 'list',
+      header: { type: 'text', text: 'Adicionales' },
+      body: { text: 'Elige un adicional para tu reserva:' },
+      action: {
+        button: 'Ver adicionales',
+        sections: [
+          {
+            title: 'Disponibles',
+            rows: addons.slice(0, MAX_LIST_MESSAGE_ROWS).map((a) => ({
+              id: `rest_addon_${a.id}`,
+              title: sanitizeWhatsAppText(a.name, 24),
+              description: `${a.currency} ${a.price.toLocaleString('es-CO')}`,
+            })),
           },
         ],
       },
@@ -756,11 +778,14 @@ export class WhatsAppRendererService {
     zoneName: string;
     partySize: number;
     occasionLabel: string;
-    addonsSummary: string;
+    reservationTotal: number;
+    addons: Array<{ name: string; price: number }>;
     guestName: string;
     total: number;
     currency: string;
     requiresPayment: boolean;
+    summaryFooterMessage?: string;
+    summaryFooterLink?: string;
   }): WhatsAppButtonMessage {
     let body =
       `📋 *Resumen de tu reserva*\n\n` +
@@ -771,16 +796,25 @@ export class WhatsAppRendererService {
       `🎉 ${data.occasionLabel}\n` +
       `👤 ${data.guestName}\n`;
 
-    if (data.addonsSummary) {
-      body += `\n✨ *Extras:* ${data.addonsSummary}\n`;
+    body += `\n💵 *Valor reserva:* ${data.currency} ${data.reservationTotal.toLocaleString('es-CO')}`;
+
+    for (const addon of data.addons) {
+      body += `\n✨ *Extra (${addon.name}):* ${data.currency} ${addon.price.toLocaleString('es-CO')}`;
     }
 
-    body += `\n💰 *Total:* ${data.currency} ${data.total.toLocaleString('es-CO')}`;
+    body += `\n\n💰 *Total:* ${data.currency} ${data.total.toLocaleString('es-CO')}`;
 
     if (!data.requiresPayment || data.total <= 0) {
       body += `\n\n✅ Esta reserva *no requiere pago* anticipado.`;
     } else {
       body += `\n\n💳 Al confirmar, recibirás el link de pago.`;
+    }
+
+    if (data.summaryFooterMessage?.trim()) {
+      body += `\n\n📋 ${data.summaryFooterMessage.trim()}`;
+    }
+    if (data.summaryFooterLink?.trim()) {
+      body += `\n\n🔗 ${data.summaryFooterLink.trim()}`;
     }
 
     return {

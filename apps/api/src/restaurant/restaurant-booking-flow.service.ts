@@ -138,7 +138,12 @@ export class RestaurantBookingFlowService {
         return;
 
       case 'rest_selecting_addons':
-        return this.handleAddOnInput(hotelId, session, text);
+        await this.whatsapp.sendText(
+          hotelId,
+          session.whatsappPhone,
+          'Usa los botones del mensaje anterior: *Quiero adicionales* para ver la lista, o *Reservar* para continuar sin extras.',
+        );
+        return;
 
       case 'rest_collecting_guest_info':
         return this.handleGuestInfoInput(hotelId, session, text, business);
@@ -208,6 +213,30 @@ export class RestaurantBookingFlowService {
         session.whatsappPhone,
         'Perfecto. Comparte tu *nombre y apellido*.\n\nSi tienes alguna petición especial (decoración, alergias, etc.), inclúyela en el mismo mensaje.',
       );
+      return;
+    }
+
+    if (buttonId === WHATSAPP_BUTTON_IDS.REST_WANT_ADDONS) {
+      const addons = await this.inventory.listAddOns(hotelId);
+      const active = addons.filter((a) => a.is_active);
+      if (!active.length) {
+        await this.updateSession(session.id, {
+          selectedAddOnsJson: [],
+          state: 'rest_collecting_guest_info',
+        });
+        await this.whatsapp.sendText(
+          hotelId,
+          session.whatsappPhone,
+          'No hay adicionales disponibles. Comparte tu *nombre y apellido* para continuar.',
+        );
+        return;
+      }
+      const msg = this.renderer.renderRestaurantAddOnPickerList(active);
+      if (msg.type === 'text') {
+        await this.whatsapp.sendText(hotelId, session.whatsappPhone, msg.text.body);
+      } else {
+        await this.whatsapp.sendInteractive(hotelId, session.whatsappPhone, msg);
+      }
       return;
     }
 
@@ -289,18 +318,49 @@ export class RestaurantBookingFlowService {
       });
       const addons = await this.inventory.listAddOns(hotelId);
       const active = addons.filter((a) => a.is_active);
-      const msg = this.renderer.renderRestaurantAddOnList(active);
-      if (msg.type === 'text') {
-        await this.whatsapp.sendText(hotelId, session.whatsappPhone, msg.text.body);
+      if (!active.length) {
         await this.updateSession(session.id, { state: 'rest_collecting_guest_info' });
         await this.whatsapp.sendText(
           hotelId,
           session.whatsappPhone,
           'Comparte tu *nombre y apellido*. Si tienes alguna petición especial, inclúyela en el mismo mensaje.',
         );
-      } else {
-        await this.whatsapp.sendInteractive(hotelId, session.whatsappPhone, msg);
+        return;
       }
+      await this.whatsapp.sendInteractive(
+        hotelId,
+        session.whatsappPhone,
+        this.renderer.renderRestaurantAddOnPrompt(),
+      );
+      return;
+    }
+
+    if (listId.startsWith('rest_addon_')) {
+      const addonId = listId.replace('rest_addon_', '');
+      const addons = await this.inventory.listAddOns(hotelId);
+      const match = addons.find((a) => a.id === addonId && a.is_active);
+      if (!match) {
+        await this.whatsapp.sendText(
+          hotelId,
+          session.whatsappPhone,
+          'Ese adicional ya no está disponible. Pulsa *Quiero adicionales* para ver la lista actualizada.',
+        );
+        return;
+      }
+
+      const selection: RestaurantAddOnSelection[] = [
+        { id: match.id, name: match.name, price: match.price, quantity: 1 },
+      ];
+
+      await this.updateSession(session.id, {
+        selectedAddOnsJson: selection,
+        state: 'rest_collecting_guest_info',
+      });
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        `Agregamos *${match.name}*. Ahora comparte tu *nombre y apellido* (y peticiones especiales si las tienes).`,
+      );
     }
   }
 
@@ -529,40 +589,6 @@ export class RestaurantBookingFlowService {
     }
   }
 
-  private async handleAddOnInput(
-    hotelId: string,
-    session: { id: string; whatsappPhone: string },
-    text: string,
-  ) {
-    const addons = await this.inventory.listAddOns(hotelId);
-    const active = addons.filter((a) => a.is_active);
-    const normalized = text.trim().toLowerCase();
-    const match = active.find((a) => a.name.toLowerCase().includes(normalized));
-
-    if (!match) {
-      await this.whatsapp.sendText(
-        hotelId,
-        session.whatsappPhone,
-        'No encontré ese adicional. Escribe el nombre exacto o pulsa *Continuar sin extras*.',
-      );
-      return;
-    }
-
-    const selection: RestaurantAddOnSelection[] = [
-      { id: match.id, name: match.name, price: match.price, quantity: 1 },
-    ];
-
-    await this.updateSession(session.id, {
-      selectedAddOnsJson: selection,
-      state: 'rest_collecting_guest_info',
-    });
-    await this.whatsapp.sendText(
-      hotelId,
-      session.whatsappPhone,
-      `Agregamos *${match.name}*. Ahora comparte tu *nombre y apellido* (y peticiones especiales si las tienes).`,
-    );
-  }
-
   private async handleGuestInfoInput(
     hotelId: string,
     session: { id: string; whatsappPhone: string },
@@ -616,7 +642,8 @@ export class RestaurantBookingFlowService {
     }
 
     const settings = await this.inventory.getSettings(hotelId);
-    const addonIds = this.getSelectedAddOnIds(full.selectedAddOnsJson);
+    const selectedAddons = this.getSelectedAddOns(full.selectedAddOnsJson);
+    const addonIds = selectedAddons.map((a) => a.id);
     const quote = await this.inventory.buildQuote(hotelId, {
       dining_zone_id: full.selectedDiningZoneId,
       date: full.bookingDate,
@@ -630,12 +657,11 @@ export class RestaurantBookingFlowService {
     const occasion =
       RESTAURANT_OCCASION_LABELS[full.occasionType as RestaurantOccasion] ??
       full.occasionType;
-    const addonsSummary = quote.addons_total
-      ? `${quote.currency} ${quote.addons_total.toLocaleString('es-CO')}`
-      : '';
 
     const guestName = [ctx.guestFirstName, ctx.guestLastName].filter(Boolean).join(' ');
     const requiresPayment = settings.require_payment && quote.total > 0;
+    const reservationTotal =
+      quote.reservation_fee + quote.price_per_guest * quote.party_size;
 
     const msg = this.renderer.renderRestaurantConfirmSummary({
       businessName,
@@ -644,11 +670,14 @@ export class RestaurantBookingFlowService {
       zoneName: zone?.name ?? 'Mesa',
       partySize: full.partySize,
       occasionLabel: occasion,
-      addonsSummary,
+      reservationTotal,
+      addons: selectedAddons.map((a) => ({ name: a.name, price: a.price * a.quantity })),
       guestName,
       total: quote.total,
       currency: quote.currency,
       requiresPayment,
+      summaryFooterMessage: settings.summary_footer_message,
+      summaryFooterLink: settings.summary_footer_link,
     });
 
     await this.whatsapp.sendInteractive(hotelId, phone, msg);

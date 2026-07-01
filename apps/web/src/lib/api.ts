@@ -727,6 +727,8 @@ export interface RestaurantSettings {
   require_payment: boolean;
   post_payment_message: string;
   post_payment_link: string;
+  summary_footer_message: string;
+  summary_footer_link: string;
   slot_interval_minutes: number;
   default_duration_minutes: number;
   max_covers_per_slot: number | null;

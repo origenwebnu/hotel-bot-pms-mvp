@@ -19,6 +19,7 @@ export const WHATSAPP_BUTTON_IDS = {
   NEW_BOOKING: 'btn_new_booking',
   VIEW_PHOTOS: 'btn_view_photos',
   REST_SKIP_ADDONS: 'btn_rest_skip_addons',
+  REST_WANT_ADDONS: 'btn_rest_want_addons',
   REST_CONFIRM_BOOKING: 'btn_rest_confirm_booking',
 } as const;
 

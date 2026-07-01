@@ -38,6 +38,8 @@ export class RestaurantInventoryService {
       require_payment: boolean;
       post_payment_message: string;
       post_payment_link: string;
+      summary_footer_message: string;
+      summary_footer_link: string;
       slot_interval_minutes: number;
       default_duration_minutes: number;
       max_covers_per_slot: number | null;
@@ -60,6 +62,12 @@ export class RestaurantInventoryService {
         }),
         ...(data.post_payment_link !== undefined && {
           postPaymentLink: data.post_payment_link.trim() || null,
+        }),
+        ...(data.summary_footer_message !== undefined && {
+          summaryFooterMessage: data.summary_footer_message.trim() || null,
+        }),
+        ...(data.summary_footer_link !== undefined && {
+          summaryFooterLink: data.summary_footer_link.trim() || null,
         }),
         ...(data.slot_interval_minutes !== undefined && {
           slotIntervalMinutes: data.slot_interval_minutes,
@@ -645,6 +653,8 @@ export class RestaurantInventoryService {
     requirePayment: boolean;
     postPaymentMessage: string | null;
     postPaymentLink: string | null;
+    summaryFooterMessage: string | null;
+    summaryFooterLink: string | null;
     slotIntervalMinutes: number;
     defaultDurationMinutes: number;
     maxCoversPerSlot: number | null;
@@ -658,6 +668,8 @@ export class RestaurantInventoryService {
       require_payment: s.requirePayment,
       post_payment_message: s.postPaymentMessage ?? '',
       post_payment_link: s.postPaymentLink ?? '',
+      summary_footer_message: s.summaryFooterMessage ?? '',
+      summary_footer_link: s.summaryFooterLink ?? '',
       slot_interval_minutes: s.slotIntervalMinutes,
       default_duration_minutes: s.defaultDurationMinutes,
       max_covers_per_slot: s.maxCoversPerSlot,
