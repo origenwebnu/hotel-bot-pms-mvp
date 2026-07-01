@@ -13,3 +13,4 @@ export * from './types/discount';
 export * from './utils/discount';
 export * from './utils/restaurant';
 export * from './utils/whatsapp-text';
+export * from './utils/payment-receipt';

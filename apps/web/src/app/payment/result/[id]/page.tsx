@@ -2,14 +2,27 @@
 
 import { useEffect, useState, Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
+import {
+  paymentApprovedThanks,
+  paymentFailureHint,
+  paymentRecommendationsTitle,
+  resolvePaymentVertical,
+} from '@hotel-bot/shared';
+import { PaymentReservationSummary } from '@/components/PaymentReservationSummary';
 
 type PaymentStatus = {
   reservation_id: string;
   payment_status: string;
   status: string;
   payment_event_id: string | null;
+  booking_kind?: string | null;
+  business_vertical?: string | null;
   hotel_name: string;
   room_name: string | null;
+  dining_zone_name?: string | null;
+  booking_date_label?: string | null;
+  booking_time?: string | null;
+  party_size?: number | null;
   check_in_label: string | null;
   check_out_label: string | null;
   guest_name: string;
@@ -94,6 +107,7 @@ function PaymentResultContent() {
 
   const label = statusLabel(data.payment_status);
   const paymentPageUrl = `/payment/${id}?token=${encodeURIComponent(token)}`;
+  const vertical = resolvePaymentVertical(data.business_vertical, data.booking_kind);
 
   return (
     <main className="page">
@@ -113,44 +127,43 @@ function PaymentResultContent() {
               <strong>{data.payment_event_id.slice(-12).toUpperCase()}</strong>
             </div>
           ) : null}
-          <div className="line">
-            <span>Cliente</span>
-            <strong>{data.guest_name}</strong>
-          </div>
-          <div className="line">
-            <span>Habitación</span>
-            <strong>{data.room_name ?? '—'}</strong>
-          </div>
-          <div className="line">
-            <span>Estadía</span>
-            <strong>
-              {data.check_in_label} → {data.check_out_label}
-            </strong>
-          </div>
-          <div className="line">
-            <span>Huéspedes</span>
-            <strong>{data.guests}</strong>
-          </div>
-          {data.discount_percent && data.original_amount ? (
-            <div className="line">
-              <span>Descuento</span>
-              <strong>{data.discount_percent}%</strong>
+          <PaymentReservationSummary
+            variant="receipt"
+            context={{
+              business_vertical: data.business_vertical,
+              booking_kind: data.booking_kind,
+              guest_name: data.guest_name,
+              room_name: data.room_name,
+              check_in_label: data.check_in_label,
+              check_out_label: data.check_out_label,
+              guests: data.guests,
+              dining_zone_name: data.dining_zone_name,
+              booking_date_label: data.booking_date_label,
+              booking_time: data.booking_time,
+              party_size: data.party_size,
+            }}
+          >
+            {data.discount_percent && data.original_amount ? (
+              <div className="row">
+                <span>Descuento</span>
+                <strong>{data.discount_percent}%</strong>
+              </div>
+            ) : null}
+            <div className="total">
+              <span>Total</span>
+              <strong>
+                {data.currency} {(data.amount ?? 0).toLocaleString('es-CO')}
+              </strong>
             </div>
-          ) : null}
-          <div className="total">
-            <span>Total</span>
-            <strong>
-              {data.currency} {(data.amount ?? 0).toLocaleString('es-CO')}
-            </strong>
-          </div>
+          </PaymentReservationSummary>
         </div>
 
         {data.payment_status === 'approved' ? (
           <>
-            <p className="thanks">¡Gracias! Tu reserva está confirmada. También te enviamos el recibo por WhatsApp.</p>
+            <p className="thanks">{paymentApprovedThanks(vertical)}</p>
             {data.recommendations ? (
               <div className="reco">
-                <strong>Recomendaciones para tu estadía</strong>
+                <strong>{paymentRecommendationsTitle(vertical)}</strong>
                 <p>{data.recommendations}</p>
               </div>
             ) : null}
@@ -159,10 +172,7 @@ function PaymentResultContent() {
 
         {data.payment_status === 'declined' || data.payment_status === 'error' ? (
           <>
-            <p className="fail">
-              El pago no se completó. Tu habitación puede seguir reservada por un tiempo limitado.
-              Intenta de nuevo o usa otro método.
-            </p>
+            <p className="fail">{paymentFailureHint(vertical)}</p>
             <a className="retry" href={paymentPageUrl}>
               Volver a pagar
             </a>
