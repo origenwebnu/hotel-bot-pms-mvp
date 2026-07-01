@@ -227,13 +227,30 @@ export class CheckoutService {
       });
     }
 
-    if (!reservation.totalAmount || !reservation.guestEmail) {
+    if (!reservation.totalAmount || reservation.totalAmount <= 0) {
       return {
         reservation,
         paymentReady: false,
         userMessage:
-          '⚠️ No pudimos generar el link de pago (faltan datos de la reserva). Escribe *menu* y vuelve a reservar.',
+          '⚠️ No pudimos generar el link de pago: el monto de la reserva es $0. Configura tarifas en *Inventario* y vuelve a reservar.',
       };
+    }
+
+    const guestEmail = this.resolvePaymentGuestEmail(reservation);
+    if (!guestEmail) {
+      return {
+        reservation,
+        paymentReady: false,
+        userMessage:
+          '⚠️ No pudimos generar el link de pago (faltan datos del comensal). Escribe *menu* y vuelve a reservar.',
+      };
+    }
+
+    if (!reservation.guestEmail) {
+      reservation = await this.prisma.reservation.update({
+        where: { id: reservationId },
+        data: { guestEmail },
+      });
     }
 
     try {
@@ -250,12 +267,12 @@ export class CheckoutService {
       });
 
       const payment = await this.createPaymentLink(hotelId, {
-        amount: reservation.totalAmount,
+        amount: reservation.totalAmount!,
         currency: reservation.currency ?? 'COP',
         reservation_id: reservation.id,
         hold_id: holdId,
         expires_at: expiresAt,
-        guest_email: reservation.guestEmail,
+        guest_email: guestEmail,
         guest_name:
           [reservation.guestFirstName, reservation.guestLastName]
             .filter(Boolean)
@@ -839,6 +856,21 @@ export class CheckoutService {
       webhook_secret: decrypted.webhook_secret,
       customer_id: decrypted.customer_id,
     };
+  }
+
+  /** WhatsApp restaurant flow often has phone but no email; Wompi/Stripe still need one. */
+  resolvePaymentGuestEmail(reservation: {
+    guestEmail?: string | null;
+    guestPhone?: string | null;
+    id: string;
+  }): string | null {
+    const trimmed = reservation.guestEmail?.trim();
+    if (trimmed) return trimmed;
+
+    const phone = reservation.guestPhone?.replace(/\D/g, '');
+    if (phone) return `wa+${phone}@guest.bookichat.com`;
+
+    return `reserva+${reservation.id.slice(-8).toLowerCase()}@guest.bookichat.com`;
   }
 }
 

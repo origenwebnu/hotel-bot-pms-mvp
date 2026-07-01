@@ -640,6 +640,12 @@ export class RestaurantBookingFlowService {
           currency: quote.currency,
           guestFirstName: ctx.guestFirstName,
           guestLastName: ctx.guestLastName ?? ctx.guestFirstName,
+          guestPhone: session.whatsappPhone,
+          guestEmail: this.checkout.resolvePaymentGuestEmail({
+            guestEmail: reservation.guestEmail,
+            guestPhone: session.whatsappPhone,
+            id: reservation.id,
+          }),
           specialRequests: ctx.specialRequests,
           addOnsJson: addonsJson.length ? (addonsJson as object) : Prisma.DbNull,
           holdExpiresAt: requiresPayment
@@ -674,6 +680,10 @@ export class RestaurantBookingFlowService {
           guestFirstName: ctx.guestFirstName,
           guestLastName: ctx.guestLastName ?? ctx.guestFirstName,
           guestPhone: session.whatsappPhone,
+          guestEmail: this.checkout.resolvePaymentGuestEmail({
+            guestPhone: session.whatsappPhone,
+            id: idempotencyKey,
+          }),
           paymentAccessToken,
         },
       });
