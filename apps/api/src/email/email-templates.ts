@@ -106,7 +106,7 @@ export function renderBrandedEmail(options: EmailLayoutOptions): string {
                 BookiChat
               </p>
               <p style="margin:0;font-family:Rubik,Arial,sans-serif;font-size:12px;line-height:1.5;color:${BRAND.textMuted}">
-                Reservas directas para hoteles vía WhatsApp<br>
+                Aplicativo de gestión por WhatsApp - Hecho con amor por Origen Web<br>
                 © ${year} BookiChat
               </p>
             </td>

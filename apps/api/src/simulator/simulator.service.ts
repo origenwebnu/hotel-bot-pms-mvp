@@ -5,7 +5,11 @@ import {
   type BusinessVertical,
   type RestaurantOccasion,
   isBusinessVertical,
+  matchTimeToAvailableSlot,
   parseRestaurantBookingDate,
+  parseRestaurantBookingIntent,
+  parseRestaurantBookingTime,
+  parsePartySizeFromText,
   supportsTransactionalFlow,
 } from '@hotel-bot/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -89,24 +93,35 @@ export class SimulatorService {
         };
       }
       if (business.vertical === 'restaurant') {
-        const embeddedDate = parseRestaurantBookingDate(text);
-        const embeddedParty = this.parsePartySize(text);
-        if (embeddedDate) {
-          const dateStep = await this.handleRestaurantDate(hotelId, embeddedDate, {
-            state: 'rest_collecting_date',
-          });
-          if (embeddedParty && dateStep.session.state === 'rest_collecting_time') {
-            const firstSlot = dateStep.session.pendingTimeSlots?.[0];
-            if (firstSlot) {
-              const withTime = {
+        const intent = parseRestaurantBookingIntent(text);
+        if (intent.date || intent.time || intent.partySize) {
+          if (intent.date) {
+            const dateStep = await this.handleRestaurantDate(hotelId, text, {
+              state: 'rest_collecting_date',
+              ...(intent.partySize ? { partySize: intent.partySize } : {}),
+            });
+            if (
+              intent.partySize &&
+              intent.time &&
+              dateStep.session.bookingDate &&
+              dateStep.session.bookingTime
+            ) {
+              return this.handleRestaurantParty(hotelId, String(intent.partySize), {
                 ...dateStep.session,
-                bookingTime: firstSlot,
-                state: 'rest_collecting_party',
-              };
-              return this.handleRestaurantParty(hotelId, String(embeddedParty), withTime);
+                partySize: intent.partySize,
+              });
             }
+            return dateStep;
           }
-          return dateStep;
+          if (intent.partySize) {
+            return {
+              replies: [
+                `¡Perfecto! Anoté *${intent.partySize}* personas. ¿Para qué *fecha* y a qué *hora*?\n\nEjemplo: *domingo 8pm*`,
+              ],
+              session: { state: 'rest_collecting_date', partySize: intent.partySize },
+              suggestions: ['domingo 8pm', 'mañana 20:00', 'menu'],
+            };
+          }
         }
         return this.startRestaurantBooking(hotelId, business);
       }
@@ -173,10 +188,12 @@ export class SimulatorService {
 
     return {
       replies: [
-        `¡Perfecto! Simulación de reserva en *${business.name}* 📅\n\n¿Para qué *fecha* quieres reservar?\n\nEjemplos: *28 de junio*, *2026-07-15* o *mañana*`,
+        `¡Perfecto! Simulación de reserva en *${business.name}* 📅\n\n` +
+          'Cuéntame *fecha*, *hora* y *personas* en un solo mensaje o paso a paso.\n\n' +
+          'Ejemplo: *domingo 8pm 4 personas*',
       ],
       session: { state: 'rest_collecting_date' },
-      suggestions: ['mañana', '15 de julio', 'menu'],
+      suggestions: ['domingo 8pm 4 personas', 'mañana 20:00', 'menu'],
     };
   }
 
@@ -190,7 +207,7 @@ export class SimulatorService {
       case 'rest_collecting_date':
         return this.handleRestaurantDate(hotelId, text, session);
       case 'rest_collecting_time':
-        return this.handleRestaurantTime(text, session);
+        return this.handleRestaurantTime(hotelId, text, session);
       case 'rest_collecting_party':
         return this.handleRestaurantParty(hotelId, text, session);
       case 'rest_selecting_zone':
@@ -224,12 +241,15 @@ export class SimulatorService {
     text: string,
     session: SimulatorSession,
   ) {
-    const date = parseRestaurantBookingDate(text);
+    const intent = parseRestaurantBookingIntent(text);
+    const date = intent.date ?? parseRestaurantBookingDate(text);
     if (!date) {
       return {
-        replies: ['No entendí la fecha. Prueba: *15 de julio*, *2026-07-15* o *mañana*'],
+        replies: [
+          'No entendí la fecha. Prueba: *domingo*, *15 de julio*, *mañana*\n\nO todo junto: *domingo 8pm 4 personas*',
+        ],
         session,
-        suggestions: ['mañana', '15 de julio'],
+        suggestions: ['domingo 8pm 4 personas', 'mañana', 'menu'],
       };
     }
 
@@ -238,47 +258,150 @@ export class SimulatorService {
       if (!slots.length) {
         return {
           replies: [`No hay horarios disponibles para el *${date}*. Prueba otra fecha.`],
-          session: { state: 'rest_collecting_date' },
+          session: { ...session, state: 'rest_collecting_date' },
           suggestions: ['menu'],
         };
       }
 
-      const visibleSlots = slots.slice(0, 8);
-      const lines = visibleSlots.map((t, i) => `${i + 1}. ${t}`).join('\n');
+      const partySize = intent.partySize ?? session.partySize;
+
+      if (intent.time) {
+        const { slot, snapped } = matchTimeToAvailableSlot(intent.time, slots);
+        if (!slot) {
+          return {
+            replies: [
+              `Fecha *${date}* anotada. El horario *${intent.time}* no está disponible.\n\n${this.buildTimePrompt(slots)}`,
+            ],
+            session: {
+              ...session,
+              bookingDate: date,
+              partySize,
+              state: 'rest_collecting_time',
+              pendingTimeSlots: slots,
+            },
+            suggestions: slots.slice(0, 3),
+          };
+        }
+
+        const snapNote = snapped ? ` (ajustado al más cercano: *${slot}*)` : '';
+        if (partySize) {
+          return this.handleRestaurantParty(hotelId, String(partySize), {
+            ...session,
+            bookingDate: date,
+            bookingTime: slot,
+            partySize,
+            state: 'rest_collecting_party',
+            pendingTimeSlots: undefined,
+          });
+        }
+
+        return {
+          replies: [`Fecha *${date}*, horario *${slot}*${snapNote}. ¿Cuántas *personas* serán?`],
+          session: {
+            ...session,
+            bookingDate: date,
+            bookingTime: slot,
+            state: 'rest_collecting_party',
+            pendingTimeSlots: undefined,
+          },
+          suggestions: ['2', '4 personas', '6 personas'],
+        };
+      }
+
       return {
         replies: [
-          `Horarios disponibles para *${date}*:\n\n${lines}\n\nResponde con la *hora* (ej: *19:30*) o el *número* de la lista.`,
+          partySize
+            ? `Fecha *${date}* y *${partySize}* personas anotadas.\n\n${this.buildTimePrompt(slots)}`
+            : `Fecha *${date}* anotada.\n\n${this.buildTimePrompt(slots)}`,
         ],
         session: {
           ...session,
           bookingDate: date,
+          partySize,
           state: 'rest_collecting_time',
-          pendingTimeSlots: visibleSlots,
+          pendingTimeSlots: slots,
         },
-        suggestions: visibleSlots.slice(0, 3),
+        suggestions: slots.slice(0, 3),
       };
     } catch (error) {
       return {
         replies: [error instanceof Error ? error.message : 'Fecha no válida'],
-        session: { state: 'rest_collecting_date' },
+        session: { ...session, state: 'rest_collecting_date' },
         suggestions: ['menu'],
       };
     }
   }
 
-  private async handleRestaurantTime(text: string, session: SimulatorSession) {
-    const time = this.parseTimeChoice(text, session.pendingTimeSlots);
-    if (!time) {
+  private buildTimePrompt(slots: string[]): string {
+    if (!slots.length) return 'No hay horarios disponibles.';
+    const first = slots[0];
+    const last = slots[slots.length - 1];
+    const examples =
+      slots.length <= 3
+        ? slots.join(', ')
+        : `${slots[0]}, ${slots[Math.floor(slots.length / 2)]}, ${slots[slots.length - 1]}`;
+    return `¿A qué *hora*?\n\nHorarios disponibles: *${first}* – *${last}*\nEjemplos: ${examples}`;
+  }
+
+  private async handleRestaurantTime(
+    hotelId: string,
+    text: string,
+    session: SimulatorSession,
+  ) {
+    if (!session.bookingDate) {
+      return this.handleRestaurantDate(hotelId, text, session);
+    }
+
+    const slots =
+      session.pendingTimeSlots ??
+      (await this.restaurant.getAvailableTimeSlots(hotelId, session.bookingDate));
+
+    const intent = parseRestaurantBookingIntent(text);
+    if (intent.date && intent.date !== session.bookingDate) {
+      return this.handleRestaurantDate(hotelId, text, session);
+    }
+
+    const requested = parseRestaurantBookingTime(text) ?? this.parseTimeChoice(text, slots);
+    if (!requested) {
       return {
-        replies: ['Elige una hora de la lista (ej: *19:30* o *1*)'],
-        session,
-        suggestions: session.pendingTimeSlots?.slice(0, 3) ?? ['19:00', '20:00'],
+        replies: [`No entendí la hora.\n\n${this.buildTimePrompt(slots)}`],
+        session: { ...session, pendingTimeSlots: slots },
+        suggestions: slots.slice(0, 3),
       };
     }
 
+    const { slot, snapped } = matchTimeToAvailableSlot(requested, slots);
+    if (!slot) {
+      return {
+        replies: [
+          `El horario *${requested}* no está disponible.\n\n${this.buildTimePrompt(slots)}`,
+        ],
+        session: { ...session, pendingTimeSlots: slots },
+        suggestions: slots.slice(0, 3),
+      };
+    }
+
+    const partySize = intent.partySize ?? session.partySize;
+    const snapNote = snapped ? ' (ajustado al más cercano)' : '';
+
+    if (partySize) {
+      return this.handleRestaurantParty(hotelId, String(partySize), {
+        ...session,
+        bookingTime: slot,
+        partySize,
+        state: 'rest_collecting_party',
+        pendingTimeSlots: undefined,
+      });
+    }
+
     return {
-      replies: [`Horario *${time}* seleccionado. ¿Cuántas *personas* serán?`],
-      session: { ...session, bookingTime: time, state: 'rest_collecting_party', pendingTimeSlots: undefined },
+      replies: [`Horario *${slot}*${snapNote} seleccionado. ¿Cuántas *personas* serán?`],
+      session: {
+        ...session,
+        bookingTime: slot,
+        state: 'rest_collecting_party',
+        pendingTimeSlots: undefined,
+      },
       suggestions: ['2', '4 personas', '6 personas'],
     };
   }

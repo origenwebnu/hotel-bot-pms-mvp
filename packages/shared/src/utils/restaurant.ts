@@ -209,6 +209,141 @@ export function parseRestaurantBookingDate(text: string): string | undefined {
   return undefined;
 }
 
+function formatTime24(h: number, m: number): string {
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+/** Parse party size from natural language (Spanish). */
+export function parsePartySizeFromText(text: string): number | undefined {
+  const paraMatch = text.match(
+    /(?:para|de|somos|seremos|con)\s+(\d+)(?:\s*(?:personas?|pax|comensales?))?/i,
+  );
+  if (paraMatch) {
+    const n = parseInt(paraMatch[1], 10);
+    if (n > 0 && n < 100) return n;
+  }
+  const match = text.match(/(\d+)\s*(?:personas?|pax|comensales?)/i);
+  if (match) {
+    const n = parseInt(match[1], 10);
+    if (n > 0 && n < 100) return n;
+  }
+  if (/pareja/i.test(text)) return 2;
+  return undefined;
+}
+
+/** Parse a booking time from natural language (Spanish). Returns HH:MM (24h). */
+export function parseRestaurantBookingTime(text: string): string | undefined {
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+  if (/^\d+\s*(personas?|pax|comensales?)$/i.test(text.trim())) return undefined;
+
+  const night = normalized.match(
+    /(?:a\s+las?\s+|hora\s+)?(\d{1,2})(?::([0-5]\d))?\s*(?:de\s+la\s+noche|\s*pm|\s*p\.?\s*m\.?)/,
+  );
+  if (night) {
+    let h = parseInt(night[1], 10);
+    const m = parseInt(night[2] ?? '0', 10);
+    if (h < 12) h += 12;
+    if (h <= 23 && m <= 59) return formatTime24(h, m);
+  }
+
+  const afternoon = normalized.match(
+    /(?:a\s+las?\s+)?(\d{1,2})(?::([0-5]\d))?\s*de\s+la\s+tarde/,
+  );
+  if (afternoon) {
+    let h = parseInt(afternoon[1], 10);
+    const m = parseInt(afternoon[2] ?? '0', 10);
+    if (h >= 1 && h <= 11) h += 12;
+    if (h <= 23 && m <= 59) return formatTime24(h, m);
+  }
+
+  const morning = normalized.match(
+    /(?:a\s+las?\s+)?(\d{1,2})(?::([0-5]\d))?\s*(?:de\s+la\s+manana|\s*am|\s*a\.?\s*m\.?)/,
+  );
+  if (morning) {
+    let h = parseInt(morning[1], 10);
+    const m = parseInt(morning[2] ?? '0', 10);
+    if (h === 12) h = 0;
+    if (h <= 23 && m <= 59) return formatTime24(h, m);
+  }
+
+  const h24 = normalized.match(/\b([01]?\d|2[0-3])[:h.]([0-5]\d)\b/);
+  if (h24) {
+    return formatTime24(parseInt(h24[1], 10), parseInt(h24[2], 10));
+  }
+
+  const compactPm = normalized.match(/\b(\d{1,2})(?::([0-5]\d))?\s*pm\b/);
+  if (compactPm) {
+    let h = parseInt(compactPm[1], 10);
+    const m = parseInt(compactPm[2] ?? '0', 10);
+    if (h < 12) h += 12;
+    return formatTime24(h, m);
+  }
+
+  const compactAm = normalized.match(/\b(\d{1,2})(?::([0-5]\d))?\s*am\b/);
+  if (compactAm) {
+    let h = parseInt(compactAm[1], 10);
+    const m = parseInt(compactAm[2] ?? '0', 10);
+    if (h === 12) h = 0;
+    return formatTime24(h, m);
+  }
+
+  const aLas = normalized.match(
+    /(?:a\s+las?\s+|hora\s+)(\d{1,2})(?::([0-5]\d))?(?!\s*(?:de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre)|personas?|pax))/,
+  );
+  if (aLas) {
+    let h = parseInt(aLas[1], 10);
+    const m = parseInt(aLas[2] ?? '0', 10);
+    if (h >= 1 && h <= 9) h += 12;
+    if (h <= 23 && m <= 59) return formatTime24(h, m);
+  }
+
+  return undefined;
+}
+
+/** Match requested time to an available slot (exact or nearest within 15 min). */
+export function matchTimeToAvailableSlot(
+  requested: string,
+  slots: string[],
+): { slot: string | null; snapped: boolean } {
+  if (!slots.length) return { slot: null, snapped: false };
+  if (slots.includes(requested)) return { slot: requested, snapped: false };
+
+  const reqMin = timeToMinutes(requested);
+  let best: string | null = null;
+  let bestDiff = Infinity;
+  for (const s of slots) {
+    const diff = Math.abs(timeToMinutes(s) - reqMin);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      best = s;
+    }
+  }
+  if (best && bestDiff <= 15) {
+    return { slot: best, snapped: bestDiff > 0 };
+  }
+  return { slot: null, snapped: false };
+}
+
+export interface RestaurantBookingIntent {
+  date?: string;
+  time?: string;
+  partySize?: number;
+}
+
+/** Extract date, time and party size from a single message. */
+export function parseRestaurantBookingIntent(text: string): RestaurantBookingIntent {
+  return {
+    date: parseRestaurantBookingDate(text),
+    time: parseRestaurantBookingTime(text),
+    partySize: parsePartySizeFromText(text),
+  };
+}
+
 export function buildRestaurantQuote(input: {
   partySize: number;
   reservationFee: number;
