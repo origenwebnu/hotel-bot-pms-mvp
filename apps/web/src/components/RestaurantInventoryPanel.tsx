@@ -57,6 +57,8 @@ export function RestaurantInventoryPanel() {
     require_payment: true,
     post_payment_message: '',
     post_payment_link: '',
+    summary_footer_message: '',
+    summary_footer_link: '',
     slot_interval_minutes: '30',
     advance_booking_days: '60',
     min_advance_hours: '2',
@@ -79,6 +81,8 @@ export function RestaurantInventoryPanel() {
         require_payment: s.require_payment,
         post_payment_message: s.post_payment_message,
         post_payment_link: s.post_payment_link,
+        summary_footer_message: s.summary_footer_message,
+        summary_footer_link: s.summary_footer_link,
         slot_interval_minutes: String(s.slot_interval_minutes),
         advance_booking_days: String(s.advance_booking_days),
         min_advance_hours: String(s.min_advance_hours),
@@ -166,6 +170,8 @@ export function RestaurantInventoryPanel() {
         require_payment: settingsForm.require_payment,
         post_payment_message: settingsForm.post_payment_message,
         post_payment_link: settingsForm.post_payment_link,
+        summary_footer_message: settingsForm.summary_footer_message,
+        summary_footer_link: settingsForm.summary_footer_link,
         slot_interval_minutes: Number(settingsForm.slot_interval_minutes),
         advance_booking_days: Number(settingsForm.advance_booking_days),
         min_advance_hours: Number(settingsForm.min_advance_hours),
@@ -510,6 +516,28 @@ export function RestaurantInventoryPanel() {
               value={settingsForm.post_payment_link}
               onChange={(e) =>
                 setSettingsForm({ ...settingsForm, post_payment_link: e.target.value })
+              }
+            />
+          </label>
+          <label>
+            Texto al final del resumen (antes de confirmar)
+            <textarea
+              rows={3}
+              placeholder="Política de cancelación, formas de pago, dress code, etc."
+              value={settingsForm.summary_footer_message}
+              onChange={(e) =>
+                setSettingsForm({ ...settingsForm, summary_footer_message: e.target.value })
+              }
+            />
+          </label>
+          <label>
+            Link en el resumen (opcional)
+            <input
+              type="url"
+              placeholder="https://..."
+              value={settingsForm.summary_footer_link}
+              onChange={(e) =>
+                setSettingsForm({ ...settingsForm, summary_footer_link: e.target.value })
               }
             />
           </label>

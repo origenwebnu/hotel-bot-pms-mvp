@@ -386,10 +386,11 @@ export class SimulatorService {
 
     return {
       replies: [
-        `Motivo: *${match.label}*.\n\n¿Deseas agregar un adicional? Responde con el nombre o escribe *continuar* para seguir sin extras.`,
+        `Motivo: *${match.label}*.\n\n¿Deseas agregar un adicional?\n` +
+          `Escribe *adicionales* para ver la lista o *reservar* para continuar sin extras.`,
       ],
       session: { ...session, occasionType: match.key, state: 'rest_selecting_addons', selectedAddOnIds: [] },
-      suggestions: ['continuar'],
+      suggestions: ['adicionales', 'reservar'],
     };
   }
 
@@ -398,7 +399,7 @@ export class SimulatorService {
     text: string,
     session: SimulatorSession,
   ) {
-    if (/^(continuar|sin extras|no|ninguno)$/i.test(text.trim())) {
+    if (/^(reservar|continuar|sin extras|no|ninguno)$/i.test(text.trim())) {
       return {
         replies: [
           'Perfecto. Comparte tu *nombre y apellido*. Si tienes peticiones especiales, inclúyelas en el mismo mensaje.',
@@ -409,17 +410,36 @@ export class SimulatorService {
     }
 
     const addons = (await this.restaurant.listAddOns(hotelId)).filter((a) => a.is_active);
-    const match = addons.find((a) => a.name.toLowerCase().includes(text.toLowerCase()));
-    if (!match) {
-      const list = addons.map((a) => `• ${a.name} — ${a.currency} ${a.price.toLocaleString('es-CO')}`).join('\n');
+    if (/^adicionales?$/i.test(text.trim()) || !addons.some((a) => a.name.toLowerCase().includes(text.toLowerCase()))) {
+      if (!addons.length) {
+        return {
+          replies: ['No hay adicionales. Escribe *reservar* para continuar.'],
+          session: { ...session, state: 'rest_collecting_guest_info' },
+          suggestions: ['reservar'],
+        };
+      }
+      const list = addons
+        .map((a, i) => `${i + 1}. *${a.name}* — ${a.currency} ${a.price.toLocaleString('es-CO')}`)
+        .join('\n');
       return {
         replies: [
-          list
-            ? `Adicionales disponibles:\n${list}\n\nResponde con el nombre o *continuar*.`
-            : 'No hay adicionales. Escribe *continuar*.',
+          `*Adicionales disponibles:*\n${list}\n\nResponde con el *número* o *nombre* del adicional, o *reservar* para continuar sin extras.`,
         ],
         session,
-        suggestions: ['continuar'],
+        suggestions: addons.slice(0, 3).map((a) => a.name).concat(['reservar']),
+      };
+    }
+
+    const trimmed = text.trim();
+    const byIndex = trimmed.match(/^(\d+)$/);
+    const match = byIndex
+      ? addons[Number(byIndex[1]) - 1]
+      : addons.find((a) => a.name.toLowerCase().includes(trimmed.toLowerCase()));
+    if (!match) {
+      return {
+        replies: ['No encontré ese adicional. Escribe *adicionales* para ver la lista o *reservar* para continuar.'],
+        session,
+        suggestions: ['adicionales', 'reservar'],
       };
     }
 
@@ -518,6 +538,7 @@ export class SimulatorService {
     businessName: string,
     session: SimulatorSession,
   ) {
+    const settings = await this.restaurant.getSettings(hotelId);
     const quote = await this.restaurant.buildQuote(hotelId, {
       dining_zone_id: session.selectedDiningZoneId!,
       date: session.bookingDate!,
@@ -531,6 +552,28 @@ export class SimulatorService {
       RESTAURANT_OCCASION_LABELS[(session.occasionType ?? 'other') as RestaurantOccasion] ??
       session.occasionType;
 
+    const reservationTotal =
+      quote.reservation_fee + quote.price_per_guest * quote.party_size;
+    const addons = await this.restaurant.listAddOns(hotelId);
+    const selectedAddons = (session.selectedAddOnIds ?? [])
+      .map((id) => addons.find((a) => a.id === id))
+      .filter(Boolean);
+
+    let pricing =
+      `\n💵 *Valor reserva:* ${quote.currency} ${reservationTotal.toLocaleString('es-CO')}`;
+    for (const addon of selectedAddons) {
+      if (!addon) continue;
+      pricing += `\n✨ *Extra (${addon.name}):* ${quote.currency} ${addon.price.toLocaleString('es-CO')}`;
+    }
+    pricing += `\n\n💰 *Total:* ${quote.currency} ${quote.total.toLocaleString('es-CO')}`;
+
+    if (settings.summary_footer_message) {
+      pricing += `\n\n📋 ${settings.summary_footer_message}`;
+    }
+    if (settings.summary_footer_link) {
+      pricing += `\n\n🔗 ${settings.summary_footer_link}`;
+    }
+
     return (
       `📋 *Resumen simulado*\n\n` +
       `🍽 ${businessName}\n` +
@@ -538,8 +581,8 @@ export class SimulatorService {
       `📍 ${zone?.name ?? 'Mesa'}\n` +
       `👥 ${session.partySize} personas\n` +
       `🎉 ${occasion}\n` +
-      `👤 ${session.guestFirstName} ${session.guestLastName}\n` +
-      `💰 Total: ${quote.currency} ${quote.total.toLocaleString('es-CO')}`
+      `👤 ${session.guestFirstName} ${session.guestLastName}` +
+      pricing
     );
   }
 

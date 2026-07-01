@@ -257,6 +257,8 @@ model RestaurantSettings {
   requirePayment          Boolean  @default(true) @map("require_payment")
   postPaymentMessage      String?  @map("post_payment_message") @db.Text
   postPaymentLink         String?  @map("post_payment_link")
+  summaryFooterMessage    String?  @map("summary_footer_message") @db.Text
+  summaryFooterLink       String?  @map("summary_footer_link")
   slotIntervalMinutes     Int      @default(30) @map("slot_interval_minutes")
   defaultDurationMinutes  Int      @default(90) @map("default_duration_minutes")
   maxCoversPerSlot        Int?     @map("max_covers_per_slot")
