@@ -6,6 +6,7 @@ import { AuthModule } from '../auth/auth.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { CheckoutModule } from '../checkout/checkout.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
+import { PlatformBillingModule } from '../platform-billing/subscription-billing.module';
 
 @Module({
   imports: [
@@ -14,6 +15,7 @@ import { SubscriptionModule } from '../subscription/subscription.module';
     WhatsAppModule,
     CheckoutModule,
     SubscriptionModule,
+    PlatformBillingModule,
   ],
   controllers: [HotelsController],
   providers: [HotelsService],

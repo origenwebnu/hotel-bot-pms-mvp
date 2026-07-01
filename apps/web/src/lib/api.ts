@@ -81,6 +81,18 @@ export const api = {
   getBillingHistory: () =>
     request<BillingHistoryResponse>('/hotels/me/billing-history'),
 
+  listSubscriptionPlans: () =>
+    request<SubscriptionPlanCatalogItem[]>('/hotels/me/subscription/plans'),
+
+  createSubscriptionCheckout: (planId: string, payerEmail?: string) =>
+    request<SubscriptionCheckoutResult>('/hotels/me/subscription/checkout', {
+      method: 'POST',
+      body: JSON.stringify({
+        plan_id: planId,
+        ...(payerEmail ? { payer_email: payerEmail } : {}),
+      }),
+    }),
+
   getIntegration: () => request<IntegrationStatus>('/hotels/me/integration'),
 
   getPaymentConfig: () => request<PaymentConfig>('/hotels/me/payment-config'),
@@ -473,6 +485,29 @@ export interface HotelSubscription {
   plan_currency: string | null;
   period_month: string | null;
   can_create_reservations: boolean;
+}
+
+export interface SubscriptionPlanCatalogItem {
+  id: string;
+  name: string;
+  max_reservations_per_month: number;
+  price_monthly: number;
+  currency: string;
+  description: string | null;
+  is_active: boolean;
+  sort_order: number;
+}
+
+export interface SubscriptionCheckoutResult {
+  payment_id: string;
+  checkout_url: string;
+  preference_id: string;
+  plan: {
+    id: string;
+    name: string;
+    amount: number;
+    currency: string;
+  };
 }
 
 export interface IntegrationStatus {

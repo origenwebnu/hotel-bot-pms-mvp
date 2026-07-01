@@ -407,10 +407,80 @@ export class SubscriptionService {
     await this.syncBillingRecords(hotelId);
     await this.prisma.hotelSubscriptionPayment.updateMany({
       where: { hotelId, periodMonth },
-      data: { status: 'paid', paidAt: new Date() },
+      data: {
+        status: 'paid',
+        paidAt: new Date(),
+        description: `Asignado por administrador — ${plan.name}`,
+      },
     });
 
     return updated;
+  }
+
+  async activatePlanFromPayment(
+    hotelId: string,
+    planId: string,
+    payment: {
+      provider: string;
+      externalId: string;
+      periodMonth: string;
+    },
+  ) {
+    const hotel = await this.prisma.hotel.findUnique({ where: { id: hotelId } });
+    if (!hotel) throw new NotFoundException('Hotel no encontrado');
+
+    await this.initializeTrialForHotel(hotelId, hotel.createdAt);
+
+    const plan = await this.prisma.subscriptionPlan.findFirst({
+      where: { id: planId, isActive: true },
+    });
+    if (!plan) throw new NotFoundException('Plan no encontrado');
+
+    const { start, end } = this.getMonthBounds(payment.periodMonth);
+
+    await this.prisma.hotelSubscription.update({
+      where: { hotelId },
+      data: {
+        planId: plan.id,
+        status: 'active',
+        currentPeriodStart: start,
+        currentPeriodEnd: end,
+        quotaNotifiedAt: null,
+      },
+    });
+
+    await this.prisma.hotelSubscriptionPayment.upsert({
+      where: {
+        hotelId_periodMonth: { hotelId, periodMonth: payment.periodMonth },
+      },
+      create: {
+        hotelId,
+        periodMonth: payment.periodMonth,
+        planId: plan.id,
+        amount: plan.priceMonthly,
+        currency: plan.currency,
+        planName: plan.name,
+        status: 'paid',
+        provider: payment.provider,
+        externalId: payment.externalId,
+        paidAt: new Date(),
+        description: `Pago ${payment.provider} — ${plan.name}`,
+      },
+      update: {
+        planId: plan.id,
+        amount: plan.priceMonthly,
+        currency: plan.currency,
+        planName: plan.name,
+        status: 'paid',
+        provider: payment.provider,
+        externalId: payment.externalId,
+        paidAt: new Date(),
+        description: `Pago ${payment.provider} — ${plan.name}`,
+        checkoutUrl: null,
+      },
+    });
+
+    await this.syncBillingRecords(hotelId);
   }
 
   async getBillingHistory(hotelId: string) {

@@ -427,10 +427,14 @@ model HotelSubscriptionPayment {
   id          String    @id @default(cuid())
   hotelId     String    @map("hotel_id")
   periodMonth String    @map("period_month")
+  planId      String?   @map("plan_id")
   amount      Float
   currency    String    @default("COP")
   planName    String?   @map("plan_name")
   status      String    @default("pending")
+  provider    String?
+  externalId  String?   @unique @map("external_id")
+  checkoutUrl String?   @map("checkout_url")
   description String?   @db.Text
   paidAt      DateTime? @map("paid_at")
   createdAt   DateTime  @default(now()) @map("created_at")
@@ -440,4 +444,15 @@ model HotelSubscriptionPayment {
   @@unique([hotelId, periodMonth])
   @@index([hotelId])
   @@map("hotel_subscription_payments")
+}
+
+model PlatformCredential {
+  id             String   @id @default(cuid())
+  credentialType String   @unique @map("credential_type")
+  encryptedValue String   @map("encrypted_value") @db.Text
+  keyHint        String?  @map("key_hint")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_credentials")
 }

@@ -14,6 +14,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreIntegratorService } from '../core-integrator/core-integrator.service';
 import { CheckoutService } from '../checkout/checkout.service';
 import { SubscriptionService } from '../subscription/subscription.service';
+import { SubscriptionBillingService } from '../platform-billing/subscription-billing.service';
 import { UpdateIntegrationDto } from './dto/update-integration.dto';
 import { UpdateHotelDto } from './dto/update-hotel.dto';
 
@@ -41,6 +42,7 @@ export class HotelsController {
     private readonly pms: CoreIntegratorService,
     private readonly checkout: CheckoutService,
     private readonly subscription: SubscriptionService,
+    private readonly subscriptionBilling: SubscriptionBillingService,
   ) {}
 
   @Get('me')
@@ -64,6 +66,23 @@ export class HotelsController {
   @Get('me/billing-history')
   getMyBillingHistory(@Request() req: { user: { hotelId: string } }) {
     return this.subscription.getBillingHistory(req.user.hotelId);
+  }
+
+  @Get('me/subscription/plans')
+  listSubscriptionPlans() {
+    return this.subscriptionBilling.listActivePlansForHotel();
+  }
+
+  @Post('me/subscription/checkout')
+  createSubscriptionCheckout(
+    @Request() req: { user: { hotelId: string; email?: string } },
+    @Body() body: { plan_id: string; payer_email?: string },
+  ) {
+    return this.subscriptionBilling.createCheckout(
+      req.user.hotelId,
+      body.plan_id,
+      body.payer_email ?? req.user.email,
+    );
   }
 
   @Get('me/integration')
