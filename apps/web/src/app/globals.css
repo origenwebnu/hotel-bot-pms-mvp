@@ -1719,6 +1719,19 @@ input, select, textarea {
   box-shadow: var(--shadow-sm);
 }
 
+.subscription-banner-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.subscription-banner-cta {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 .subscription-banner.warn {
   border-color: rgba(217, 119, 6, 0.35);
   background: rgba(217, 119, 6, 0.08);

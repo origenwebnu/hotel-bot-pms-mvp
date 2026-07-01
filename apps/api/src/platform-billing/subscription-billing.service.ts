@@ -107,7 +107,7 @@ export class SubscriptionBillingService {
     });
 
     const appUrl = (process.env.APP_URL ?? 'https://app.bookichat.com').replace(/\/$/, '');
-    const returnBase = `${appUrl}/dashboard?tab=account`;
+    const returnBase = `${appUrl}/dashboard?tab=subscription`;
 
     const preference = await this.mercadopago.createPreference({
       items: [
