@@ -62,6 +62,11 @@ export function RestaurantReservationsPanel({ loadReservations }: Props) {
       )}
 
       <style jsx>{`
+        .rest-res-panel {
+          display: flex;
+          flex-direction: column;
+          gap: 1.5rem;
+        }
         .rest-res-tabs {
           display: flex;
           gap: 0.5rem;
