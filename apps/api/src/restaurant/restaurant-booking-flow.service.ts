@@ -245,8 +245,33 @@ export class RestaurantBookingFlowService {
     listId: string,
     business: { name: string; vertical: 'restaurant' },
   ) {
+    if (listId.startsWith('rest_time_more_')) {
+      const startIndex = parseInt(listId.replace('rest_time_more_', ''), 10);
+      const full = await this.getSession(session.id);
+      if (!full.bookingDate || Number.isNaN(startIndex)) {
+        return this.startBooking(hotelId, session.id, session.whatsappPhone);
+      }
+      const slots = await this.inventory.getAvailableTimeSlots(hotelId, full.bookingDate);
+      const msg = this.renderer.renderRestaurantTimeList(full.bookingDate, slots, startIndex);
+      if (msg.type === 'text') {
+        await this.whatsapp.sendText(hotelId, session.whatsappPhone, msg.text.body);
+      } else {
+        await this.whatsapp.sendInteractive(hotelId, session.whatsappPhone, msg);
+      }
+      return;
+    }
+
     if (listId.startsWith('rest_time_')) {
-      const time = listId.replace('rest_time_', '').replace(/^(\d{2})(\d{2})$/, '$1:$2');
+      const raw = listId.replace('rest_time_', '');
+      const time = raw.replace(/^(\d{2})(\d{2})$/, '$1:$2');
+      if (!/^\d{2}:\d{2}$/.test(time)) {
+        await this.whatsapp.sendText(
+          hotelId,
+          session.whatsappPhone,
+          'Horario no válido. Elige uno de la lista.',
+        );
+        return;
+      }
       return this.afterTimeSelected(hotelId, session, time, business);
     }
 

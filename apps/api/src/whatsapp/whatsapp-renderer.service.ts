@@ -627,7 +627,11 @@ export class WhatsAppRendererService {
     };
   }
 
-  renderRestaurantTimeList(date: string, slots: string[]): WhatsAppListMessage | WhatsAppTextMessage {
+  renderRestaurantTimeList(
+    date: string,
+    slots: string[],
+    startIndex = 0,
+  ): WhatsAppListMessage | WhatsAppTextMessage {
     if (!slots.length) {
       return {
         type: 'text',
@@ -637,15 +641,17 @@ export class WhatsAppRendererService {
       };
     }
 
-    const sections = this.buildTimeSlotSections(slots);
+    const sections = this.buildTimeSlotSections(slots, startIndex);
+    const pageNote =
+      startIndex > 0
+        ? `\n(Mostrando ${startIndex + 1}–${Math.min(startIndex + 9, slots.length)} de ${slots.length})`
+        : `\n(${slots.length} horario${slots.length !== 1 ? 's' : ''} disponible${slots.length !== 1 ? 's' : ''})`;
 
     return {
       type: 'list',
       header: { type: 'text', text: 'Horarios disponibles' },
       body: {
-        text:
-          `Elige la hora para el *${formatDisplayDate(date)}*:\n` +
-          `(${slots.length} horario${slots.length !== 1 ? 's' : ''} disponible${slots.length !== 1 ? 's' : ''})`,
+        text: `Elige la hora para el *${formatDisplayDate(date)}*:${pageNote}`,
       },
       action: {
         button: 'Ver horarios',
@@ -654,55 +660,27 @@ export class WhatsAppRendererService {
     };
   }
 
-  private buildTimeSlotSections(slots: string[]) {
-    const maxPerSection = MAX_LIST_MESSAGE_ROWS;
-    const buckets: Array<{ title: string; slots: string[] }> = [
-      { title: 'Mañana', slots: [] },
-      { title: 'Tarde', slots: [] },
-      { title: 'Noche', slots: [] },
-    ];
+  /** WhatsApp allows max 10 rows total in a list — paginate with a "Ver más" row. */
+  private buildTimeSlotSections(slots: string[], startIndex = 0) {
+    const maxSlotsPerPage = 9;
+    const pageSlots = slots.slice(startIndex, startIndex + maxSlotsPerPage);
+    const hasMore = slots.length > startIndex + maxSlotsPerPage;
 
-    for (const time of slots) {
-      const [h] = time.split(':').map(Number);
-      if (h < 12) buckets[0].slots.push(time);
-      else if (h < 17) buckets[1].slots.push(time);
-      else buckets[2].slots.push(time);
+    const rows = pageSlots.map((t) => ({
+      id: `rest_time_${t.replace(':', '')}`,
+      title: t,
+      description: 'Disponible',
+    }));
+
+    if (hasMore) {
+      rows.push({
+        id: `rest_time_more_${startIndex + maxSlotsPerPage}`,
+        title: 'Ver más horarios',
+        description: `${slots.length - startIndex - maxSlotsPerPage} restantes`,
+      });
     }
 
-    const sections: WhatsAppListMessage['action']['sections'] = [];
-    for (const bucket of buckets) {
-      if (!bucket.slots.length) continue;
-      for (let i = 0; i < bucket.slots.length; i += maxPerSection) {
-        const chunk = bucket.slots.slice(i, i + maxPerSection);
-        const pageSuffix =
-          bucket.slots.length > maxPerSection
-            ? ` (${Math.floor(i / maxPerSection) + 1})`
-            : '';
-        sections.push({
-          title: `${bucket.title}${pageSuffix}`.slice(0, 24),
-          rows: chunk.map((t) => ({
-            id: `rest_time_${t.replace(':', '')}`,
-            title: t,
-            description: 'Disponible',
-          })),
-        });
-      }
-    }
-
-    if (!sections.length) {
-      return [
-        {
-          title: 'Horarios',
-          rows: slots.slice(0, maxPerSection).map((t) => ({
-            id: `rest_time_${t.replace(':', '')}`,
-            title: t,
-            description: 'Disponible',
-          })),
-        },
-      ];
-    }
-
-    return sections.slice(0, 10);
+    return [{ title: 'Horarios', rows }];
   }
 
   renderRestaurantZoneList(

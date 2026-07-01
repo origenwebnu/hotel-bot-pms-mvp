@@ -107,30 +107,32 @@ export class WhatsAppService {
     }
 
     if (message.type === 'list') {
+      const interactive: Record<string, unknown> = {
+        type: 'list',
+        body: message.body,
+        action: message.action,
+      };
+      if (message.header) interactive.header = message.header;
+      if (message.footer) interactive.footer = message.footer;
       return {
         ...base,
         type: 'interactive',
-        interactive: {
-          type: 'list',
-          header: message.header,
-          body: message.body,
-          footer: message.footer,
-          action: message.action,
-        },
+        interactive,
       };
     }
 
     if (message.type === 'button') {
+      const interactive: Record<string, unknown> = {
+        type: 'button',
+        body: message.body,
+        action: message.action,
+      };
+      if (message.header) interactive.header = message.header;
+      if (message.footer) interactive.footer = message.footer;
       return {
         ...base,
         type: 'interactive',
-        interactive: {
-          type: 'button',
-          header: message.header,
-          body: message.body,
-          footer: message.footer,
-          action: message.action,
-        },
+        interactive,
       };
     }
 
