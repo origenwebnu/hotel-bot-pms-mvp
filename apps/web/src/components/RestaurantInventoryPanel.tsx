@@ -180,19 +180,19 @@ export function RestaurantInventoryPanel() {
   }
 
   return (
-    <div className="inventory-stack">
-      <div className="panel">
+    <div className="rest-inventory">
+      <div className="panel rest-inventory-header">
         <div className="panel-header-row">
           <div>
             <h2>Inventario del restaurante</h2>
-            <p className="muted">
+            <p className="muted rest-inventory-lead">
               Configura zonas, tarifas por fecha (estilo calendario), adicionales y reglas de
               reserva para WhatsApp.
             </p>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '1rem' }}>
+        <div className="rest-inventory-tabs">
           {(
             [
               ['zones', 'Zonas / mesas'],
@@ -220,32 +220,26 @@ export function RestaurantInventoryPanel() {
       </div>
 
       {section === 'zones' && (
-        <>
-          <form className="panel form-panel" onSubmit={saveZone}>
+        <div className="rest-inventory-zones-layout">
+          <form className="panel form-panel rest-inventory-form" onSubmit={saveZone}>
             <h3>{editingZoneId ? 'Editar zona' : 'Nueva zona o ambiente'}</h3>
-            <label>
-              Nombre
-              <input
-                required
-                value={zoneForm.name}
-                onChange={(e) => setZoneForm({ ...zoneForm, name: e.target.value })}
-              />
-            </label>
-            <label>
-              Descripción
-              <textarea
-                rows={2}
-                value={zoneForm.description}
-                onChange={(e) => setZoneForm({ ...zoneForm, description: e.target.value })}
-              />
-            </label>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-                gap: '1rem',
-              }}
-            >
+            <div className="rest-inventory-form-grid rest-inventory-form-grid--2">
+              <label className="rest-inventory-span-2">
+                Nombre
+                <input
+                  required
+                  value={zoneForm.name}
+                  onChange={(e) => setZoneForm({ ...zoneForm, name: e.target.value })}
+                />
+              </label>
+              <label className="rest-inventory-span-2">
+                Descripción
+                <textarea
+                  rows={2}
+                  value={zoneForm.description}
+                  onChange={(e) => setZoneForm({ ...zoneForm, description: e.target.value })}
+                />
+              </label>
               <label>
                 Mín. personas
                 <input
@@ -287,7 +281,7 @@ export function RestaurantInventoryPanel() {
                   }
                 />
               </label>
-              <label>
+              <label className="rest-inventory-span-2">
                 Precio / persona (COP)
                 <input
                   type="number"
@@ -299,7 +293,7 @@ export function RestaurantInventoryPanel() {
                 />
               </label>
             </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <div className="rest-inventory-form-actions">
               <button type="submit" className="btn-primary">
                 {editingZoneId ? 'Guardar cambios' : 'Crear zona'}
               </button>
@@ -318,20 +312,23 @@ export function RestaurantInventoryPanel() {
             </div>
           </form>
 
-          <div className="panel">
-            <h3>Zonas activas</h3>
+          <div className="panel rest-inventory-table-panel">
+            <div className="rest-inventory-table-header">
+              <h3>Zonas activas</h3>
+              <span className="muted">{zones.length} zona{zones.length !== 1 ? 's' : ''}</span>
+            </div>
             {zones.length === 0 ? (
               <p className="muted">Aún no hay zonas. Crea al menos una para recibir reservas.</p>
             ) : (
-              <div className="table-wrap">
-                <table>
+              <div className="rest-inventory-table-wrap">
+                <table className="admin-table rest-inventory-table">
                   <thead>
                     <tr>
                       <th>Zona</th>
                       <th>Personas</th>
                       <th>Tarifa base</th>
                       <th>Estado</th>
-                      <th></th>
+                      <th aria-label="Acciones" />
                     </tr>
                   </thead>
                   <tbody>
@@ -339,11 +336,7 @@ export function RestaurantInventoryPanel() {
                       <tr key={z.id}>
                         <td>
                           <strong>{z.name}</strong>
-                          {z.description && (
-                            <div className="muted" style={{ fontSize: '0.85rem' }}>
-                              {z.description}
-                            </div>
-                          )}
+                          {z.description && <small>{z.description}</small>}
                         </td>
                         <td>
                           {z.min_party_size}–{z.max_party_size}
@@ -352,8 +345,12 @@ export function RestaurantInventoryPanel() {
                           {formatCop(z.base_reservation_fee)} + {formatCop(z.base_price_per_guest)}
                           /pax
                         </td>
-                        <td>{z.is_active ? 'Activa' : 'Inactiva'}</td>
                         <td>
+                          <span className={`pill ${z.is_active ? 'ok' : 'off'}`}>
+                            {z.is_active ? 'Activa' : 'Inactiva'}
+                          </span>
+                        </td>
+                        <td className="rest-inventory-actions">
                           <button
                             type="button"
                             className="btn-secondary"
@@ -380,7 +377,7 @@ export function RestaurantInventoryPanel() {
               </div>
             )}
           </div>
-        </>
+        </div>
       )}
 
       {section === 'calendar' && settings && (
@@ -393,8 +390,8 @@ export function RestaurantInventoryPanel() {
       )}
 
       {section === 'addons' && (
-        <>
-          <form className="panel form-panel" onSubmit={saveAddon}>
+        <div className="rest-inventory-zones-layout">
+          <form className="panel form-panel rest-inventory-form" onSubmit={saveAddon}>
             <h3>{editingAddonId ? 'Editar adicional' : 'Nuevo adicional'}</h3>
             <label>
               Nombre
@@ -412,7 +409,7 @@ export function RestaurantInventoryPanel() {
                 onChange={(e) => setAddonForm({ ...addonForm, description: e.target.value })}
               />
             </label>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div className="rest-inventory-form-grid rest-inventory-form-grid--2">
               <label>
                 Precio (COP)
                 <input
@@ -433,27 +430,28 @@ export function RestaurantInventoryPanel() {
                 />
               </label>
             </div>
-            <button type="submit" className="btn-primary">
-              {editingAddonId ? 'Guardar' : 'Crear adicional'}
-            </button>
+            <div className="rest-inventory-form-actions">
+              <button type="submit" className="btn-primary">
+                {editingAddonId ? 'Guardar' : 'Crear adicional'}
+              </button>
+            </div>
           </form>
 
-          <div className="panel">
+          <div className="panel rest-inventory-table-panel">
             <h3>Adicionales ofrecidos al reservar</h3>
             {addons.length === 0 ? (
               <p className="muted">Opcional: botella, decoración, postre especial, etc.</p>
             ) : (
-              <ul>
+              <ul className="rest-inventory-addon-list">
                 {addons.map((a) => (
-                  <li key={a.id} style={{ marginBottom: '0.75rem' }}>
-                    <strong>{a.name}</strong> — {formatCop(a.price)}
-                    {a.description && (
-                      <span className="muted"> · {a.description}</span>
-                    )}
+                  <li key={a.id}>
+                    <div>
+                      <strong>{a.name}</strong> — {formatCop(a.price)}
+                      {a.description && <span className="muted"> · {a.description}</span>}
+                    </div>
                     <button
                       type="button"
                       className="btn-secondary"
-                      style={{ marginLeft: '0.5rem' }}
                       onClick={() => {
                         setEditingAddonId(a.id);
                         setAddonForm({
@@ -471,11 +469,11 @@ export function RestaurantInventoryPanel() {
               </ul>
             )}
           </div>
-        </>
+        </div>
       )}
 
       {section === 'settings' && settings && (
-        <form className="panel form-panel" onSubmit={saveSettings}>
+        <form className="panel form-panel rest-inventory-form rest-inventory-settings" onSubmit={saveSettings}>
           <h3>Configuración de reservas</h3>
           <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <input
@@ -509,13 +507,7 @@ export function RestaurantInventoryPanel() {
               }
             />
           </label>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-              gap: '1rem',
-            }}
-          >
+          <div className="rest-inventory-form-grid rest-inventory-form-grid--2">
             <label>
               Intervalo horarios (min)
               <input
@@ -562,11 +554,115 @@ export function RestaurantInventoryPanel() {
               />
             </label>
           </div>
-          <button type="submit" className="btn-primary">
-            Guardar configuración
-          </button>
+          <div className="rest-inventory-form-actions">
+            <button type="submit" className="btn-primary">
+              Guardar configuración
+            </button>
+          </div>
         </form>
       )}
+
+      <style jsx>{`
+        .rest-inventory {
+          display: flex;
+          flex-direction: column;
+          gap: 1.5rem;
+        }
+        .rest-inventory-header :global(.muted) {
+          margin-bottom: 0;
+        }
+        .rest-inventory-lead {
+          margin-top: 0.35rem;
+        }
+        .rest-inventory-tabs {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.5rem;
+          margin-top: 1.25rem;
+        }
+        .rest-inventory-zones-layout {
+          display: flex;
+          flex-direction: column;
+          gap: 1.5rem;
+        }
+        .rest-inventory-form :global(h3) {
+          margin: 0 0 1rem;
+        }
+        .rest-inventory-form-grid {
+          display: grid;
+          gap: 1rem 1.25rem;
+          margin-bottom: 1.25rem;
+        }
+        .rest-inventory-form-grid--2 {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        .rest-inventory-span-2 {
+          grid-column: 1 / -1;
+        }
+        @media (max-width: 720px) {
+          .rest-inventory-form-grid--2 {
+            grid-template-columns: 1fr;
+          }
+        }
+        .rest-inventory-form-actions {
+          display: flex;
+          gap: 0.75rem;
+          flex-wrap: wrap;
+        }
+        .rest-inventory-table-panel {
+          padding: 1.25rem 1.5rem 1.5rem;
+        }
+        .rest-inventory-table-header {
+          display: flex;
+          align-items: baseline;
+          justify-content: space-between;
+          gap: 1rem;
+          margin-bottom: 1rem;
+        }
+        .rest-inventory-table-header :global(h3) {
+          margin: 0;
+        }
+        .rest-inventory-table-wrap {
+          width: 100%;
+          overflow-x: auto;
+          margin: 0 -0.25rem;
+          padding: 0 0.25rem;
+        }
+        .rest-inventory-table {
+          width: 100%;
+          min-width: 640px;
+        }
+        .rest-inventory-table :global(th:last-child),
+        .rest-inventory-table :global(td:last-child) {
+          width: 1%;
+          white-space: nowrap;
+          text-align: right;
+        }
+        .rest-inventory-actions {
+          text-align: right;
+        }
+        .rest-inventory-addon-list {
+          list-style: none;
+          margin: 0;
+          padding: 0;
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+        }
+        .rest-inventory-addon-list li {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          padding: 0.85rem 1rem;
+          border: 1px solid var(--border);
+          border-radius: 10px;
+          background: var(--surface);
+        }
+        .rest-inventory-settings :global(textarea) {
+          min-height: 100px;
+        }
+      `}</style>
     </div>
   );
 }
