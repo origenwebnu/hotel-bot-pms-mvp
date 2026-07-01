@@ -86,8 +86,11 @@ export class RestaurantBookingFlowService {
     switch (session.state) {
       case 'idle':
       case 'faq':
+        if (this.isRatesQuery(text)) {
+          return this.handleRatesQuery(hotelId, session.whatsappPhone, text);
+        }
         if (this.wantsNewBooking(text)) {
-          return this.startBooking(hotelId, session.id, session.whatsappPhone);
+          return this.startBooking(hotelId, session.id, session.whatsappPhone, text);
         }
         if (session.state === 'idle' && !(await this.hasSeenWelcome(session.id))) {
           return this.sendWelcomeMenu(hotelId, session.id, session.whatsappPhone, business);
@@ -300,7 +303,12 @@ export class RestaurantBookingFlowService {
     }
   }
 
-  private async startBooking(hotelId: string, sessionId: string, phone: string) {
+  private async startBooking(
+    hotelId: string,
+    sessionId: string,
+    phone: string,
+    initialText?: string,
+  ) {
     const zones = await this.inventory.listZones(hotelId);
     const activeZones = zones.filter((z) => z.is_active);
     if (!activeZones.length) {
@@ -313,12 +321,119 @@ export class RestaurantBookingFlowService {
     }
 
     await this.resetRestaurantSession(sessionId);
-    await this.updateSession(sessionId, { state: 'rest_collecting_date' });
+
+    const embeddedDate = initialText ? parseRestaurantBookingDate(initialText) : undefined;
+    const embeddedParty = initialText ? this.parsePartySize(initialText) : undefined;
+
+    if (embeddedDate) {
+      await this.updateSession(sessionId, { state: 'rest_collecting_date' });
+      return this.handleDateInput(hotelId, { id: sessionId, whatsappPhone: phone }, embeddedDate);
+    }
+
+    await this.updateSession(sessionId, {
+      state: embeddedParty ? 'rest_collecting_party' : 'rest_collecting_date',
+      ...(embeddedParty ? { partySize: embeddedParty } : {}),
+    });
+
+    if (embeddedParty) {
+      await this.whatsapp.sendText(
+        hotelId,
+        phone,
+        `¡Perfecto! 📅 Anoté *${embeddedParty}* persona${embeddedParty > 1 ? 's' : ''}. ¿Para qué *fecha* quieres reservar?\n\nEjemplos: *28 de junio*, *2026-06-28* o *mañana*`,
+      );
+      return;
+    }
+
     await this.whatsapp.sendText(
       hotelId,
       phone,
       '¡Perfecto! 📅 ¿Para qué *fecha* quieres reservar?\n\nEjemplos: *28 de junio*, *2026-06-28* o *mañana*',
     );
+  }
+
+  private async handleRatesQuery(hotelId: string, phone: string, text: string) {
+    const zones = (await this.inventory.listZones(hotelId)).filter((z) => z.is_active);
+    if (!zones.length) {
+      await this.whatsapp.sendText(
+        hotelId,
+        phone,
+        'No hay zonas configuradas aún. El restaurante debe crear zonas en *Inventario*.',
+      );
+      return;
+    }
+
+    const settings = await this.inventory.getSettings(hotelId);
+    const date = parseRestaurantBookingDate(text);
+    const partySize = this.parsePartySize(text) ?? 2;
+    const defaultFee = settings.default_reservation_fee ?? 0;
+    const defaultPerGuest = settings.default_price_per_guest ?? 0;
+
+    let header = '*Tarifas de reserva de mesa*\n\n';
+    if (date) {
+      const formatted = this.formatDisplayDate(date);
+      header = `*Tarifas para ${formatted}*\n\n`;
+      try {
+        const slots = await this.inventory.getAvailableTimeSlots(hotelId, date);
+        header += slots.length
+          ? `Hay ${slots.length} horario(s) disponible(s).\n\n`
+          : `Sin horarios disponibles ese día.\n\n`;
+      } catch {
+        /* ignore invalid date */
+      }
+    } else if (defaultFee > 0 || defaultPerGuest > 0) {
+      header +=
+        `*Tarifas generales:* fee ${defaultFee.toLocaleString('es-CO')} + ${defaultPerGuest.toLocaleString('es-CO')}/persona\n` +
+        `(Ejemplo ${partySize} personas: ~${(defaultFee + defaultPerGuest * partySize).toLocaleString('es-CO')})\n\n`;
+    }
+
+    const lines: string[] = [];
+    for (const zone of zones) {
+      if (partySize < zone.min_party_size || partySize > zone.max_party_size) continue;
+
+      if (date) {
+        const pricing = await this.inventory.getZonePricingForDate(hotelId, zone.id, date);
+        const total = pricing.reservationFee + pricing.pricePerGuest * partySize;
+        const labelNote = pricing.label ? ` (${pricing.label})` : '';
+        lines.push(
+          `• *${zone.name}*${labelNote}\n` +
+            `  ${pricing.currency} ${pricing.reservationFee.toLocaleString('es-CO')} fee + ${pricing.currency} ${pricing.pricePerGuest.toLocaleString('es-CO')}/persona\n` +
+            `  Total ${partySize} personas: ~${pricing.currency} ${total.toLocaleString('es-CO')}`,
+        );
+      } else {
+        const fee = (zone.base_reservation_fee > 0 ? zone.base_reservation_fee : defaultFee).toLocaleString(
+          'es-CO',
+        );
+        const perGuest = (
+          zone.base_price_per_guest > 0 ? zone.base_price_per_guest : defaultPerGuest
+        ).toLocaleString('es-CO');
+        const effectiveFee = zone.base_reservation_fee > 0 ? zone.base_reservation_fee : defaultFee;
+        const effectivePerGuest =
+          zone.base_price_per_guest > 0 ? zone.base_price_per_guest : defaultPerGuest;
+        const example = effectiveFee + effectivePerGuest * partySize;
+        lines.push(
+          `• *${zone.name}* (${zone.min_party_size}–${zone.max_party_size} pax)\n` +
+            `  Fee: ${zone.currency} ${fee} + ${zone.currency} ${perGuest}/persona\n` +
+            `  Ejemplo ${partySize} personas: ~${zone.currency} ${example.toLocaleString('es-CO')}`,
+        );
+      }
+    }
+
+    const paymentNote = settings.require_payment
+      ? '\n\n💳 Este restaurante *requiere pago* al reservar.'
+      : '\n\n✅ Puedes reservar *sin cobro anticipado*.';
+
+    const body =
+      lines.length > 0
+        ? `${header}${lines.join('\n\n')}${paymentNote}\n\n_Escribe *Reservar mesa* o usa el menú para reservar._`
+        : `${header}No hay zonas disponibles para ${partySize} personas.${paymentNote}`;
+
+    await this.whatsapp.sendText(hotelId, phone, body);
+  }
+
+  private formatDisplayDate(isoDate: string) {
+    const [year, month, day] = isoDate.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
   }
 
   private async handleDateInput(
@@ -917,6 +1032,11 @@ export class RestaurantBookingFlowService {
       const n = parseInt(bare[1], 10);
       if (n > 0 && n < 100) return n;
     }
+    const paraMatch = text.match(/(?:para|de)\s+(\d+)(?:\s*(?:personas?|pax|comensales?))?/i);
+    if (paraMatch) {
+      const n = parseInt(paraMatch[1], 10);
+      if (n > 0 && n < 100) return n;
+    }
     const match = text.match(/(\d+)\s*(?:personas?|pax|comensales?)/i);
     if (match) {
       const n = parseInt(match[1], 10);
@@ -965,7 +1085,14 @@ export class RestaurantBookingFlowService {
   }
 
   private wantsNewBooking(text: string): boolean {
-    return /reserv|mesa|booking|book/i.test(text);
+    return /reservar|reserva de mesa|reserva una mesa|mesa para|quiero una mesa|booking|book/i.test(
+      text,
+    );
+  }
+
+  private isRatesQuery(text: string): boolean {
+    if (/reservar|reserva una mesa|mesa para|quiero una mesa/.test(text)) return false;
+    return /tarifa|precio|costo|cuesta|cuánto|cuanto|valor|cuánto cuesta/.test(text);
   }
 
   private async hasSeenWelcome(sessionId: string): Promise<boolean> {

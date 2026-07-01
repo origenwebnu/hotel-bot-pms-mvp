@@ -359,7 +359,7 @@ export class RestaurantInventoryService {
     const available: string[] = [];
     for (const time of allSlots) {
       if (await this.isSlotOpen(hotelId, date, time, settings, options?.forManual)) {
-        available.push(time);(time);
+        available.push(time);
       }
     }
     return available;
@@ -437,6 +437,27 @@ export class RestaurantInventoryService {
       addons,
       rateLabel: pricing.label,
     });
+  }
+
+  async getZonePricingForDate(hotelId: string, zoneId: string, date: string) {
+    const zone = await this.prisma.diningZone.findFirst({
+      where: { id: zoneId, hotelId, isActive: true },
+    });
+    if (!zone) throw new NotFoundException('Zona no encontrada');
+
+    const settings = await this.ensureSettings(hotelId);
+    const defaults = this.getDefaultPricing(settings);
+    const globalRate = await this.getDateRate(hotelId, date, null);
+    const zoneRate = await this.getDateRate(hotelId, date, zone.id);
+    const pricing = this.resolvePricing(zone, globalRate, zoneRate, defaults);
+
+    return {
+      zoneName: zone.name,
+      currency: zone.currency,
+      minPartySize: zone.minPartySize,
+      maxPartySize: zone.maxPartySize,
+      ...pricing,
+    };
   }
 
   async assertZoneAvailable(
