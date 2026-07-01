@@ -6,8 +6,11 @@ import {
   type DiningZone,
   type RestaurantAddOn,
   type RestaurantSettings,
+  type ServiceHoursMap,
 } from '@/lib/api';
 import { RestaurantCalendarPanel } from '@/components/RestaurantCalendarPanel';
+import { ServiceHoursSettings } from '@/components/ServiceHoursSettings';
+import { DEFAULT_SERVICE_HOURS } from '@hotel-bot/shared';
 
 type Section = 'zones' | 'calendar' | 'addons' | 'settings';
 
@@ -58,6 +61,7 @@ export function RestaurantInventoryPanel() {
     advance_booking_days: '60',
     min_advance_hours: '2',
     max_covers_per_slot: '',
+    service_hours_json: DEFAULT_SERVICE_HOURS as ServiceHoursMap,
   });
 
   const loadAll = useCallback(async () => {
@@ -79,6 +83,7 @@ export function RestaurantInventoryPanel() {
         advance_booking_days: String(s.advance_booking_days),
         min_advance_hours: String(s.min_advance_hours),
         max_covers_per_slot: s.max_covers_per_slot != null ? String(s.max_covers_per_slot) : '',
+        service_hours_json: s.service_hours_json ?? DEFAULT_SERVICE_HOURS,
       });
     } catch {
       setMessage('Error cargando inventario del restaurante');
@@ -167,6 +172,7 @@ export function RestaurantInventoryPanel() {
         max_covers_per_slot: settingsForm.max_covers_per_slot
           ? Number(settingsForm.max_covers_per_slot)
           : null,
+        service_hours_json: settingsForm.service_hours_json,
       });
       setMessage('Configuración guardada.');
       await loadAll();
@@ -554,6 +560,12 @@ export function RestaurantInventoryPanel() {
               />
             </label>
           </div>
+          <ServiceHoursSettings
+            value={settingsForm.service_hours_json}
+            onChange={(service_hours_json) =>
+              setSettingsForm({ ...settingsForm, service_hours_json })
+            }
+          />
           <div className="rest-inventory-form-actions">
             <button type="submit" className="btn-primary">
               Guardar configuración

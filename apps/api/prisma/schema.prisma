@@ -304,6 +304,8 @@ model RestaurantDateRate {
   date                  DateTime @db.Date
   closed                Boolean  @default(false)
   label                 String?
+  openTimeOverride      String?  @map("open_time_override")
+  closeTimeOverride     String?  @map("close_time_override")
   reservationFeeOverride Float?  @map("reservation_fee_override")
   pricePerGuestOverride  Float?  @map("price_per_guest_override")
   createdAt             DateTime @default(now()) @map("created_at")

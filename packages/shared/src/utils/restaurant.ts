@@ -65,6 +65,32 @@ export function getServiceHoursForDate(
   return { open: cfg.open, close: cfg.close, closed: false };
 }
 
+export interface DateServiceHoursOverride {
+  closed?: boolean;
+  open_time_override?: string | null;
+  close_time_override?: string | null;
+}
+
+/** Weekday defaults plus optional per-date open/close overrides from the calendar. */
+export function resolveServiceHoursForDate(
+  dateStr: string,
+  hours: ServiceHoursMap | null | undefined,
+  dateOverride?: DateServiceHoursOverride | null,
+): { open: string; close: string; closed: boolean } {
+  if (dateOverride?.closed) {
+    return { open: '00:00', close: '00:00', closed: true };
+  }
+
+  const base = getServiceHoursForDate(dateStr, hours);
+  if (base.closed) return base;
+
+  return {
+    open: dateOverride?.open_time_override?.trim() || base.open,
+    close: dateOverride?.close_time_override?.trim() || base.close,
+    closed: false,
+  };
+}
+
 const MONTHS: Record<string, number> = {
   enero: 1,
   febrero: 2,
