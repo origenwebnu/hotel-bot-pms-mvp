@@ -259,6 +259,7 @@ model RestaurantSettings {
   postPaymentLink         String?  @map("post_payment_link")
   summaryFooterMessage    String?  @map("summary_footer_message") @db.Text
   summaryFooterLink       String?  @map("summary_footer_link")
+  notificationEmail       String?  @map("notification_email")
   slotIntervalMinutes     Int      @default(30) @map("slot_interval_minutes")
   defaultDurationMinutes  Int      @default(90) @map("default_duration_minutes")
   maxCoversPerSlot        Int?     @map("max_covers_per_slot")

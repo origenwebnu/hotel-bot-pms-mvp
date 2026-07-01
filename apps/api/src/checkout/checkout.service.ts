@@ -704,6 +704,7 @@ export class CheckoutService {
         occasionLabel,
         amount: reservation.totalAmount ?? payload.amount,
         currency: reservation.currency ?? payload.currency,
+        specialRequests: reservation.specialRequests,
       });
 
       await this.whatsapp.sendText(
@@ -723,6 +724,7 @@ export class CheckoutService {
           partySize: reservation.partySize ?? 1,
           postPaymentMessage: settings?.postPaymentMessage,
           postPaymentLink: settings?.postPaymentLink,
+          specialRequests: reservation.specialRequests,
         });
         await this.whatsapp.sendText(
           reservation.hotelId,
@@ -891,6 +893,7 @@ type ReservationWithHotel = {
   bookingTime: string | null;
   partySize: number | null;
   occasionType: string | null;
+  specialRequests: string | null;
   checkIn: string | null;
   checkOut: string | null;
   adults: number | null;

@@ -10,6 +10,7 @@ import type Transporter from 'nodemailer/lib/mailer';
 import {
   renderMonthlyQuotaEmail,
   renderRegistrationCodeEmail,
+  renderRestaurantReservationNotificationEmail,
   renderTrialExpiredEmail,
   renderTrialQuotaEmail,
 } from './email-templates';
@@ -213,6 +214,44 @@ export class EmailService {
     const html = renderMonthlyQuotaEmail(hotelName, planName, limit, dashboard);
 
     await this.sendOptional(email, subject, text, html, 'monthly quota');
+  }
+
+  async sendRestaurantReservationNotification(
+    to: string,
+    data: {
+      restaurantName: string;
+      guestName: string;
+      guestPhone?: string | null;
+      dateLabel: string;
+      time: string;
+      partySize: number;
+      zoneName: string;
+      occasionLabel?: string | null;
+      totalLabel: string;
+      specialRequests?: string | null;
+      receiptUrl?: string | null;
+    },
+  ): Promise<void> {
+    const subject = `Nueva reserva — ${data.guestName} · ${data.dateLabel}`;
+    const text = [
+      `Nueva reserva en ${data.restaurantName}`,
+      ``,
+      `Cliente: ${data.guestName}`,
+      data.guestPhone ? `WhatsApp: ${data.guestPhone}` : '',
+      `Fecha: ${data.dateLabel}`,
+      `Hora: ${data.time}`,
+      `Personas: ${data.partySize}`,
+      `Zona: ${data.zoneName}`,
+      data.occasionLabel ? `Motivo: ${data.occasionLabel}` : '',
+      data.specialRequests?.trim() ? `Petición: ${data.specialRequests.trim()}` : '',
+      `Total: ${data.totalLabel}`,
+      data.receiptUrl ? `Recibo: ${data.receiptUrl}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const html = renderRestaurantReservationNotificationEmail(data);
+    await this.sendOptional(to, subject, text, html, 'restaurant reservation');
   }
 
   private async sendOptional(

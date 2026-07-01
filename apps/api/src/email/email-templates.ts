@@ -193,3 +193,59 @@ export function renderMonthlyQuotaEmail(
       ${emailButton(dashboard, 'Actualizar plan')}`,
   });
 }
+
+function receiptRow(label: string, value: string): string {
+  return `
+    <tr>
+      <td style="padding:8px 0;font-size:14px;color:${BRAND.textMuted};border-bottom:1px solid ${BRAND.border}">${escapeHtml(label)}</td>
+      <td style="padding:8px 0;font-size:14px;font-weight:600;color:${BRAND.primary};text-align:right;border-bottom:1px solid ${BRAND.border}">${escapeHtml(value)}</td>
+    </tr>`;
+}
+
+export function renderRestaurantReservationNotificationEmail(data: {
+  restaurantName: string;
+  guestName: string;
+  guestPhone?: string | null;
+  dateLabel: string;
+  time: string;
+  partySize: number;
+  zoneName: string;
+  occasionLabel?: string | null;
+  totalLabel: string;
+  specialRequests?: string | null;
+  receiptUrl?: string | null;
+}): string {
+  const rows = [
+    receiptRow('Cliente', data.guestName),
+    ...(data.guestPhone ? [receiptRow('WhatsApp', data.guestPhone)] : []),
+    receiptRow('Fecha', data.dateLabel),
+    receiptRow('Hora', data.time),
+    receiptRow('Personas', String(data.partySize)),
+    receiptRow('Zona', data.zoneName),
+    ...(data.occasionLabel ? [receiptRow('Motivo', data.occasionLabel)] : []),
+    ...(data.specialRequests?.trim()
+      ? [receiptRow('Petición especial', data.specialRequests.trim())]
+      : []),
+    receiptRow('Total', data.totalLabel),
+  ].join('');
+
+  const receiptButton = data.receiptUrl
+    ? emailButton(data.receiptUrl, 'Ver recibo completo')
+    : '';
+
+  return renderBrandedEmail({
+    preheader: `Nueva reserva de ${data.guestName}`,
+    title: 'Nueva reserva recibida',
+    bodyHtml: `
+      <p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:${BRAND.textMuted};text-align:center">
+        Tienes una nueva reserva en <strong style="color:${BRAND.primary}">${escapeHtml(data.restaurantName)}</strong>.
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 8px">
+        ${rows}
+      </table>
+      ${receiptButton}
+      <p style="margin:16px 0 0;font-size:12px;line-height:1.5;color:${BRAND.textMuted};text-align:center">
+        Notificación automática de BookiChat.
+      </p>`,
+  });
+}

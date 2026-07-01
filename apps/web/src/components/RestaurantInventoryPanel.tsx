@@ -59,6 +59,7 @@ export function RestaurantInventoryPanel() {
     post_payment_link: '',
     summary_footer_message: '',
     summary_footer_link: '',
+    notification_email: '',
     slot_interval_minutes: '30',
     advance_booking_days: '60',
     min_advance_hours: '2',
@@ -83,6 +84,7 @@ export function RestaurantInventoryPanel() {
         post_payment_link: s.post_payment_link,
         summary_footer_message: s.summary_footer_message,
         summary_footer_link: s.summary_footer_link,
+        notification_email: s.notification_email,
         slot_interval_minutes: String(s.slot_interval_minutes),
         advance_booking_days: String(s.advance_booking_days),
         min_advance_hours: String(s.min_advance_hours),
@@ -172,6 +174,7 @@ export function RestaurantInventoryPanel() {
         post_payment_link: settingsForm.post_payment_link,
         summary_footer_message: settingsForm.summary_footer_message,
         summary_footer_link: settingsForm.summary_footer_link,
+        notification_email: settingsForm.notification_email,
         slot_interval_minutes: Number(settingsForm.slot_interval_minutes),
         advance_booking_days: Number(settingsForm.advance_booking_days),
         min_advance_hours: Number(settingsForm.min_advance_hours),
@@ -541,6 +544,21 @@ export function RestaurantInventoryPanel() {
               }
             />
           </label>
+          <label>
+            Email de notificaciones de reservas
+            <input
+              type="email"
+              placeholder="reservas@turestaurante.com"
+              value={settingsForm.notification_email}
+              onChange={(e) =>
+                setSettingsForm({ ...settingsForm, notification_email: e.target.value })
+              }
+            />
+          </label>
+          <p className="muted small" style={{ margin: '-0.5rem 0 1rem' }}>
+            Recibirás un correo con el detalle de cada reserva nueva (incluye peticiones especiales
+            y link al recibo).
+          </p>
           <div className="rest-inventory-form-grid rest-inventory-form-grid--2">
             <label>
               Intervalo horarios (min)

@@ -19,6 +19,7 @@ import { CheckoutService } from '../checkout/checkout.service';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionLimitError } from '../subscription/subscription.errors';
 import { AiService } from '../conversation/ai.service';
+import { EmailService } from '../email/email.service';
 import { RestaurantInventoryService } from './restaurant-inventory.service';
 
 export const RESTAURANT_STATES = [
@@ -48,6 +49,7 @@ export class RestaurantBookingFlowService {
     private readonly checkout: CheckoutService,
     private readonly subscription: SubscriptionService,
     private readonly ai: AiService,
+    private readonly email: EmailService,
   ) {}
 
   isRestaurantState(state: string): boolean {
@@ -245,52 +247,12 @@ export class RestaurantBookingFlowService {
   ) {
     if (listId.startsWith('rest_time_')) {
       const time = listId.replace('rest_time_', '').replace(/^(\d{2})(\d{2})$/, '$1:$2');
-      await this.updateSession(session.id, {
-        bookingTime: time,
-        state: 'rest_collecting_party',
-      });
-      await this.whatsapp.sendText(
-        hotelId,
-        session.whatsappPhone,
-        `Horario *${time}* seleccionado. ¿Cuántas *personas* serán? (ej: *4* o *4 personas*)`,
-      );
-      return;
+      return this.afterTimeSelected(hotelId, session, time, business);
     }
 
     if (listId.startsWith('rest_zone_')) {
       const zoneId = listId.replace('rest_zone_', '');
-      const full = await this.getSession(session.id);
-      if (!full.bookingDate || !full.bookingTime || !full.partySize) {
-        return this.startBooking(hotelId, session.id, session.whatsappPhone);
-      }
-
-      try {
-        await this.inventory.assertZoneAvailable(
-          hotelId,
-          zoneId,
-          full.bookingDate,
-          full.bookingTime,
-          full.partySize,
-        );
-      } catch {
-        await this.whatsapp.sendText(
-          hotelId,
-          session.whatsappPhone,
-          'Esa zona ya no está disponible. Escribe *reservar* para buscar otro horario.',
-        );
-        return;
-      }
-
-      await this.updateSession(session.id, {
-        selectedDiningZoneId: zoneId,
-        state: 'rest_collecting_occasion',
-      });
-      await this.whatsapp.sendInteractive(
-        hotelId,
-        session.whatsappPhone,
-        this.renderer.renderRestaurantOccasionButtons(),
-      );
-      return;
+      return this.afterZoneSelected(hotelId, session, zoneId, business);
     }
 
     if (listId.startsWith('rest_occ_')) {
@@ -934,6 +896,204 @@ export class RestaurantBookingFlowService {
     }
   }
 
+  private async afterTimeSelected(
+    hotelId: string,
+    session: { id: string; whatsappPhone: string },
+    time: string,
+    business: { name: string; vertical: 'restaurant' },
+  ) {
+    await this.updateSession(session.id, { bookingTime: time });
+    const full = await this.getSession(session.id);
+
+    if (full.partySize && full.bookingDate) {
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        `Horario *${time}* seleccionado.`,
+      );
+      return this.proceedToZoneSelection(hotelId, session, business);
+    }
+
+    await this.updateSession(session.id, { state: 'rest_collecting_party' });
+    await this.whatsapp.sendText(
+      hotelId,
+      session.whatsappPhone,
+      `Horario *${time}* seleccionado. ¿Cuántas *personas* serán? (ej: *4* o *4 personas*)`,
+    );
+  }
+
+  private async afterZoneSelected(
+    hotelId: string,
+    session: { id: string; whatsappPhone: string },
+    zoneId: string,
+    business: { name: string; vertical: 'restaurant' },
+  ) {
+    const full = await this.getSession(session.id);
+    if (!full.bookingDate || !full.bookingTime || !full.partySize) {
+      return this.startBooking(hotelId, session.id, session.whatsappPhone);
+    }
+
+    try {
+      await this.inventory.assertZoneAvailable(
+        hotelId,
+        zoneId,
+        full.bookingDate,
+        full.bookingTime,
+        full.partySize,
+      );
+    } catch {
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        'Esa zona ya no está disponible. Escribe *reservar* para buscar otro horario.',
+      );
+      return;
+    }
+
+    await this.updateSession(session.id, { selectedDiningZoneId: zoneId });
+    const updated = await this.getSession(session.id);
+    const ctx = (updated.contextJson ?? {}) as { guestFirstName?: string };
+
+    if (updated.occasionType && ctx.guestFirstName) {
+      await this.updateSession(session.id, { state: 'rest_confirming' });
+      await this.whatsapp.sendText(
+        hotelId,
+        session.whatsappPhone,
+        'Actualizamos tu reserva. Revisa el resumen:',
+      );
+      await this.sendConfirmSummary(hotelId, session.id, session.whatsappPhone, business.name);
+      return;
+    }
+
+    if (updated.occasionType) {
+      return this.proceedToAddons(hotelId, session, business);
+    }
+
+    await this.updateSession(session.id, { state: 'rest_collecting_occasion' });
+    await this.whatsapp.sendInteractive(
+      hotelId,
+      session.whatsappPhone,
+      this.renderer.renderRestaurantOccasionButtons(),
+    );
+  }
+
+  private async proceedToZoneSelection(
+    hotelId: string,
+    session: { id: string; whatsappPhone: string },
+    business: { name: string; vertical: 'restaurant' },
+  ) {
+    const full = await this.getSession(session.id);
+    if (!full.bookingDate || !full.bookingTime || !full.partySize) {
+      return this.startBooking(hotelId, session.id, session.whatsappPhone);
+    }
+
+    const zones = await this.inventory.getAvailableZones(
+      hotelId,
+      full.bookingDate,
+      full.bookingTime,
+      full.partySize,
+    );
+
+    if (!zones.length) {
+      const limits = await this.inventory.getPartySizeLimits(hotelId);
+      let message: string;
+      if (limits && full.partySize > limits.max) {
+        message =
+          `No hay zonas para *${full.partySize}* persona${full.partySize > 1 ? 's' : ''}. ` +
+          `El máximo permitido por reserva es *${limits.max}* persona${limits.max > 1 ? 's' : ''}.`;
+      } else {
+        message =
+          `No hay disponibilidad para *${full.partySize}* persona${full.partySize > 1 ? 's' : ''} ` +
+          `a las ${full.bookingTime}. Prueba otro horario o cantidad.`;
+      }
+      await this.whatsapp.sendText(hotelId, session.whatsappPhone, message);
+      return;
+    }
+
+    await this.updateSession(session.id, { state: 'rest_selecting_zone' });
+    const msg = this.renderer.renderRestaurantZoneList(zones);
+    if (msg.type === 'text') {
+      await this.whatsapp.sendText(hotelId, session.whatsappPhone, msg.text.body);
+    } else {
+      await this.whatsapp.sendInteractive(hotelId, session.whatsappPhone, msg);
+    }
+  }
+
+  private async proceedToAddons(
+    hotelId: string,
+    session: { id: string; whatsappPhone: string },
+    business: { name: string; vertical: 'restaurant' },
+  ) {
+    const addons = await this.inventory.listAddOns(hotelId);
+    const active = addons.filter((a) => a.is_active);
+    if (!active.length) {
+      return this.finishAddOnSelection(hotelId, session, business);
+    }
+
+    await this.updateSession(session.id, { state: 'rest_selecting_addons' });
+    await this.whatsapp.sendInteractive(
+      hotelId,
+      session.whatsappPhone,
+      this.renderer.renderRestaurantAddOnPrompt(),
+    );
+  }
+
+  private async notifyRestaurantByEmail(
+    hotelId: string,
+    businessName: string,
+    reservation: {
+      id: string;
+      guestFirstName: string | null;
+      guestLastName: string | null;
+      guestPhone: string | null;
+      bookingDate: string | null;
+      bookingTime: string | null;
+      partySize: number | null;
+      diningZoneName: string | null;
+      occasionType: string | null;
+      totalAmount: number | null;
+      currency: string | null;
+      specialRequests: string | null;
+      paymentAccessToken: string | null;
+      status: string;
+    },
+  ) {
+    const settings = await this.inventory.getSettings(hotelId);
+    const emailTo = settings.notification_email?.trim();
+    if (!emailTo) return;
+
+    const guestName = [reservation.guestFirstName, reservation.guestLastName]
+      .filter(Boolean)
+      .join(' ')
+      .trim() || 'Cliente';
+    const occasion =
+      RESTAURANT_OCCASION_LABELS[
+        (reservation.occasionType ?? 'other') as RestaurantOccasion
+      ] ?? reservation.occasionType;
+    const appUrl = (process.env.APP_URL ?? 'https://app.bookichat.com').replace(/\/$/, '');
+    const receiptUrl =
+      reservation.paymentAccessToken &&
+      ['hold', 'payment_pending', 'confirmed'].includes(reservation.status)
+        ? `${appUrl}/payment/result/${reservation.id}?token=${encodeURIComponent(reservation.paymentAccessToken)}`
+        : null;
+
+    await this.email.sendRestaurantReservationNotification(emailTo, {
+      restaurantName: businessName,
+      guestName,
+      guestPhone: reservation.guestPhone,
+      dateLabel: reservation.bookingDate
+        ? this.formatDisplayDate(reservation.bookingDate)
+        : '—',
+      time: reservation.bookingTime ?? '—',
+      partySize: reservation.partySize ?? 1,
+      zoneName: reservation.diningZoneName ?? 'Mesa',
+      occasionLabel: occasion,
+      totalLabel: `${reservation.currency ?? 'COP'} ${(reservation.totalAmount ?? 0).toLocaleString('es-CO')}`,
+      specialRequests: reservation.specialRequests,
+      receiptUrl,
+    });
+  }
+
   private async handleGuestInfoInput(
     hotelId: string,
     session: { id: string; whatsappPhone: string },
@@ -1021,6 +1181,7 @@ export class RestaurantBookingFlowService {
       total: quote.total,
       currency: quote.currency,
       requiresPayment,
+      specialRequests: ctx.specialRequests,
       summaryFooterMessage: settings.summary_footer_message,
       summaryFooterLink: settings.summary_footer_link,
     });
@@ -1181,6 +1342,8 @@ export class RestaurantBookingFlowService {
       await this.subscription.recordBillableReservation(hotelId, reservation.id);
     }
 
+    await this.notifyRestaurantByEmail(hotelId, business.name, reservation);
+
     if (!requiresPayment) {
       await this.updateSession(session.id, {
         state: 'confirmed',
@@ -1219,6 +1382,7 @@ export class RestaurantBookingFlowService {
       bookingDate: string | null;
       bookingTime: string | null;
       partySize: number | null;
+      specialRequests?: string | null;
     },
     settings: { post_payment_message: string; post_payment_link: string },
   ) {
@@ -1231,6 +1395,7 @@ export class RestaurantBookingFlowService {
       partySize: reservation.partySize ?? 1,
       postPaymentMessage: settings.post_payment_message,
       postPaymentLink: settings.post_payment_link,
+      specialRequests: reservation.specialRequests,
     });
     await this.whatsapp.sendText(hotelId, phone, msg.text.body);
   }
@@ -1252,6 +1417,7 @@ export class RestaurantBookingFlowService {
       currency: string | null;
       paymentLink: string | null;
       paymentAccessToken?: string | null;
+      specialRequests?: string | null;
     },
     holdTtl: number,
     businessName: string,
@@ -1285,6 +1451,7 @@ export class RestaurantBookingFlowService {
       amount: reservation.totalAmount ?? 0,
       currency: reservation.currency ?? 'COP',
       holdMinutes: holdTtl,
+      specialRequests: reservation.specialRequests,
     });
 
     await this.whatsapp.sendText(hotelId, phone, receipt.text.body);
