@@ -68,7 +68,7 @@ function getDayStatus(
       price: null,
     };
   }
-  if (global?.price_per_guest_override != null || global?.reservation_fee_override != null) {
+  if (global?.price_per_guest_override != null || global?.reservation_fee_override != null || global?.label) {
     return {
       kind: 'special' as const,
       label: global.label ?? 'Especial',
@@ -156,6 +156,22 @@ export function RestaurantCalendarPanel({
     });
   }, [settings.default_reservation_fee, settings.default_price_per_guest]);
 
+  function hydrateSpecialForm(date: string, zoneId = specialForm.dining_zone_id) {
+    const dayRates = ratesByDate.get(date) ?? [];
+    const rate = zoneId
+      ? dayRates.find((r) => r.dining_zone_id === zoneId)
+      : dayRates.find((r) => !r.dining_zone_id);
+
+    setSpecialForm({
+      dining_zone_id: zoneId,
+      label: rate?.label ?? '',
+      reservation_fee_override:
+        rate?.reservation_fee_override != null ? String(rate.reservation_fee_override) : '',
+      price_per_guest_override:
+        rate?.price_per_guest_override != null ? String(rate.price_per_guest_override) : '',
+    });
+  }
+
   function toggleDate(date: string) {
     if (mode === 'general') return;
 
@@ -181,7 +197,22 @@ export function RestaurantCalendarPanel({
   }
 
   function handleDayClick(date: string, shiftKey: boolean) {
-    if (mode === 'general') return;
+    const status = getDayStatus(date, ratesByDate, defaultPerGuest);
+
+    if (mode === 'general') {
+      if (status.kind === 'blocked') {
+        setMode('block');
+      } else {
+        setMode('special');
+      }
+      setSelectedDates(new Set([date]));
+      setRangeAnchor(date);
+      if (status.kind !== 'blocked') {
+        hydrateSpecialForm(date);
+      }
+      return;
+    }
+
     if (shiftKey) {
       if (!rangeAnchor) {
         setRangeAnchor(date);
@@ -193,6 +224,9 @@ export function RestaurantCalendarPanel({
     }
     setRangeAnchor(date);
     toggleDate(date);
+    if (mode === 'special' && !shiftKey) {
+      hydrateSpecialForm(date);
+    }
   }
 
   function selectAllMonth() {
@@ -247,6 +281,33 @@ export function RestaurantCalendarPanel({
       await loadRates();
     } catch (err) {
       onMessage(err instanceof Error ? err.message : 'Error al aplicar tarifas', true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function clearSpecialRates() {
+    if (!selectedDates.size) {
+      onMessage('Selecciona días con tarifa especial para quitar el override.', true);
+      return;
+    }
+    setSaving(true);
+    try {
+      const result = await api.bulkClearRestaurantCalendar({
+        dates: [...selectedDates],
+        dining_zone_id: specialForm.dining_zone_id || null,
+      });
+      onMessage(`Tarifa especial eliminada en ${result.deleted} registro(s).`);
+      clearSelection();
+      setSpecialForm({
+        label: '',
+        reservation_fee_override: '',
+        price_per_guest_override: '',
+        dining_zone_id: specialForm.dining_zone_id,
+      });
+      await loadRates();
+    } catch (err) {
+      onMessage(err instanceof Error ? err.message : 'Error al quitar tarifa', true);
     } finally {
       setSaving(false);
     }
@@ -360,6 +421,13 @@ export function RestaurantCalendarPanel({
           ))}
         </div>
 
+        {mode === 'general' && (
+          <p className="muted small rest-calendar-hint">
+            Haz clic en un día amarillo (tarifa especial) para editarlo, o en cualquier día para
+            crear una tarifa especial.
+          </p>
+        )}
+
         {mode !== 'general' && (
           <div className="rest-calendar-selection-bar">
             <span>
@@ -408,9 +476,8 @@ export function RestaurantCalendarPanel({
                 <button
                   key={cell.date}
                   type="button"
-                  className={`rest-calendar-day ${status.kind} ${isPicked ? 'picked' : ''} ${mode === 'general' ? 'readonly' : ''}`}
+                  className={`rest-calendar-day ${status.kind} ${isPicked ? 'picked' : ''}`}
                   onClick={(e) => handleDayClick(cell.date, e.shiftKey)}
-                  disabled={mode === 'general'}
                 >
                   <span className="day-num">{cell.day}</span>
                   {status.kind === 'blocked' ? (
@@ -484,9 +551,13 @@ export function RestaurantCalendarPanel({
               Alcance
               <select
                 value={specialForm.dining_zone_id}
-                onChange={(e) =>
-                  setSpecialForm({ ...specialForm, dining_zone_id: e.target.value })
-                }
+                onChange={(e) => {
+                  const zoneId = e.target.value;
+                  setSpecialForm({ ...specialForm, dining_zone_id: zoneId });
+                  if (selectedDates.size === 1) {
+                    hydrateSpecialForm([...selectedDates][0], zoneId);
+                  }
+                }}
               >
                 <option value="">Todo el restaurante</option>
                 {zones.map((z) => (
@@ -531,6 +602,15 @@ export function RestaurantCalendarPanel({
               disabled={saving || !selectedDates.size}
             >
               Aplicar a {selectedDates.size || '…'} día(s)
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              style={{ marginTop: '0.75rem' }}
+              disabled={saving || !selectedDates.size}
+              onClick={clearSpecialRates}
+            >
+              Quitar tarifa especial
             </button>
           </form>
         )}
@@ -660,6 +740,9 @@ export function RestaurantCalendarPanel({
         }
         .rest-calendar-day.readonly {
           cursor: default;
+        }
+        .rest-calendar-hint {
+          margin: 0 0 0.75rem;
         }
         .rest-calendar-day.special {
           background: #fef9c3;
