@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { resolveServiceHoursForDate } from '@hotel-bot/shared';
 import {
   api,
   type DiningZone,
@@ -8,7 +9,7 @@ import {
   type RestaurantSettings,
 } from '@/lib/api';
 
-type CalendarMode = 'general' | 'special' | 'block';
+type CalendarMode = 'general' | 'special' | 'block' | 'hours';
 
 function formatCop(amount: number) {
   return new Intl.NumberFormat('es-CO', {
@@ -54,18 +55,38 @@ function buildCalendarDays(monthDate: Date) {
   return cells;
 }
 
+function formatTimeShort(time: string) {
+  const [h, m] = time.split(':').map(Number);
+  const suffix = h >= 12 ? 'pm' : 'am';
+  const hour12 = h % 12 || 12;
+  return m === 0 ? `${hour12}${suffix}` : `${hour12}:${String(m).padStart(2, '0')}${suffix}`;
+}
+
+function hasHoursOverride(global?: RestaurantDateRate) {
+  return Boolean(global?.open_time_override || global?.close_time_override);
+}
+
 function getDayStatus(
   date: string,
   ratesByDate: Map<string, RestaurantDateRate[]>,
   defaultPerGuest: number,
+  serviceHours: RestaurantSettings['service_hours_json'],
 ) {
   const dayRates = ratesByDate.get(date) ?? [];
   const global = dayRates.find((r) => !r.dining_zone_id);
+  const hoursOverride = hasHoursOverride(global);
+  const resolvedHours = resolveServiceHoursForDate(date, serviceHours, global ?? undefined);
+  const hoursLabel =
+    hoursOverride && !resolvedHours.closed
+      ? `${formatTimeShort(resolvedHours.open)}–${formatTimeShort(resolvedHours.close)}`
+      : null;
+
   if (global?.closed) {
     return {
       kind: 'blocked' as const,
       label: global.label ?? 'Cerrado',
       price: null,
+      hoursLabel: null,
     };
   }
   if (global?.price_per_guest_override != null || global?.reservation_fee_override != null || global?.label) {
@@ -73,12 +94,22 @@ function getDayStatus(
       kind: 'special' as const,
       label: global.label ?? 'Especial',
       price: global.price_per_guest_override ?? defaultPerGuest,
+      hoursLabel,
+    };
+  }
+  if (hoursOverride) {
+    return {
+      kind: 'hours' as const,
+      label: null,
+      price: defaultPerGuest,
+      hoursLabel,
     };
   }
   return {
     kind: 'default' as const,
     label: null,
     price: defaultPerGuest,
+    hoursLabel: null,
   };
 }
 
@@ -113,6 +144,11 @@ export function RestaurantCalendarPanel({
     reservation_fee_override: '',
     price_per_guest_override: '',
     dining_zone_id: '',
+  });
+
+  const [hoursForm, setHoursForm] = useState({
+    open_time: '14:00',
+    close_time: '22:00',
   });
 
   const monthMeta = useMemo(() => monthRange(monthDate), [monthDate]);
@@ -156,6 +192,20 @@ export function RestaurantCalendarPanel({
     });
   }, [settings.default_reservation_fee, settings.default_price_per_guest]);
 
+  function hydrateHoursForm(date: string) {
+    const dayRates = ratesByDate.get(date) ?? [];
+    const global = dayRates.find((r) => !r.dining_zone_id);
+    const resolved = resolveServiceHoursForDate(
+      date,
+      settings.service_hours_json,
+      global ?? undefined,
+    );
+    setHoursForm({
+      open_time: resolved.open,
+      close_time: resolved.close,
+    });
+  }
+
   function hydrateSpecialForm(date: string, zoneId = specialForm.dining_zone_id) {
     const dayRates = ratesByDate.get(date) ?? [];
     const rate = zoneId
@@ -197,19 +247,20 @@ export function RestaurantCalendarPanel({
   }
 
   function handleDayClick(date: string, shiftKey: boolean) {
-    const status = getDayStatus(date, ratesByDate, defaultPerGuest);
+    const status = getDayStatus(date, ratesByDate, defaultPerGuest, settings.service_hours_json);
 
     if (mode === 'general') {
       if (status.kind === 'blocked') {
         setMode('block');
+      } else if (status.hoursLabel) {
+        setMode('hours');
+        hydrateHoursForm(date);
       } else {
         setMode('special');
+        hydrateSpecialForm(date);
       }
       setSelectedDates(new Set([date]));
       setRangeAnchor(date);
-      if (status.kind !== 'blocked') {
-        hydrateSpecialForm(date);
-      }
       return;
     }
 
@@ -226,6 +277,9 @@ export function RestaurantCalendarPanel({
     toggleDate(date);
     if (mode === 'special' && !shiftKey) {
       hydrateSpecialForm(date);
+    }
+    if (mode === 'hours' && !shiftKey) {
+      hydrateHoursForm(date);
     }
   }
 
@@ -359,6 +413,57 @@ export function RestaurantCalendarPanel({
     }
   }
 
+  async function applyHours(e: React.FormEvent) {
+    e.preventDefault();
+    if (!selectedDates.size) {
+      onMessage('Selecciona uno o más días en el calendario.', true);
+      return;
+    }
+    if (hoursForm.open_time >= hoursForm.close_time) {
+      onMessage('La hora de cierre debe ser posterior a la de apertura.', true);
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.bulkUpsertRestaurantCalendar({
+        dates: [...selectedDates],
+        dining_zone_id: null,
+        open_time_override: hoursForm.open_time,
+        close_time_override: hoursForm.close_time,
+      });
+      onMessage(`Horario aplicado a ${selectedDates.size} día(s).`);
+      clearSelection();
+      await loadRates();
+    } catch (err) {
+      onMessage(err instanceof Error ? err.message : 'Error al aplicar horario', true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function clearHoursOverrides() {
+    if (!selectedDates.size) {
+      onMessage('Selecciona días con horario especial para quitar el override.', true);
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.bulkUpsertRestaurantCalendar({
+        dates: [...selectedDates],
+        dining_zone_id: null,
+        open_time_override: null,
+        close_time_override: null,
+      });
+      onMessage(`Horario especial eliminado en ${selectedDates.size} día(s).`);
+      clearSelection();
+      await loadRates();
+    } catch (err) {
+      onMessage(err instanceof Error ? err.message : 'Error al quitar horario', true);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="rest-calendar-layout">
       <div className="rest-calendar-main panel">
@@ -404,6 +509,7 @@ export function RestaurantCalendarPanel({
             [
               ['general', 'Tarifas generales'],
               ['special', 'Tarifas especiales'],
+              ['hours', 'Horarios'],
               ['block', 'Bloquear días'],
             ] as const
           ).map(([id, label]) => (
@@ -423,8 +529,8 @@ export function RestaurantCalendarPanel({
 
         {mode === 'general' && (
           <p className="muted small rest-calendar-hint">
-            Haz clic en un día amarillo (tarifa especial) para editarlo, o en cualquier día para
-            crear una tarifa especial.
+            Haz clic en un día amarillo (tarifa especial) o azul (horario especial) para editarlo,
+            o en cualquier día para crear una tarifa especial.
           </p>
         )}
 
@@ -452,6 +558,9 @@ export function RestaurantCalendarPanel({
             <i className="swatch special" /> Tarifa especial
           </span>
           <span className="legend-item">
+            <i className="swatch hours" /> Horario especial
+          </span>
+          <span className="legend-item">
             <i className="swatch blocked" /> Bloqueado
           </span>
           <span className="legend-item">
@@ -470,7 +579,12 @@ export function RestaurantCalendarPanel({
             ))}
             {calendarDays.map((cell, idx) => {
               if (!cell) return <div key={`e-${idx}`} className="rest-calendar-empty" />;
-              const status = getDayStatus(cell.date, ratesByDate, defaultPerGuest);
+              const status = getDayStatus(
+                cell.date,
+                ratesByDate,
+                defaultPerGuest,
+                settings.service_hours_json,
+              );
               const isPicked = selectedDates.has(cell.date);
               return (
                 <button
@@ -487,6 +601,9 @@ export function RestaurantCalendarPanel({
                   ) : null}
                   {status.label && status.kind === 'special' && (
                     <span className="day-tag">{status.label}</span>
+                  )}
+                  {status.hoursLabel && (
+                    <span className="day-tag hours">{status.hoursLabel}</span>
                   )}
                 </button>
               );
@@ -641,6 +758,50 @@ export function RestaurantCalendarPanel({
             </button>
           </div>
         )}
+
+        {mode === 'hours' && (
+          <form className="form-panel" onSubmit={applyHours}>
+            <h4>Horario de reservas</h4>
+            <p className="muted small">
+              Selecciona uno o varios días y define el rango en que se aceptan reservas (ej. 2:00
+              pm – 10:00 pm). Sobrescribe el horario general de Configuración solo en esas fechas.
+            </p>
+            <label>
+              Desde
+              <input
+                type="time"
+                required
+                value={hoursForm.open_time}
+                onChange={(e) => setHoursForm({ ...hoursForm, open_time: e.target.value })}
+              />
+            </label>
+            <label>
+              Hasta
+              <input
+                type="time"
+                required
+                value={hoursForm.close_time}
+                onChange={(e) => setHoursForm({ ...hoursForm, close_time: e.target.value })}
+              />
+            </label>
+            <button
+              type="submit"
+              className="btn-primary"
+              disabled={saving || !selectedDates.size}
+            >
+              Aplicar a {selectedDates.size || '…'} día(s)
+            </button>
+            <button
+              type="button"
+              className="btn-secondary"
+              style={{ marginTop: '0.75rem' }}
+              disabled={saving || !selectedDates.size}
+              onClick={clearHoursOverrides}
+            >
+              Quitar horario especial
+            </button>
+          </form>
+        )}
       </aside>
 
       <style jsx>{`
@@ -705,6 +866,9 @@ export function RestaurantCalendarPanel({
         .swatch.special {
           background: #fef9c3;
         }
+        .swatch.hours {
+          background: #e0f2fe;
+        }
         .swatch.blocked {
           background: #fee2e2;
         }
@@ -747,6 +911,9 @@ export function RestaurantCalendarPanel({
         .rest-calendar-day.special {
           background: #fef9c3;
         }
+        .rest-calendar-day.hours {
+          background: #e0f2fe;
+        }
         .rest-calendar-day.blocked {
           background: #fee2e2;
         }
@@ -769,6 +936,9 @@ export function RestaurantCalendarPanel({
         }
         .day-tag.blocked {
           color: #b91c1c;
+        }
+        .day-tag.hours {
+          color: #0369a1;
         }
         .rest-calendar-sidebar h4 {
           margin: 0 0 0.5rem;

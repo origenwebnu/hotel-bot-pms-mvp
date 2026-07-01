@@ -357,6 +357,8 @@ export const api = {
     dining_zone_id?: string | null;
     closed?: boolean;
     label?: string;
+    open_time_override?: string | null;
+    close_time_override?: string | null;
     reservation_fee_override?: number | null;
     price_per_guest_override?: number | null;
   }) =>
@@ -370,6 +372,8 @@ export const api = {
     dining_zone_id?: string | null;
     closed?: boolean;
     label?: string;
+    open_time_override?: string | null;
+    close_time_override?: string | null;
     reservation_fee_override?: number | null;
     price_per_guest_override?: number | null;
   }) =>
@@ -705,9 +709,19 @@ export interface RestaurantDateRate {
   dining_zone_name: string | null;
   closed: boolean;
   label: string | null;
+  open_time_override: string | null;
+  close_time_override: string | null;
   reservation_fee_override: number | null;
   price_per_guest_override: number | null;
 }
+
+export interface ServiceHoursDay {
+  open: string;
+  close: string;
+  closed?: boolean;
+}
+
+export type ServiceHoursMap = Record<string, ServiceHoursDay>;
 
 export interface RestaurantSettings {
   require_payment: boolean;
@@ -720,6 +734,7 @@ export interface RestaurantSettings {
   min_advance_hours: number;
   default_reservation_fee: number;
   default_price_per_guest: number;
+  service_hours_json: ServiceHoursMap;
 }
 
 export interface SimulatorSession {

@@ -42,6 +42,26 @@ export const DEFAULT_SERVICE_HOURS: ServiceHoursMap = {
   sun: { open: '12:00', close: '21:00' },
 };
 
+export const SERVICE_HOURS_DAY_ORDER = [
+  'mon',
+  'tue',
+  'wed',
+  'thu',
+  'fri',
+  'sat',
+  'sun',
+] as const;
+
+export const SERVICE_HOURS_DAY_LABELS: Record<string, string> = {
+  mon: 'Lunes',
+  tue: 'Martes',
+  wed: 'Miércoles',
+  thu: 'Jueves',
+  fri: 'Viernes',
+  sat: 'Sábado',
+  sun: 'Domingo',
+};
+
 export interface RestaurantAddOnSelection {
   id: string;
   name: string;

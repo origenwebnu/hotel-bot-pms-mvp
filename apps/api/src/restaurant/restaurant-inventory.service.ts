@@ -4,6 +4,7 @@ import {
   buildRestaurantQuote,
   generateTimeSlots,
   getServiceHoursForDate,
+  resolveServiceHoursForDate,
   type RestaurantAddOnSelection,
   type ServiceHoursMap,
 } from '@hotel-bot/shared';
@@ -237,6 +238,8 @@ export class RestaurantInventoryService {
       dining_zone_id?: string | null;
       closed?: boolean;
       label?: string;
+      open_time_override?: string | null;
+      close_time_override?: string | null;
       reservation_fee_override?: number | null;
       price_per_guest_override?: number | null;
     },
@@ -254,12 +257,29 @@ export class RestaurantInventoryService {
       where: { hotelId, diningZoneId, date },
     });
 
-    const data = {
-      closed: body.closed ?? false,
-      label: body.label?.trim() || null,
-      reservationFeeOverride: body.reservation_fee_override ?? null,
-      pricePerGuestOverride: body.price_per_guest_override ?? null,
-    };
+    const data: {
+      closed?: boolean;
+      label?: string | null;
+      openTimeOverride?: string | null;
+      closeTimeOverride?: string | null;
+      reservationFeeOverride?: number | null;
+      pricePerGuestOverride?: number | null;
+    } = {};
+
+    if (body.closed !== undefined) data.closed = body.closed;
+    if (body.label !== undefined) data.label = body.label.trim() || null;
+    if (body.open_time_override !== undefined) {
+      data.openTimeOverride = body.open_time_override?.trim() || null;
+    }
+    if (body.close_time_override !== undefined) {
+      data.closeTimeOverride = body.close_time_override?.trim() || null;
+    }
+    if (body.reservation_fee_override !== undefined) {
+      data.reservationFeeOverride = body.reservation_fee_override;
+    }
+    if (body.price_per_guest_override !== undefined) {
+      data.pricePerGuestOverride = body.price_per_guest_override;
+    }
 
     const rate = existing
       ? await this.prisma.restaurantDateRate.update({
@@ -268,7 +288,17 @@ export class RestaurantInventoryService {
           include: { diningZone: { select: { id: true, name: true } } },
         })
       : await this.prisma.restaurantDateRate.create({
-          data: { hotelId, diningZoneId, date, ...data },
+          data: {
+            hotelId,
+            diningZoneId,
+            date,
+            closed: body.closed ?? false,
+            label: body.label?.trim() || null,
+            openTimeOverride: body.open_time_override?.trim() || null,
+            closeTimeOverride: body.close_time_override?.trim() || null,
+            reservationFeeOverride: body.reservation_fee_override ?? null,
+            pricePerGuestOverride: body.price_per_guest_override ?? null,
+          },
           include: { diningZone: { select: { id: true, name: true } } },
         });
 
@@ -282,6 +312,8 @@ export class RestaurantInventoryService {
       dining_zone_id?: string | null;
       closed?: boolean;
       label?: string;
+      open_time_override?: string | null;
+      close_time_override?: string | null;
       reservation_fee_override?: number | null;
       price_per_guest_override?: number | null;
     },
@@ -299,6 +331,8 @@ export class RestaurantInventoryService {
           dining_zone_id: body.dining_zone_id,
           closed: body.closed,
           label: body.label,
+          open_time_override: body.open_time_override,
+          close_time_override: body.close_time_override,
           reservation_fee_override: body.reservation_fee_override,
           price_per_guest_override: body.price_per_guest_override,
         }),
@@ -340,9 +374,18 @@ export class RestaurantInventoryService {
       this.assertBookableDate(settings, date);
     }
 
-    const hours = getServiceHoursForDate(
+    const globalRate = await this.getDateRate(hotelId, date, null);
+
+    const hours = resolveServiceHoursForDate(
       date,
       settings.serviceHoursJson as ServiceHoursMap | null,
+      globalRate
+        ? {
+            closed: globalRate.closed,
+            open_time_override: globalRate.openTimeOverride,
+            close_time_override: globalRate.closeTimeOverride,
+          }
+        : null,
     );
     if (hours.closed) return [];
 
@@ -353,7 +396,6 @@ export class RestaurantInventoryService {
       settings.defaultDurationMinutes,
     );
 
-    const globalRate = await this.getDateRate(hotelId, date, null);
     if (globalRate?.closed) return [];
 
     const available: string[] = [];
@@ -683,6 +725,8 @@ export class RestaurantInventoryService {
     diningZoneId: string | null;
     closed: boolean;
     label: string | null;
+    openTimeOverride: string | null;
+    closeTimeOverride: string | null;
     reservationFeeOverride: number | null;
     pricePerGuestOverride: number | null;
     diningZone?: { id: string; name: string } | null;
@@ -694,6 +738,8 @@ export class RestaurantInventoryService {
       dining_zone_name: r.diningZone?.name ?? null,
       closed: r.closed,
       label: r.label,
+      open_time_override: r.openTimeOverride,
+      close_time_override: r.closeTimeOverride,
       reservation_fee_override: r.reservationFeeOverride,
       price_per_guest_override: r.pricePerGuestOverride,
     };
