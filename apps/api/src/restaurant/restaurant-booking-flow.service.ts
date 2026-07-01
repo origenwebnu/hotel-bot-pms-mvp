@@ -6,6 +6,7 @@ import {
   WHATSAPP_BUTTON_IDS,
   parseGuestCountryCode,
   parseRestaurantBookingDate,
+  wantsWhatsAppSessionReset,
   type RestaurantAddOnSelection,
   type RestaurantOccasion,
   type WhatsAppInboundMessage,
@@ -1081,7 +1082,7 @@ export class RestaurantBookingFlowService {
   }
 
   private wantsSessionReset(text: string): boolean {
-    return /^(menu|inicio|cancelar|volver|empezar de nuevo)$/i.test(text.trim());
+    return wantsWhatsAppSessionReset(text);
   }
 
   private wantsNewBooking(text: string): boolean {
