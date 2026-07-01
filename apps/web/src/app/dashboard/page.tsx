@@ -37,7 +37,9 @@ import { DashboardOverviewPanel } from '@/components/DashboardOverviewPanel';
 import { ReservationsHistoryPanel } from '@/components/ReservationsHistoryPanel';
 import { RestaurantReservationsPanel } from '@/components/RestaurantReservationsPanel';
 import { MyAccountPanel } from '@/components/MyAccountPanel';
+import { SubscriptionPlansPanel } from '@/components/SubscriptionPlansPanel';
 import { BusinessOnboardingPanel } from '@/components/BusinessOnboardingPanel';
+import { subscriptionBannerMessage } from '@/lib/subscription-ui';
 
 const DEFAULT_INTEGRATION_TAB: HotelTab = 'integration-whatsapp';
 
@@ -163,14 +165,14 @@ function DashboardPageContent() {
       }}
       headerExtra={headerExtra}
     >
-      {subscription && (showHotelBooking || showRestaurantBooking) && tab !== 'overview' && tab !== 'account' && (
-        <SubscriptionBanner subscription={subscription} />
+      {subscription && (showHotelBooking || showRestaurantBooking) && tab !== 'overview' && tab !== 'account' && tab !== 'subscription' && (
+        <SubscriptionBanner subscription={subscription} onChoosePlan={() => handleNavigate('subscription')} />
       )}
 
       {tab === 'overview' && (
         <>
           {subscription && (showHotelBooking || showRestaurantBooking) && (
-            <SubscriptionBanner subscription={subscription} />
+            <SubscriptionBanner subscription={subscription} onChoosePlan={() => handleNavigate('subscription')} />
           )}
           <BusinessOnboardingPanel vertical={vertical} />
           {showHotelBooking && <DashboardOverviewPanel loadStats={loadStats} />}
@@ -200,6 +202,9 @@ function DashboardPageContent() {
       {tab === 'discounts' && showHotelBooking && <DiscountTiersPanel />}
       {tab === 'knowledge' && <KnowledgePanel />}
       {tab === 'simulator' && <ChatSimulator />}
+      {tab === 'subscription' && (
+        <SubscriptionPlansPanel subscription={subscription} />
+      )}
       {tab === 'account' && (
         <MyAccountPanel
           hotel={hotel}
@@ -213,66 +218,29 @@ function DashboardPageContent() {
   );
 }
 
-function SubscriptionBanner({ subscription }: { subscription: HotelSubscription }) {
-  const formatCop = (amount: number) =>
-    new Intl.NumberFormat('es-CO', {
-      style: 'currency',
-      currency: 'COP',
-      maximumFractionDigits: 0,
-    }).format(amount);
+function SubscriptionBanner({
+  subscription,
+  onChoosePlan,
+}: {
+  subscription: HotelSubscription;
+  onChoosePlan: () => void;
+}) {
+  const banner = subscriptionBannerMessage(subscription);
+  if (!banner) return null;
 
-  if (subscription.status === 'trial') {
-    return (
-      <div className="subscription-banner ok">
-        <strong>Periodo de prueba activo</strong>
-        <small>
-          {subscription.used}/{subscription.limit} reservas usadas
-          {subscription.trial_days_left != null &&
-            ` · ${subscription.trial_days_left} día(s) restantes`}
-        </small>
+  return (
+    <div className={`subscription-banner ${banner.tone}`}>
+      <div className="subscription-banner-content">
+        <div>
+          <strong>{banner.title}</strong>
+          <small>{banner.body}</small>
+        </div>
+        {banner.showPlanCta && (
+          <button type="button" className="btn-primary subscription-banner-cta" onClick={onChoosePlan}>
+            {banner.ctaLabel}
+          </button>
+        )}
       </div>
-    );
-  }
-
-  if (subscription.status === 'active' && subscription.plan_name) {
-    return (
-      <div className="subscription-banner ok">
-        <strong>
-          Plan {subscription.plan_name}
-          {subscription.plan_price_monthly != null &&
-            ` — ${formatCop(subscription.plan_price_monthly)}/mes`}
-        </strong>
-        <small>
-          {subscription.used}/{subscription.limit} reservas este mes
-          {subscription.period_month && ` (${subscription.period_month})`}
-        </small>
-      </div>
-    );
-  }
-
-  if (subscription.status === 'quota_reached') {
-    return (
-      <div className="subscription-banner danger">
-        <strong>Límite mensual alcanzado</strong>
-        <small>
-          Consumiste las {subscription.limit} reservas de tu plan este mes. Contacta a
-          BookiChat para actualizar a un plan superior.
-        </small>
-      </div>
-    );
-  }
-
-  if (subscription.status === 'trial_expired') {
-    return (
-      <div className="subscription-banner danger">
-        <strong>Periodo de prueba finalizado</strong>
-        <small>
-          Elige un plan para seguir recibiendo reservas por WhatsApp. Contacta a soporte
-          BookiChat.
-        </small>
-      </div>
-    );
-  }
-
-  return null;
+    </div>
+  );
 }

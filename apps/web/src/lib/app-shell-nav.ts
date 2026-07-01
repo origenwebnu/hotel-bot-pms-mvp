@@ -27,6 +27,7 @@ export const HOTEL_NAV: AppNavItem[] = [
   { id: 'discounts', label: 'Descuentos', icon: '/icons/modules/discounts.svg' },
   { id: 'knowledge', label: 'Entrenamiento AI', icon: '/icons/modules/knowledge.svg' },
   { id: 'simulator', label: 'Simulador IA', icon: '/icons/modules/simulator.svg' },
+  { id: 'subscription', label: 'Plan BookiChat', icon: '/icons/modules/plans.svg' },
   { id: 'account', label: 'Mi cuenta', icon: '/icons/modules/mi-cuenta.svg' },
 ];
 
@@ -38,6 +39,7 @@ export type HotelTab =
   | 'knowledge'
   | 'simulator'
   | 'account'
+  | 'subscription'
   | HotelIntegrationTab;
 
 export const HOTEL_TAB_TITLES: Record<string, string> = {
@@ -50,6 +52,7 @@ export const HOTEL_TAB_TITLES: Record<string, string> = {
   discounts: 'Descuentos automáticos',
   knowledge: 'Entrenamiento AI',
   simulator: 'Simulador de Chat',
+  subscription: 'Plan BookiChat',
   account: 'Mi cuenta',
 };
 
@@ -70,6 +73,7 @@ const HOTEL_TAB_IDS = new Set<string>([
   'discounts',
   'knowledge',
   'simulator',
+  'subscription',
   'account',
   ...HOTEL_INTEGRATION_ITEMS.map((item) => item.id),
 ]);
@@ -107,6 +111,7 @@ export function buildDashboardNav(vertical: BusinessVertical): AppNavItem[] {
       { id: 'inventory', label: 'Inventario', icon: '/icons/modules/inventory.svg' },
       { id: 'knowledge', label: 'Entrenamiento AI', icon: '/icons/modules/knowledge.svg' },
       { id: 'simulator', label: 'Simulador IA', icon: '/icons/modules/simulator.svg' },
+      { id: 'subscription', label: 'Plan BookiChat', icon: '/icons/modules/plans.svg' },
       { id: 'account', label: 'Mi cuenta', icon: '/icons/modules/mi-cuenta.svg' },
     ];
   }
@@ -126,6 +131,7 @@ export function buildDashboardNav(vertical: BusinessVertical): AppNavItem[] {
     },
     { id: 'knowledge', label: 'Entrenamiento AI', icon: '/icons/modules/knowledge.svg' },
     { id: 'simulator', label: 'Simulador IA', icon: '/icons/modules/simulator.svg' },
+    { id: 'subscription', label: 'Plan BookiChat', icon: '/icons/modules/plans.svg' },
     { id: 'account', label: 'Mi cuenta', icon: '/icons/modules/mi-cuenta.svg' },
   ];
 }
@@ -176,6 +182,7 @@ export function getDashboardTabTitle(tab: string, vertical: BusinessVertical): s
       inventory: 'Inventario y tarifas',
       knowledge: 'Entrenamiento AI',
       simulator: 'Simulador de Chat',
+      subscription: 'Plan BookiChat',
       account: 'Mi cuenta',
     };
     if (titles[tab]) return titles[tab];

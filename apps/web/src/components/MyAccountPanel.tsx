@@ -1,15 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import {
   api,
   type BillingHistoryItem,
   type Hotel,
   type HotelSubscription,
-  type SubscriptionPlanCatalogItem,
   type UserProfile,
 } from '@/lib/api';
+import { buildHotelDashboardPath } from '@/lib/app-shell-nav';
+import { subscriptionNeedsPlanPicker } from '@/lib/subscription-ui';
 
 const TIMEZONES = [
   { value: 'America/Bogota', label: 'Bogotá (Colombia)' },
@@ -104,13 +105,9 @@ function subscriptionStatusClass(sub: HotelSubscription) {
 }
 
 export function MyAccountPanel({ hotel, subscription, onHotelUpdate }: Props) {
-  const searchParams = useSearchParams();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [billing, setBilling] = useState<BillingHistoryItem[]>([]);
   const [loadingBilling, setLoadingBilling] = useState(true);
-  const [plans, setPlans] = useState<SubscriptionPlanCatalogItem[]>([]);
-  const [loadingPlans, setLoadingPlans] = useState(true);
-  const [checkoutPlanId, setCheckoutPlanId] = useState<string | null>(null);
 
   const [hotelForm, setHotelForm] = useState({
     name: hotel.name,
@@ -138,19 +135,6 @@ export function MyAccountPanel({ hotel, subscription, onHotelUpdate }: Props) {
   }, [hotel]);
 
   useEffect(() => {
-    const subscriptionResult = searchParams.get('subscription');
-    if (subscriptionResult === 'success') {
-      setMessage(
-        'Pago recibido. Activaremos tu plan en unos segundos cuando Mercado Pago confirme el pago.',
-      );
-    } else if (subscriptionResult === 'pending') {
-      setMessage('Tu pago está pendiente de confirmación. Te avisaremos cuando se acredite.');
-    } else if (subscriptionResult === 'failure') {
-      setMessage('El pago no se completó. Puedes intentar de nuevo con otro plan.');
-    }
-  }, [searchParams]);
-
-  useEffect(() => {
     api
       .getProfile()
       .then((p) => {
@@ -164,12 +148,6 @@ export function MyAccountPanel({ hotel, subscription, onHotelUpdate }: Props) {
       .then((res) => setBilling(res.items))
       .catch(() => setMessage('Error cargando historial de pagos'))
       .finally(() => setLoadingBilling(false));
-
-    api
-      .listSubscriptionPlans()
-      .then(setPlans)
-      .catch(() => {})
-      .finally(() => setLoadingPlans(false));
   }, []);
 
   async function handleSaveHotel(e: React.FormEvent) {
@@ -228,25 +206,7 @@ export function MyAccountPanel({ hotel, subscription, onHotelUpdate }: Props) {
     }
   }
 
-  async function handleSubscribe(planId: string) {
-    setCheckoutPlanId(planId);
-    setMessage('');
-    try {
-      const result = await api.createSubscriptionCheckout(planId, profile?.email ?? undefined);
-      window.location.href = result.checkout_url;
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'No se pudo iniciar el pago');
-      setCheckoutPlanId(null);
-    }
-  }
-
-  const showPlanPicker =
-    subscription &&
-    (subscription.status === 'trial_expired' ||
-      subscription.status === 'suspended' ||
-      (subscription.status === 'trial' &&
-        subscription.trial_days_left != null &&
-        subscription.trial_days_left <= 7));
+  const needsPlan = subscription && subscriptionNeedsPlanPicker(subscription);
 
   return (
     <div className="account-panel">
@@ -444,52 +404,17 @@ export function MyAccountPanel({ hotel, subscription, onHotelUpdate }: Props) {
 
             {!subscription.plan_name && subscription.status === 'trial_expired' && (
               <p className="muted">
-                Tu periodo de prueba finalizó. Contrata un plan abajo para seguir usando BookiChat.
+                Tu periodo de prueba finalizó.{' '}
+                <Link href={buildHotelDashboardPath('subscription')}>Elige un plan y paga con Mercado Pago</Link>.
               </p>
             )}
           </div>
-        </section>
-      )}
 
-      {showPlanPicker && (
-        <section className="panel account-section account-plans">
-          <h2>Contratar plan</h2>
-          <p className="muted">
-            Elige un plan y paga de forma segura con Mercado Pago. La activación es automática
-            al confirmarse el pago.
-          </p>
-
-          {loadingPlans ? (
-            <p className="muted">Cargando planes…</p>
-          ) : plans.length === 0 ? (
-            <p className="muted">
-              No hay planes disponibles en este momento. Contacta a soporte BookiChat.
-            </p>
-          ) : (
-            <div className="plan-cards">
-              {plans.map((plan) => (
-                <article key={plan.id} className="plan-card">
-                  <h3>{plan.name}</h3>
-                  {plan.description && <p className="muted">{plan.description}</p>}
-                  <p className="plan-price">
-                    {formatMoney(plan.price_monthly, plan.currency)}
-                    <span className="muted"> / mes</span>
-                  </p>
-                  <ul className="plan-features">
-                    <li>
-                      Hasta <strong>{plan.max_reservations_per_month}</strong> reservas al mes
-                    </li>
-                  </ul>
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    disabled={checkoutPlanId === plan.id}
-                    onClick={() => handleSubscribe(plan.id)}
-                  >
-                    {checkoutPlanId === plan.id ? 'Redirigiendo…' : 'Pagar con Mercado Pago'}
-                  </button>
-                </article>
-              ))}
+          {needsPlan && (
+            <div className="account-plan-cta">
+              <Link href={buildHotelDashboardPath('subscription')} className="btn-primary">
+                Ver planes y pagar
+              </Link>
             </div>
           )}
         </section>
@@ -550,32 +475,8 @@ export function MyAccountPanel({ hotel, subscription, onHotelUpdate }: Props) {
       </section>
 
       <style jsx>{`
-        .plan-cards {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-          gap: 1rem;
+        .account-plan-cta {
           margin-top: 1rem;
-        }
-        .plan-card {
-          border: 1px solid var(--border, #e5e7eb);
-          border-radius: 8px;
-          padding: 1.25rem;
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-        }
-        .plan-card h3 {
-          margin: 0;
-        }
-        .plan-price {
-          font-size: 1.25rem;
-          font-weight: 600;
-          margin: 0;
-        }
-        .plan-features {
-          margin: 0;
-          padding-left: 1.25rem;
-          flex: 1;
         }
       `}</style>
     </div>
