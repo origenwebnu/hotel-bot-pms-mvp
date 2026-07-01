@@ -3,6 +3,18 @@
 import { useEffect, useState } from 'react';
 import { superAdminApi, type PlatformBillingConfig } from '@/lib/super-admin-api';
 
+function modeLabel(mode: PlatformBillingConfig['access_token_mode']) {
+  if (mode === 'test') return 'Pruebas (TEST-)';
+  if (mode === 'production') return 'Producción (APP_USR-)';
+  return 'Sin definir';
+}
+
+function modeClass(mode: PlatformBillingConfig['access_token_mode']) {
+  if (mode === 'test') return 'warn';
+  if (mode === 'production') return 'ok';
+  return 'off';
+}
+
 export function SubscriptionBillingAdminPanel() {
   const [config, setConfig] = useState<PlatformBillingConfig | null>(null);
   const [accessToken, setAccessToken] = useState('');
@@ -22,17 +34,29 @@ export function SubscriptionBillingAdminPanel() {
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    const tokenValue = accessToken.trim();
+    const publicKeyValue = publicKey.trim();
+
+    if (!tokenValue && !publicKeyValue) {
+      setMessage('Ingresa el Access Token de Mercado Pago antes de guardar.');
+      return;
+    }
+
     setSaving(true);
     setMessage('');
     try {
       const updated = await superAdminApi.updateBillingConfig({
-        ...(accessToken.trim() && { mercadopago_access_token: accessToken.trim() }),
-        ...(publicKey.trim() && { mercadopago_public_key: publicKey.trim() }),
+        ...(tokenValue && { mercadopago_access_token: tokenValue }),
+        ...(publicKeyValue && { mercadopago_public_key: publicKeyValue }),
       });
       setConfig(updated);
       setAccessToken('');
       setPublicKey('');
-      setMessage('Credenciales de Mercado Pago guardadas.');
+      setMessage(
+        `Credenciales guardadas. Modo activo: ${modeLabel(updated.access_token_mode)}${
+          updated.access_token_hint ? ` (${updated.access_token_hint})` : ''
+        }.`,
+      );
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Error al guardar');
     } finally {
@@ -41,13 +65,18 @@ export function SubscriptionBillingAdminPanel() {
   }
 
   async function validate() {
+    if (accessToken.trim() || publicKey.trim()) {
+      setMessage('Guarda las credenciales primero y luego prueba la conexión.');
+      return;
+    }
+
     setValidating(true);
     setMessage('');
     try {
       const result = await superAdminApi.validateBillingConfig();
       setMessage(
         result.valid
-          ? `Conexión OK${result.user_id ? ` — cuenta MP ${result.user_id}` : ''}.`
+          ? `Conexión OK — cuenta MP ${result.user_id ?? '—'} · ${modeLabel(config?.access_token_mode ?? null)}`
           : result.reason ?? 'Credenciales inválidas',
       );
     } catch (err) {
@@ -74,7 +103,16 @@ export function SubscriptionBillingAdminPanel() {
       </p>
 
       {message && (
-        <div className={message.includes('Error') || message.includes('inválid') || message.includes('rechaz') ? 'error-banner' : 'info-banner'}>
+        <div
+          className={
+            message.includes('Error') ||
+            message.includes('inválid') ||
+            message.includes('rechaz') ||
+            message.includes('Ingresa')
+              ? 'error-banner'
+              : 'info-banner'
+          }
+        >
           {message}
         </div>
       )}
@@ -83,6 +121,11 @@ export function SubscriptionBillingAdminPanel() {
         <span className={`pill ${config?.configured ? 'ok' : 'warn'}`}>
           {config?.configured ? 'Configurado' : 'Sin configurar'}
         </span>
+        {config?.access_token_mode && (
+          <span className={`pill ${modeClass(config.access_token_mode)}`}>
+            {modeLabel(config.access_token_mode)}
+          </span>
+        )}
         {config?.access_token_hint && (
           <span className="muted">Access Token: {config.access_token_hint}</span>
         )}
@@ -94,11 +137,16 @@ export function SubscriptionBillingAdminPanel() {
       <label>
         Access Token de Mercado Pago
         <input
-          type="password"
+          type="text"
           value={accessToken}
           onChange={(e) => setAccessToken(e.target.value)}
-          placeholder={config?.has_access_token ? 'Dejar vacío para mantener el actual' : 'APP_USR-… o TEST-…'}
+          placeholder={
+            config?.has_access_token
+              ? 'Pega aquí el nuevo token (TEST- o APP_USR-)'
+              : 'TEST-… o APP_USR-…'
+          }
           autoComplete="off"
+          spellCheck={false}
         />
       </label>
       <label>
@@ -107,10 +155,22 @@ export function SubscriptionBillingAdminPanel() {
           type="text"
           value={publicKey}
           onChange={(e) => setPublicKey(e.target.value)}
-          placeholder={config?.has_public_key ? 'Dejar vacío para mantener la actual' : 'APP_USR-…'}
+          placeholder={
+            config?.has_public_key
+              ? 'Pega aquí la nueva Public Key si quieres cambiarla'
+              : 'TEST-… o APP_USR-…'
+          }
           autoComplete="off"
+          spellCheck={false}
         />
       </label>
+
+      <p className="muted small">
+        Para pruebas usa credenciales de <strong>Credenciales de prueba</strong> en Mercado Pago
+        (token <strong>TEST-</strong>). Para cobros reales usa <strong>producción</strong>{' '}
+        (<strong>APP_USR-</strong>). Debes pulsar <strong>Guardar credenciales</strong> antes de
+        probar la conexión.
+      </p>
 
       <label>
         Webhook (configurar en Mercado Pago Developers)
@@ -128,8 +188,8 @@ export function SubscriptionBillingAdminPanel() {
 
       <p className="muted small">
         En Mercado Pago → Tu integración → Webhooks, suscríbete a eventos de{' '}
-        <strong>pagos</strong> con esta URL. Usa credenciales de producción en live y{' '}
-        <strong>TEST-</strong> para pruebas.
+        <strong>pagos</strong> con esta URL. Usa el webhook en modo <strong>Prueba</strong> si el
+        token es TEST-, y en <strong>Producción</strong> si es APP_USR-.
       </p>
 
       <div className="billing-actions">

@@ -62,6 +62,7 @@ export class PlatformCredentialService {
     const byType = new Map(rows.map((r) => [r.credentialType, r]));
     const access = byType.get(PLATFORM_CREDENTIAL_TYPES.MERCADOPAGO_ACCESS_TOKEN);
     const publicKey = byType.get(PLATFORM_CREDENTIAL_TYPES.MERCADOPAGO_PUBLIC_KEY);
+    const accessToken = access ? await this.getCredential(PLATFORM_CREDENTIAL_TYPES.MERCADOPAGO_ACCESS_TOKEN) : null;
 
     return {
       provider: 'mercadopago' as const,
@@ -70,8 +71,15 @@ export class PlatformCredentialService {
       has_public_key: Boolean(publicKey),
       access_token_hint: access?.keyHint ?? null,
       public_key_hint: publicKey?.keyHint ?? null,
+      access_token_mode: this.resolveCredentialMode(accessToken),
       webhook_url: this.buildWebhookUrl(),
     };
+  }
+
+  private resolveCredentialMode(value: string | null): 'test' | 'production' | null {
+    if (!value) return null;
+    if (value.startsWith('TEST-')) return 'test';
+    return 'production';
   }
 
   buildWebhookUrl() {
