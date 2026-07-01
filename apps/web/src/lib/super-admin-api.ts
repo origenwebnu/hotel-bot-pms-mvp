@@ -277,5 +277,6 @@ export interface PlatformBillingConfig {
   has_public_key: boolean;
   access_token_hint: string | null;
   public_key_hint: string | null;
+  access_token_mode: 'test' | 'production' | null;
   webhook_url: string;
 }

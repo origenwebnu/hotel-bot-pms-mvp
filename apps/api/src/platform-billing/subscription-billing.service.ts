@@ -8,6 +8,7 @@ import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionPlanService } from '../subscription/subscription-plan.service';
 import { MercadoPagoBillingService } from './mercadopago-billing.service';
 import { PlatformCredentialService, PLATFORM_CREDENTIAL_TYPES } from './platform-credential.service';
+import { UpdatePlatformBillingConfigDto } from '../super-admin/dto/update-platform-billing-config.dto';
 
 @Injectable()
 export class SubscriptionBillingService {
@@ -23,20 +24,26 @@ export class SubscriptionBillingService {
     return this.credentials.getBillingConfigStatus();
   }
 
-  async updatePlatformBillingConfig(body: {
-    mercadopago_access_token?: string;
-    mercadopago_public_key?: string;
-  }) {
-    if (body.mercadopago_access_token !== undefined) {
-      await this.credentials.upsertCredential(
-        PLATFORM_CREDENTIAL_TYPES.MERCADOPAGO_ACCESS_TOKEN,
-        body.mercadopago_access_token,
+  async updatePlatformBillingConfig(body: UpdatePlatformBillingConfigDto) {
+    const hasAccessToken = body.mercadopago_access_token !== undefined;
+    const hasPublicKey = body.mercadopago_public_key !== undefined;
+
+    if (!hasAccessToken && !hasPublicKey) {
+      throw new BadRequestException(
+        'Ingresa al menos el Access Token de Mercado Pago para guardar.',
       );
     }
-    if (body.mercadopago_public_key !== undefined) {
+
+    if (hasAccessToken) {
+      await this.credentials.upsertCredential(
+        PLATFORM_CREDENTIAL_TYPES.MERCADOPAGO_ACCESS_TOKEN,
+        body.mercadopago_access_token!,
+      );
+    }
+    if (hasPublicKey) {
       await this.credentials.upsertCredential(
         PLATFORM_CREDENTIAL_TYPES.MERCADOPAGO_PUBLIC_KEY,
-        body.mercadopago_public_key,
+        body.mercadopago_public_key!,
       );
     }
     return this.credentials.getBillingConfigStatus();

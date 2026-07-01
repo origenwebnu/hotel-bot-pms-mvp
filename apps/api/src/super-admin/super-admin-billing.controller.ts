@@ -2,6 +2,7 @@ import { Body, Controller, Get, Post, Put, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { SuperAdminGuard } from '../auth/super-admin.guard';
 import { SubscriptionBillingService } from '../platform-billing/subscription-billing.service';
+import { UpdatePlatformBillingConfigDto } from './dto/update-platform-billing-config.dto';
 
 @Controller('super-admin/billing')
 @UseGuards(JwtAuthGuard, SuperAdminGuard)
@@ -14,13 +15,7 @@ export class SuperAdminBillingController {
   }
 
   @Put('config')
-  updateConfig(
-    @Body()
-    body: {
-      mercadopago_access_token?: string;
-      mercadopago_public_key?: string;
-    },
-  ) {
+  updateConfig(@Body() body: UpdatePlatformBillingConfigDto) {
     return this.billing.updatePlatformBillingConfig(body);
   }
 
