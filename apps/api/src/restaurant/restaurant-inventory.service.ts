@@ -3,7 +3,7 @@ import {
   DEFAULT_SERVICE_HOURS,
   buildRestaurantQuote,
   generateTimeSlots,
-  getServiceHoursForDate,
+  getEffectiveServiceHours,
   resolveServiceHoursForDate,
   type RestaurantAddOnSelection,
   type ServiceHoursMap,
@@ -17,7 +17,7 @@ export class RestaurantInventoryService {
   constructor(private readonly prisma: PrismaService) {}
 
   async ensureSettings(hotelId: string) {
-    return this.prisma.restaurantSettings.upsert({
+    const settings = await this.prisma.restaurantSettings.upsert({
       where: { hotelId },
       create: {
         hotelId,
@@ -25,6 +25,27 @@ export class RestaurantInventoryService {
       },
       update: {},
     });
+
+    if (!settings.serviceHoursJson) {
+      return this.prisma.restaurantSettings.update({
+        where: { hotelId },
+        data: { serviceHoursJson: DEFAULT_SERVICE_HOURS as object },
+      });
+    }
+
+    return settings;
+  }
+
+  async getPartySizeLimits(hotelId: string) {
+    const zones = await this.prisma.diningZone.findMany({
+      where: { hotelId, isActive: true },
+      select: { minPartySize: true, maxPartySize: true },
+    });
+    if (!zones.length) return null;
+    return {
+      min: Math.min(...zones.map((z) => z.minPartySize)),
+      max: Math.max(...zones.map((z) => z.maxPartySize)),
+    };
   }
 
   async getSettings(hotelId: string) {
@@ -383,10 +404,13 @@ export class RestaurantInventoryService {
     }
 
     const globalRate = await this.getDateRate(hotelId, date, null);
+    const serviceHours = getEffectiveServiceHours(
+      settings.serviceHoursJson as ServiceHoursMap | null,
+    );
 
     const hours = resolveServiceHoursForDate(
       date,
-      settings.serviceHoursJson as ServiceHoursMap | null,
+      serviceHours,
       globalRate
         ? {
             closed: globalRate.closed,

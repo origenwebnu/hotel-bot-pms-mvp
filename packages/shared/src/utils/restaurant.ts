@@ -53,13 +53,25 @@ export function generateTimeSlots(
   return slots;
 }
 
+function parseLocalDateParts(dateStr: string): { year: number; month: number; day: number } {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return { year, month, day };
+}
+
+export function getEffectiveServiceHours(
+  hours: ServiceHoursMap | null | undefined,
+): ServiceHoursMap {
+  return { ...DEFAULT_SERVICE_HOURS, ...(hours ?? {}) };
+}
+
 export function getServiceHoursForDate(
   dateStr: string,
   hours: ServiceHoursMap | null | undefined,
 ): { open: string; close: string; closed: boolean } {
-  const map = hours ?? DEFAULT_SERVICE_HOURS;
-  const day = new Date(`${dateStr}T12:00:00`);
-  const key = DAY_KEYS[day.getDay()];
+  const map = getEffectiveServiceHours(hours);
+  const { year, month, day } = parseLocalDateParts(dateStr);
+  const weekday = new Date(year, month - 1, day).getDay();
+  const key = DAY_KEYS[weekday];
   const cfg = map[key] ?? DEFAULT_SERVICE_HOURS[key];
   if (cfg.closed) return { open: '00:00', close: '00:00', closed: true };
   return { open: cfg.open, close: cfg.close, closed: false };
@@ -121,6 +133,46 @@ function formatIsoDate(year: number, month: number, day: number): string {
   return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+const WEEKDAYS: Record<string, number> = {
+  domingo: 0,
+  lunes: 1,
+  martes: 2,
+  miercoles: 3,
+  jueves: 4,
+  viernes: 5,
+  sabado: 6,
+};
+
+function normalizeDateText(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function parseWeekdayDate(text: string): string | undefined {
+  const normalized = normalizeDateText(text);
+  const wantsNext = /\b(proximo|proxima|siguiente|que viene|que vienen)\b/.test(normalized);
+
+  const match = normalized.match(
+    /\b(?:para\s+el|para\s+la|el|la|este|esta|proximo|proxima|siguiente)?\s*(domingo|lunes|martes|miercoles|jueves|viernes|sabado)\b/,
+  );
+  if (!match) return undefined;
+
+  const targetDow = WEEKDAYS[match[1]];
+  if (targetDow === undefined) return undefined;
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let daysAhead = (targetDow - today.getDay() + 7) % 7;
+  if (wantsNext && daysAhead === 0) daysAhead = 7;
+
+  const result = new Date(today);
+  result.setDate(today.getDate() + daysAhead);
+  return formatIsoDate(result.getFullYear(), result.getMonth() + 1, result.getDate());
+}
+
 /** Parse a single booking date from natural language (Spanish). */
 export function parseRestaurantBookingDate(text: string): string | undefined {
   const trimmed = text.trim();
@@ -138,6 +190,9 @@ export function parseRestaurantBookingDate(text: string): string | undefined {
     d.setDate(d.getDate() + 1);
     return formatIsoDate(d.getFullYear(), d.getMonth() + 1, d.getDate());
   }
+
+  const weekdayDate = parseWeekdayDate(trimmed);
+  if (weekdayDate) return weekdayDate;
 
   const spanish = trimmed.match(
     /(?:el\s+)?(\d{1,2})(?:\s+de\s+|\s+)([a-záéíóú]+)(?:\s+de\s+(\d{4}))?/i,
