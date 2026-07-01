@@ -34,12 +34,22 @@ export class PublicPaymentController {
       epaycoPublicKey = await this.loadPublicPaymentKey(reservation.hotelId);
     }
 
+    const guestName = [reservation.guestFirstName, reservation.guestLastName]
+      .filter(Boolean)
+      .join(' ');
+
     return {
       reservation_id: reservation.id,
       status: reservation.status,
       payment_status: reservation.paymentStatus,
+      booking_kind: reservation.bookingKind,
+      business_vertical: hotel.businessVertical,
       hotel_name: hotel.name,
       room_name: reservation.roomName,
+      dining_zone_name: reservation.diningZoneName,
+      booking_date: reservation.bookingDate,
+      booking_time: reservation.bookingTime,
+      party_size: reservation.partySize,
       check_in: reservation.checkIn,
       check_out: reservation.checkOut,
       check_in_label: reservation.checkIn
@@ -48,14 +58,15 @@ export class PublicPaymentController {
       check_out_label: reservation.checkOut
         ? formatDisplayDate(reservation.checkOut)
         : null,
+      booking_date_label: reservation.bookingDate
+        ? formatDisplayDate(reservation.bookingDate)
+        : null,
       guests: (reservation.adults ?? 0) + (reservation.children ?? 0),
       amount: reservation.totalAmount,
       original_amount: reservation.originalAmount,
       discount_percent: reservation.discountPercent,
       currency: reservation.currency,
-      guest_name: [reservation.guestFirstName, reservation.guestLastName]
-        .filter(Boolean)
-        .join(' '),
+      guest_name: guestName,
       guest_email: reservation.guestEmail,
       hold_expires_at: reservation.holdExpiresAt,
       payment_provider: paymentProvider,
@@ -79,29 +90,46 @@ export class PublicPaymentController {
       orderBy: { createdAt: 'desc' },
     });
 
+    const guestName = [reservation.guestFirstName, reservation.guestLastName]
+      .filter(Boolean)
+      .join(' ');
+
+    const recommendations =
+      reservation.bookingKind === 'restaurant_table'
+        ? reservation.hotel.restaurantSettings?.postPaymentMessage ??
+          reservation.hotel.reservationRecommendations
+        : reservation.hotel.reservationRecommendations;
+
     return {
       reservation_id: reservation.id,
       status: reservation.status,
       payment_status: reservation.paymentStatus ?? latestEvent?.status ?? 'pending',
       payment_event_id: latestEvent?.externalId ?? reservation.paymentId,
+      booking_kind: reservation.bookingKind,
+      business_vertical: reservation.hotel.businessVertical,
       amount: reservation.totalAmount,
       currency: reservation.currency,
       hotel_name: reservation.hotel.name,
       room_name: reservation.roomName,
+      dining_zone_name: reservation.diningZoneName,
+      booking_date: reservation.bookingDate,
+      booking_time: reservation.bookingTime,
+      party_size: reservation.partySize,
       check_in_label: reservation.checkIn
         ? formatDisplayDate(reservation.checkIn)
         : null,
       check_out_label: reservation.checkOut
         ? formatDisplayDate(reservation.checkOut)
         : null,
-      guest_name: [reservation.guestFirstName, reservation.guestLastName]
-        .filter(Boolean)
-        .join(' '),
+      booking_date_label: reservation.bookingDate
+        ? formatDisplayDate(reservation.bookingDate)
+        : null,
+      guest_name: guestName,
       guest_email: reservation.guestEmail,
       guests: (reservation.adults ?? 0) + (reservation.children ?? 0),
       original_amount: reservation.originalAmount,
       discount_percent: reservation.discountPercent,
-      recommendations: reservation.hotel.reservationRecommendations,
+      recommendations,
     };
   }
 
@@ -116,7 +144,11 @@ export class PublicPaymentController {
         hotel: {
           select: {
             name: true,
+            businessVertical: true,
             reservationRecommendations: true,
+            restaurantSettings: {
+              select: { postPaymentMessage: true },
+            },
           },
         },
       },

@@ -3,11 +3,22 @@
 import { useEffect, useState, Suspense } from 'react';
 import { useParams, useSearchParams } from 'next/navigation';
 import Script from 'next/script';
+import {
+  paymentCheckoutSubtitle,
+  resolvePaymentVertical,
+} from '@hotel-bot/shared';
+import { PaymentReservationSummary } from '@/components/PaymentReservationSummary';
 
 type CheckoutData = {
   reservation_id: string;
+  booking_kind?: string | null;
+  business_vertical?: string | null;
   hotel_name: string;
   room_name: string | null;
+  dining_zone_name?: string | null;
+  booking_date_label?: string | null;
+  booking_time?: string | null;
+  party_size?: number | null;
   check_in_label: string | null;
   check_out_label: string | null;
   guests: number;
@@ -113,6 +124,8 @@ function PaymentCheckoutContent() {
     );
   }
 
+  const vertical = resolvePaymentVertical(data.business_vertical, data.booking_kind);
+
   return (
     <main className="page">
       {isEpayco && (
@@ -126,27 +139,23 @@ function PaymentCheckoutContent() {
       <div className="card">
         <p className="eyebrow">BookiChat · Pago seguro</p>
         <h1>{data.hotel_name}</h1>
-        <p className="subtitle">Confirma tu reserva y continúa al formulario de pago</p>
+        <p className="subtitle">{paymentCheckoutSubtitle(vertical)}</p>
 
-        <div className="summary">
-          <div className="row">
-            <span>Habitación</span>
-            <strong>{data.room_name ?? '—'}</strong>
-          </div>
-          <div className="row">
-            <span>Fechas</span>
-            <strong>
-              {data.check_in_label} → {data.check_out_label}
-            </strong>
-          </div>
-          <div className="row">
-            <span>Huéspedes</span>
-            <strong>{data.guests}</strong>
-          </div>
-          <div className="row">
-            <span>Cliente</span>
-            <strong>{data.guest_name}</strong>
-          </div>
+        <PaymentReservationSummary
+          context={{
+            business_vertical: data.business_vertical,
+            booking_kind: data.booking_kind,
+            guest_name: data.guest_name,
+            room_name: data.room_name,
+            check_in_label: data.check_in_label,
+            check_out_label: data.check_out_label,
+            guests: data.guests,
+            dining_zone_name: data.dining_zone_name,
+            booking_date_label: data.booking_date_label,
+            booking_time: data.booking_time,
+            party_size: data.party_size,
+          }}
+        >
           {data.discount_percent && data.original_amount ? (
             <div className="row">
               <span>Descuento</span>
@@ -159,7 +168,7 @@ function PaymentCheckoutContent() {
               {data.currency} {(data.amount ?? 0).toLocaleString('es-CO')}
             </strong>
           </div>
-        </div>
+        </PaymentReservationSummary>
 
         {isEpayco && data.epayco_session_id ? (
           <button
@@ -183,7 +192,7 @@ function PaymentCheckoutContent() {
             Continuar al pago
           </a>
         ) : (
-          <p className="warn">El hotel aún no tiene pagos configurados.</p>
+          <p className="warn">El negocio aún no tiene pagos configurados.</p>
         )}
 
         <p className="hint">
