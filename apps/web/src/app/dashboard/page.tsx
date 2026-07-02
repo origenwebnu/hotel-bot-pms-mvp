@@ -33,6 +33,7 @@ import { DiscountTiersPanel } from '@/components/DiscountTiersPanel';
 import { InventoryPanel } from '@/components/InventoryPanel';
 import { RestaurantInventoryPanel } from '@/components/RestaurantInventoryPanel';
 import { ChatSimulator } from '@/components/ChatSimulator';
+import { ConversationHistoryPanel } from '@/components/ConversationHistoryPanel';
 import { DashboardOverviewPanel } from '@/components/DashboardOverviewPanel';
 import { ReservationsHistoryPanel } from '@/components/ReservationsHistoryPanel';
 import { RestaurantReservationsPanel } from '@/components/RestaurantReservationsPanel';
@@ -184,6 +185,7 @@ function DashboardPageContent() {
       {tab === 'reservations' && showRestaurantBooking && (
         <RestaurantReservationsPanel loadReservations={loadReservations} />
       )}
+      {tab === 'conversations' && <ConversationHistoryPanel />}
       {tab === 'integration-whatsapp' && (
         <WhatsAppPanel
           onConnectionChange={(connected) =>

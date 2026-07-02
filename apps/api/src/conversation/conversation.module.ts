@@ -12,6 +12,7 @@ import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { LocalInventoryModule } from '../local-inventory/local-inventory.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
 import { RestaurantModule } from '../restaurant/restaurant.module';
+import { ConversationHistoryModule } from '../conversation-history/conversation-history.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { RestaurantModule } from '../restaurant/restaurant.module';
     LocalInventoryModule,
     SubscriptionModule,
     RestaurantModule,
+    ConversationHistoryModule,
   ],
   controllers: [WhatsAppWebhookController],
   providers: [

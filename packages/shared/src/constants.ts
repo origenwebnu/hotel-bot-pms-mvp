@@ -6,6 +6,13 @@ export const DEFAULT_DISCOUNT_OFFER_MINUTES = 60;
 export const DEFAULT_RESERVATION_RESUME_HOURS = 24;
 export const MAX_LIST_MESSAGE_ROWS = 10;
 
+/** Max WhatsApp conversation threads stored per hotel (cost control). */
+export const CONVERSATION_HISTORY_MAX_THREADS = 30;
+/** Max messages kept per phone thread. */
+export const CONVERSATION_HISTORY_MAX_MESSAGES_PER_THREAD = 60;
+/** Max characters stored per message body. */
+export const CONVERSATION_HISTORY_MAX_BODY_CHARS = 1200;
+
 export const WHATSAPP_BUTTON_IDS = {
   RESERVE: 'btn_reserve',
   BACK_TO_ROOMS: 'btn_back_rooms',

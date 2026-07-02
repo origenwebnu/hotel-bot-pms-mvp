@@ -34,6 +34,7 @@ import { signGalleryToken } from '../utils/gallery-token';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionLimitError } from '../subscription/subscription.errors';
 import { RestaurantBookingFlowService } from '../restaurant/restaurant-booking-flow.service';
+import { ConversationHistoryService } from '../conversation-history/conversation-history.service';
 
 @Injectable()
 export class ConversationService {
@@ -49,6 +50,7 @@ export class ConversationService {
     private readonly discountTiers: DiscountTierService,
     private readonly subscription: SubscriptionService,
     private readonly restaurantFlow: RestaurantBookingFlowService,
+    private readonly conversationHistory: ConversationHistoryService,
     @InjectQueue(QUEUE_NAMES.WHATSAPP_INBOUND) private readonly inboundQueue: Queue,
   ) {}
 
@@ -71,6 +73,7 @@ export class ConversationService {
   async processMessage(hotelId: string, message: WhatsAppInboundMessage) {
     const phone = message.from;
     const session = await this.getOrCreateSession(hotelId, phone);
+    this.conversationHistory.logInbound(hotelId, session.id, message, session.state, phone);
     const text = this.extractText(message);
     const business = await this.getBusinessProfile(hotelId);
     const canTransact = supportsTransactionalFlow(business.vertical);

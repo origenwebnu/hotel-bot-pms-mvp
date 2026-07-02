@@ -17,6 +17,7 @@ export type HotelIntegrationTab = (typeof HOTEL_INTEGRATION_ITEMS)[number]['id']
 export const HOTEL_NAV: AppNavItem[] = [
   { id: 'overview', label: 'Resumen', icon: '/icons/modules/overview.svg' },
   { id: 'reservations', label: 'Reservas', icon: '/icons/modules/reservations.svg' },
+  { id: 'conversations', label: 'Chats WhatsApp', icon: '/icons/modules/conversations.svg' },
   {
     id: 'integrations',
     label: 'Integraciones',
@@ -34,6 +35,7 @@ export const HOTEL_NAV: AppNavItem[] = [
 export type HotelTab =
   | 'overview'
   | 'reservations'
+  | 'conversations'
   | 'inventory'
   | 'discounts'
   | 'knowledge'
@@ -45,6 +47,7 @@ export type HotelTab =
 export const HOTEL_TAB_TITLES: Record<string, string> = {
   overview: 'Resumen del hotel',
   reservations: 'Historial de reservas',
+  conversations: 'Historial de chats WhatsApp',
   'integration-whatsapp': 'WhatsApp Business',
   'integration-pms': 'PMS — Property Management',
   'integration-payments': 'Pagos / Recaudo',
@@ -69,6 +72,7 @@ export function isIntegrationTab(tab: string): tab is HotelIntegrationTab {
 const HOTEL_TAB_IDS = new Set<string>([
   'overview',
   'reservations',
+  'conversations',
   'inventory',
   'discounts',
   'knowledge',
@@ -99,6 +103,7 @@ export function buildDashboardNav(vertical: BusinessVertical): AppNavItem[] {
     return [
       { id: 'overview', label: 'Resumen', icon: '/icons/modules/overview.svg' },
       { id: 'reservations', label: 'Reservas', icon: '/icons/modules/reservations.svg' },
+      { id: 'conversations', label: 'Chats WhatsApp', icon: '/icons/modules/conversations.svg' },
       {
         id: 'integrations',
         label: 'Integraciones',
@@ -123,6 +128,7 @@ export function buildDashboardNav(vertical: BusinessVertical): AppNavItem[] {
 
   return [
     { id: 'overview', label: 'Resumen', icon: '/icons/modules/overview.svg' },
+    { id: 'conversations', label: 'Chats WhatsApp', icon: '/icons/modules/conversations.svg' },
     {
       id: 'integrations',
       label: 'Integraciones',
@@ -177,6 +183,7 @@ export function getDashboardTabTitle(tab: string, vertical: BusinessVertical): s
     const titles: Record<string, string> = {
       overview: 'Resumen del restaurante',
       reservations: 'Calendario de reservas',
+      conversations: 'Historial de chats WhatsApp',
       'integration-whatsapp': 'WhatsApp Business',
       'integration-payments': 'Pagos / Recaudo',
       inventory: 'Inventario y tarifas',
