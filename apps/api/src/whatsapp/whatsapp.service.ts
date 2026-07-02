@@ -1,13 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { WhatsAppOutboundMessage } from '@hotel-bot/shared';
 import { WhatsAppCredentialsService } from './whatsapp-credentials.service';
+import { ConversationHistoryService } from '../conversation-history/conversation-history.service';
 
 @Injectable()
 export class WhatsAppService {
   private readonly logger = new Logger(WhatsAppService.name);
   private readonly apiVersion = process.env.WHATSAPP_API_VERSION ?? 'v21.0';
 
-  constructor(private readonly credentials: WhatsAppCredentialsService) {}
+  constructor(
+    private readonly credentials: WhatsAppCredentialsService,
+    private readonly history: ConversationHistoryService,
+  ) {}
 
   async sendText(hotelId: string, to: string, text: string) {
     await this.sendMessage(hotelId, to, { type: 'text', text: { body: text } });
@@ -56,6 +60,13 @@ export class WhatsAppService {
       this.logger.error(`WhatsApp image send failed: ${response.status} ${error}`);
       throw new Error(`WhatsApp API error: ${response.status}`);
     }
+
+    this.history.logOutbound(
+      hotelId,
+      to,
+      { type: 'text', text: { body: caption ?? '[Imagen]' } },
+      caption,
+    );
   }
 
   private async sendMessage(
@@ -93,6 +104,7 @@ export class WhatsAppService {
     }
 
     this.logger.debug(`Message sent to ${to} for hotel ${hotelId}`);
+    this.history.logOutbound(hotelId, to, message);
   }
 
   private buildPayload(to: string, message: WhatsAppOutboundMessage) {

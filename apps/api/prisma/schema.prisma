@@ -30,6 +30,7 @@ model Hotel {
   knowledge     KnowledgeDocument[]
   reservations  Reservation[]
   conversations ConversationSession[]
+  conversationMessages ConversationMessage[]
   vectors       KnowledgeVector[]
   roomTypes     RoomType[]
   discountTiers HotelDiscountTier[]
@@ -198,10 +199,31 @@ model ConversationSession {
   updatedAt          DateTime @updatedAt @map("updated_at")
 
   hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  messages ConversationMessage[]
 
   @@unique([hotelId, whatsappPhone])
   @@index([hotelId, lastMessageAt(sort: Desc)])
   @@map("conversation_sessions")
+}
+
+model ConversationMessage {
+  id           String   @id @default(cuid())
+  hotelId      String   @map("hotel_id")
+  sessionId    String   @map("session_id")
+  direction    String
+  body         String   @db.Text
+  messageType  String   @default("text") @map("message_type")
+  externalId   String?  @map("external_id")
+  sessionState String?  @map("session_state")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  hotel   Hotel               @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  session ConversationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([hotelId, externalId])
+  @@index([sessionId, createdAt])
+  @@index([hotelId, createdAt(sort: Desc)])
+  @@map("conversation_messages")
 }
 
 model Reservation {

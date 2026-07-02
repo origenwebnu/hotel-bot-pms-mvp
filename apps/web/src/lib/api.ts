@@ -270,6 +270,14 @@ export const api = {
     return request<ReservationHistoryResponse>(`/hotels/me/reservations${suffix}`);
   },
 
+  listConversations: (label?: ConversationHistoryLabel) => {
+    const suffix = label ? `?label=${encodeURIComponent(label)}` : '';
+    return request<ConversationHistoryResponse>(`/hotels/me/conversations${suffix}`);
+  },
+
+  getConversationThread: (sessionId: string) =>
+    request<ConversationThreadResponse>(`/hotels/me/conversations/${sessionId}`),
+
   getRestaurantSettings: () =>
     request<RestaurantSettings>('/hotels/me/restaurant/settings'),
 
@@ -676,6 +684,46 @@ export interface ReservationHistoryResponse {
     total: number;
     total_pages: number;
   };
+}
+
+export type ConversationHistoryLabel = 'completed' | 'abandoned';
+
+export interface ConversationHistoryItem {
+  id: string;
+  whatsapp_phone: string;
+  state: string;
+  label: ConversationHistoryLabel;
+  last_message_at: string;
+  message_count: number;
+  preview: string;
+  preview_direction: string | null;
+}
+
+export interface ConversationHistoryResponse {
+  items: ConversationHistoryItem[];
+  limit: number;
+  retention_note: string;
+}
+
+export interface ConversationThreadResponse {
+  session: {
+    id: string;
+    whatsapp_phone: string;
+    state: string;
+    label: ConversationHistoryLabel;
+    last_message_at: string;
+    reservation_id: string | null;
+    paid_amount: number | null;
+    paid_currency: string | null;
+  };
+  messages: Array<{
+    id: string;
+    direction: 'inbound' | 'outbound';
+    body: string;
+    message_type: string;
+    session_state: string | null;
+    created_at: string;
+  }>;
 }
 
 export interface DiningZone {

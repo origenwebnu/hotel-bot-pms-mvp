@@ -17,6 +17,7 @@ import { HealthModule } from './health/health.module';
 import { RestaurantModule } from './restaurant/restaurant.module';
 import { SimulatorModule } from './simulator/simulator.module';
 import { PlatformBillingModule } from './platform-billing/subscription-billing.module';
+import { ConversationHistoryModule } from './conversation-history/conversation-history.module';
 import { QUEUE_NAMES } from '@hotel-bot/shared';
 
 @Module({
@@ -50,6 +51,7 @@ import { QUEUE_NAMES } from '@hotel-bot/shared';
     RestaurantModule,
     SimulatorModule,
     PlatformBillingModule,
+    ConversationHistoryModule,
   ],
 })
 export class AppModule {}
