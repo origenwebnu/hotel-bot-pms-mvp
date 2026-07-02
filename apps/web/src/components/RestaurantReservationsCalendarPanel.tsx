@@ -32,6 +32,27 @@ function formatPhone(phone: string) {
   return phone;
 }
 
+function ReceiptIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z" />
+      <path d="M8 7h8" />
+      <path d="M8 11h8" />
+      <path d="M8 15h5" />
+    </svg>
+  );
+}
+
 function monthRange(date: Date) {
   const year = date.getFullYear();
   const month = date.getMonth();
@@ -413,7 +434,21 @@ export function RestaurantReservationsCalendarPanel() {
             )}
             {selectedDayReservations.map((r) => (
               <div key={r.id} className="res-card">
-                <div className="res-card-time">{r.booking_time}</div>
+                <div className="res-card-header">
+                  <div className="res-card-time">{r.booking_time}</div>
+                  {r.receipt_url && (
+                    <a
+                      href={r.receipt_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="res-receipt-link"
+                      title="Ver recibo de pago"
+                      aria-label={`Ver recibo de pago de ${r.guest.full_name ?? 'reserva'}`}
+                    >
+                      <ReceiptIcon />
+                    </a>
+                  )}
+                </div>
                 <div className="res-card-guest">{r.guest.full_name ?? 'Sin nombre'}</div>
                 {r.guest.whatsapp && (
                   <div className="res-card-phone">{formatPhone(r.guest.whatsapp)}</div>
@@ -678,9 +713,32 @@ export function RestaurantReservationsCalendarPanel() {
           margin-bottom: 0.5rem;
           background: var(--surface-hover);
         }
+        .res-card-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 0.5rem;
+        }
         .res-card-time {
           font-weight: 700;
           font-size: 1rem;
+        }
+        .res-receipt-link {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 32px;
+          height: 32px;
+          border-radius: 8px;
+          color: #2563eb;
+          background: #eff6ff;
+          border: 1px solid #bfdbfe;
+          flex-shrink: 0;
+          transition: background 0.15s, color 0.15s;
+        }
+        .res-receipt-link:hover {
+          background: #2563eb;
+          color: #fff;
         }
         .res-card-guest {
           font-weight: 600;

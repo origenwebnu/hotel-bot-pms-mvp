@@ -628,6 +628,7 @@ export interface ReservationHistoryItem {
   total_amount: number | null;
   currency: string | null;
   payment_status: string | null;
+  receipt_url?: string | null;
   guest: {
     first_name: string | null;
     last_name: string | null;
