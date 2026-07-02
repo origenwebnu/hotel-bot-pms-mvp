@@ -60,6 +60,7 @@ export class ReservationsService {
     totalAmount: number | null;
     currency: string | null;
     paymentStatus: string | null;
+    paymentAccessToken: string | null;
     guestFirstName: string | null;
     guestLastName: string | null;
     guestEmail: string | null;
@@ -68,6 +69,11 @@ export class ReservationsService {
     updatedAt: Date;
   }) {
     const outcome = getReservationOutcome(row.status, row.paymentStatus);
+    const appUrl = (process.env.APP_URL ?? 'https://app.bookichat.com').replace(/\/$/, '');
+    const receiptUrl =
+      row.paymentStatus === 'approved' && row.paymentAccessToken
+        ? `${appUrl}/payment/result/${row.id}?token=${encodeURIComponent(row.paymentAccessToken)}`
+        : null;
     return {
       id: row.id,
       hotel_id: row.hotelId,
@@ -91,6 +97,7 @@ export class ReservationsService {
       total_amount: row.totalAmount,
       currency: row.currency,
       payment_status: row.paymentStatus,
+      receipt_url: receiptUrl,
       guest: {
         first_name: row.guestFirstName,
         last_name: row.guestLastName,
