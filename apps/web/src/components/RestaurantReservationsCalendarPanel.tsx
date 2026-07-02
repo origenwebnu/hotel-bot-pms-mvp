@@ -101,8 +101,7 @@ export function RestaurantReservationsCalendarPanel() {
   const [reservations, setReservations] = useState<ReservationHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
-  const [selectedDates, setSelectedDates] = useState<Set<string>>(new Set());
-  const [rangeAnchor, setRangeAnchor] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [mode, setMode] = useState<PanelMode>('view');
   const [saving, setSaving] = useState(false);
 
@@ -132,13 +131,8 @@ export function RestaurantReservationsCalendarPanel() {
     return map;
   }, [reservations]);
 
-  const primaryDate = useMemo(() => {
-    if (!selectedDates.size) return null;
-    return [...selectedDates].sort()[0];
-  }, [selectedDates]);
-
-  const selectedDayReservations = primaryDate
-    ? (reservationsByDate.get(primaryDate) ?? [])
+  const selectedDayReservations = selectedDate
+    ? (reservationsByDate.get(selectedDate) ?? [])
     : [];
 
   const loadReservations = useCallback(async () => {
@@ -168,11 +162,11 @@ export function RestaurantReservationsCalendarPanel() {
   }, []);
 
   useEffect(() => {
-    if (mode !== 'manual' || !primaryDate) return;
+    if (mode !== 'manual' || !selectedDate) return;
 
     setLoadingAvailability(true);
     Promise.all([
-      api.listRestaurantAvailabilitySlots(primaryDate, true),
+      api.listRestaurantAvailabilitySlots(selectedDate, true),
       api.listRestaurantZones(),
     ])
       .then(([slots, allZones]) => {
@@ -184,12 +178,12 @@ export function RestaurantReservationsCalendarPanel() {
       })
       .catch(() => setMessage('Error cargando disponibilidad'))
       .finally(() => setLoadingAvailability(false));
-  }, [mode, primaryDate]);
+  }, [mode, selectedDate]);
 
   useEffect(() => {
     if (
       mode !== 'manual' ||
-      !primaryDate ||
+      !selectedDate ||
       !manualForm.booking_time ||
       !manualForm.party_size ||
       !manualForm.dining_zone_id
@@ -203,7 +197,7 @@ export function RestaurantReservationsCalendarPanel() {
 
     api
       .listRestaurantAvailabilityZones({
-        date: primaryDate,
+        date: selectedDate,
         time: manualForm.booking_time,
         party_size: partySize,
         for_manual: true,
@@ -222,7 +216,7 @@ export function RestaurantReservationsCalendarPanel() {
     api
       .buildRestaurantQuote({
         dining_zone_id: manualForm.dining_zone_id,
-        date: primaryDate,
+        date: selectedDate,
         time: manualForm.booking_time,
         party_size: partySize,
         addon_ids: manualForm.addon_ids,
@@ -231,51 +225,30 @@ export function RestaurantReservationsCalendarPanel() {
       .catch(() => setQuote(null));
   }, [
     mode,
-    primaryDate,
+    selectedDate,
     manualForm.booking_time,
     manualForm.party_size,
     manualForm.dining_zone_id,
     manualForm.addon_ids,
   ]);
 
-  function toggleDate(date: string, shiftKey: boolean) {
-    if (shiftKey && rangeAnchor) {
-      const allDates = calendarDays.filter(Boolean).map((c) => c!.date);
-      const startIdx = allDates.indexOf(rangeAnchor);
-      const endIdx = allDates.indexOf(date);
-      if (startIdx >= 0 && endIdx >= 0) {
-        const [from, to] = startIdx < endIdx ? [startIdx, endIdx] : [endIdx, startIdx];
-        const next = new Set<string>();
-        for (let i = from; i <= to; i++) next.add(allDates[i]);
-        setSelectedDates(next);
-        setRangeAnchor(null);
-        return;
-      }
+  function selectDate(date: string) {
+    setSelectedDate(date);
+    if (mode === 'manual') {
+      setMode('view');
+      setManualForm(emptyManualForm);
     }
-
-    setRangeAnchor(date);
-    setSelectedDates((prev) => {
-      const next = new Set(prev);
-      if (next.has(date)) next.delete(date);
-      else next.add(date);
-      return next;
-    });
   }
 
   function clearSelection() {
-    setSelectedDates(new Set());
-    setRangeAnchor(null);
+    setSelectedDate(null);
     setMode('view');
     setManualForm(emptyManualForm);
   }
 
   function startManualBooking() {
-    if (!selectedDates.size) {
-      setMessage('Selecciona al menos un día en el calendario.');
-      return;
-    }
-    if (selectedDates.size > 1) {
-      setMessage('Para crear una reserva manual, selecciona un solo día.');
+    if (!selectedDate) {
+      setMessage('Selecciona un día en el calendario.');
       return;
     }
     setMode('manual');
@@ -285,13 +258,13 @@ export function RestaurantReservationsCalendarPanel() {
 
   async function submitManualReservation(e: React.FormEvent) {
     e.preventDefault();
-    if (!primaryDate) return;
+    if (!selectedDate) return;
 
     setSaving(true);
     setMessage('');
     try {
       await api.createManualRestaurantReservation({
-        booking_date: primaryDate,
+        booking_date: selectedDate,
         booking_time: manualForm.booking_time,
         party_size: Number(manualForm.party_size),
         dining_zone_id: manualForm.dining_zone_id,
@@ -361,16 +334,18 @@ export function RestaurantReservationsCalendarPanel() {
 
         <div className="rest-calendar-selection-bar">
           <span>
-            {selectedDates.size} día{selectedDates.size !== 1 ? 's' : ''} seleccionado
-            {selectedDates.size !== 1 ? 's' : ''}
+            {selectedDate
+              ? `Día seleccionado: ${selectedDate}`
+              : 'Selecciona un día para ver sus reservas'}
           </span>
           <button type="button" className="btn-primary" onClick={startManualBooking}>
             + Reserva manual
           </button>
-          <button type="button" className="btn-secondary" onClick={clearSelection}>
-            Limpiar
-          </button>
-          <span className="muted small">Shift+clic para seleccionar un rango</span>
+          {selectedDate && (
+            <button type="button" className="btn-secondary" onClick={clearSelection}>
+              Limpiar
+            </button>
+          )}
         </div>
 
         {message && (
@@ -389,14 +364,14 @@ export function RestaurantReservationsCalendarPanel() {
             {calendarDays.map((cell, idx) => {
               if (!cell) return <div key={`e-${idx}`} className="rest-calendar-empty" />;
               const dayRes = reservationsByDate.get(cell.date) ?? [];
-              const isPicked = selectedDates.has(cell.date);
+              const isPicked = selectedDate === cell.date;
               const hasReservations = dayRes.length > 0;
               return (
                 <button
                   key={cell.date}
                   type="button"
                   className={`rest-calendar-day ${hasReservations ? 'has-res' : ''} ${isPicked ? 'picked' : ''}`}
-                  onClick={(e) => toggleDate(cell.date, e.shiftKey)}
+                  onClick={() => selectDate(cell.date)}
                 >
                   <span className="day-num">{cell.day}</span>
                   {hasReservations && (
@@ -419,17 +394,17 @@ export function RestaurantReservationsCalendarPanel() {
         {mode === 'view' && (
           <div className="form-panel">
             <h4>
-              {primaryDate
-                ? `Reservas del ${primaryDate}`
+              {selectedDate
+                ? `Reservas del ${selectedDate}`
                 : 'Selecciona un día'}
             </h4>
-            {!primaryDate && (
+            {!selectedDate && (
               <p className="muted small">
                 Haz clic en un día del calendario para ver las reservas confirmadas o crear una
                 reserva manual.
               </p>
             )}
-            {primaryDate && selectedDayReservations.length === 0 && (
+            {selectedDate && selectedDayReservations.length === 0 && (
               <p className="muted small">Sin reservas confirmadas este día.</p>
             )}
             {selectedDayReservations.map((r) => (
@@ -466,7 +441,7 @@ export function RestaurantReservationsCalendarPanel() {
                 )}
               </div>
             ))}
-            {primaryDate && (
+            {selectedDate && (
               <button type="button" className="btn-primary" onClick={startManualBooking}>
                 Agregar reserva manual
               </button>
@@ -474,9 +449,9 @@ export function RestaurantReservationsCalendarPanel() {
           </div>
         )}
 
-        {mode === 'manual' && primaryDate && (
+        {mode === 'manual' && selectedDate && (
           <form className="form-panel" onSubmit={submitManualReservation}>
-            <h4>Nueva reserva — {primaryDate}</h4>
+            <h4>Nueva reserva — {selectedDate}</h4>
             <p className="muted small">
               La reserva se confirma de inmediato (sin cobro por WhatsApp).
             </p>
