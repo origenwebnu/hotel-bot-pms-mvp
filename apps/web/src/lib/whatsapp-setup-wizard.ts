@@ -8,6 +8,7 @@ export const META_LINKS = {
 
 export const WIZARD_STEPS = [
   { id: 'prerequisites', label: 'Requisitos' },
+  { id: 'connect', label: 'Conectar' },
   { id: 'phone-id', label: 'Phone Number ID' },
   { id: 'token', label: 'Access Token' },
   { id: 'display-phone', label: 'Número público' },

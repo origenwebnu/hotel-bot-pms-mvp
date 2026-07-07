@@ -1421,6 +1421,26 @@ input, select, textarea {
   font-weight: 500;
 }
 
+.wa-coexistence-box {
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(37, 99, 235, 0.25);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(37, 99, 235, 0.06), rgba(37, 99, 235, 0.02));
+  margin-bottom: 1rem;
+}
+
+.wa-coexistence-box h4 {
+  margin: 0 0 0.5rem;
+}
+
+.wa-coexistence-btn {
+  margin-top: 0.75rem;
+}
+
+.wa-coexistence-notes {
+  margin-top: 0.75rem;
+}
+
 /* Modal */
 .modal-root {
   position: fixed;

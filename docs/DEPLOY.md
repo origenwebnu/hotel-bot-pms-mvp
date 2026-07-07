@@ -51,12 +51,25 @@ bash infra/digitalocean/setup-droplet.sh
 
 ## 5. Configurar WhatsApp Business API (Meta)
 
+### Webhook (una vez, plataforma)
 1. Crea una app en [Meta for Developers](https://developers.facebook.com)
 2. Agrega producto **WhatsApp**
 3. En **Configuration → Webhook:**
-   - Callback URL: `https://bot.tudominio.com/api/webhooks/whatsapp`
+   - Callback URL: `https://app.bookichat.com/api/webhooks/whatsapp`
    - Verify Token: el valor de `WHATSAPP_VERIFY_TOKEN` en tu `.env`
-   - Suscríbete a: `messages`
+   - Suscríbete a: `messages` y campos de coexistencia (`history`, `smb_app_state_sync`, `smb_message_echoes`)
+4. Configura **Embedded Signup** en WhatsApp → Embedded Signup Builder con coexistencia (`whatsapp_business_app_onboarding`)
+
+### Variables de entorno (coexistencia)
+```env
+META_APP_ID=tu-app-id
+META_APP_SECRET=tu-app-secret
+META_EMBEDDED_SIGNUP_CONFIG_ID=id-de-configuracion-login-business
+```
+
+Los clientes conectan desde el dashboard con **Conectar mi WhatsApp Business** (no necesitan copiar token manualmente).
+
+### Configuración manual (alternativa)
 4. Obtén el **Phone Number ID** y **Access Token** permanentes
 
 ## 6. SSL con Let's Encrypt

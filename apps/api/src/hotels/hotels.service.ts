@@ -12,6 +12,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../crypto/crypto.service';
 import { CoreIntegratorService } from '../core-integrator/core-integrator.service';
 import { WhatsAppCredentialsService } from '../whatsapp/whatsapp-credentials.service';
+import { MetaEmbeddedSignupService } from '../whatsapp/meta-embedded-signup.service';
 
 @Injectable()
 export class HotelsService {
@@ -20,6 +21,7 @@ export class HotelsService {
     private readonly crypto: CryptoService,
     private readonly pms: CoreIntegratorService,
     private readonly whatsappCredentials: WhatsAppCredentialsService,
+    private readonly metaEmbeddedSignup: MetaEmbeddedSignupService,
   ) {}
 
   async getHotel(hotelId: string) {
@@ -381,7 +383,11 @@ export class HotelsService {
   async getWhatsAppConfig(hotelId: string) {
     const hotel = await this.prisma.hotel.findUnique({
       where: { id: hotelId },
-      select: { whatsappPhoneNumberId: true, whatsappDisplayPhone: true },
+      select: {
+        whatsappPhoneNumberId: true,
+        whatsappDisplayPhone: true,
+        whatsappWabaId: true,
+      },
     });
     if (!hotel) throw new NotFoundException('Hotel not found');
 
@@ -390,23 +396,90 @@ export class HotelsService {
     });
 
     const appUrl = process.env.APP_URL ?? 'https://app.bookichat.com';
+    const embeddedSignup = this.metaEmbeddedSignup.getPublicConfig();
 
     return {
       phone_number_id: hotel.whatsappPhoneNumberId,
       display_phone: hotel.whatsappDisplayPhone,
+      waba_id: hotel.whatsappWabaId,
+      coexistence: integration?.whatsappCoexistence ?? false,
       connected: integration?.whatsappConnected ?? false,
       has_token: await this.whatsappCredentials.hasOwnToken(hotelId),
       webhook_url: `${appUrl.replace(/\/$/, '')}/api/webhooks/whatsapp`,
       verify_token_hint: process.env.WHATSAPP_VERIFY_TOKEN
         ? 'Configurado en la plataforma (contacta soporte si necesitas cambiarlo)'
         : null,
-      setup_steps: [
-        'En Meta Business → WhatsApp, copia el Phone Number ID de tu número.',
-        'Genera un Access Token permanente (Usuario del sistema → Generar identificador).',
-        'El webhook lo configura BookiChat una sola vez; todos los hoteles usan la misma URL.',
-        'Guarda aquí tu Phone Number ID y token, luego pulsa Validar.',
-        'Al validar se detecta el número público para el botón "Continuar reserva" en la galería de fotos.',
-      ],
+      embedded_signup: embeddedSignup,
+      setup_steps: embeddedSignup.enabled
+        ? [
+            'Recomendado: usa *Conectar WhatsApp Business existente* si ya usas el número en el celular.',
+            'Meta te pedirá confirmar en la app WhatsApp Business (coexistencia).',
+            'BookiChat recibe el token automáticamente; no necesitas copiarlo a mano.',
+            'Alternativa: configuración manual con Phone Number ID y token.',
+          ]
+        : [
+            'En Meta Business → WhatsApp, copia el Phone Number ID de tu número.',
+            'Genera un Access Token permanente (Usuario del sistema → Generar identificador).',
+            'El webhook lo configura BookiChat una sola vez; todos los negocios usan la misma URL.',
+            'Guarda aquí tu Phone Number ID y token, luego pulsa Validar.',
+          ],
+    };
+  }
+
+  async completeEmbeddedSignup(
+    hotelId: string,
+    data: {
+      code: string;
+      phone_number_id: string;
+      waba_id: string;
+      event: string;
+    },
+  ) {
+    const result = await this.metaEmbeddedSignup.completeOnboarding(data);
+
+    await this.prisma.hotel.update({
+      where: { id: hotelId },
+      data: {
+        whatsappPhoneNumberId: result.phone_number_id,
+        whatsappWabaId: result.waba_id,
+        whatsappDisplayPhone: result.display_phone,
+      },
+    });
+
+    await this.prisma.encryptedCredential.upsert({
+      where: {
+        hotelId_credentialType: {
+          hotelId,
+          credentialType: 'whatsapp_access_token',
+        },
+      },
+      create: {
+        hotelId,
+        credentialType: 'whatsapp_access_token',
+        encryptedValue: this.crypto.encrypt(result.access_token),
+      },
+      update: {
+        encryptedValue: this.crypto.encrypt(result.access_token),
+      },
+    });
+
+    await this.ensureIntegration(hotelId);
+    await this.prisma.hotelIntegration.update({
+      where: { hotelId },
+      data: {
+        whatsappCoexistence: result.coexistence,
+        whatsappConnected: true,
+        lastValidatedAt: new Date(),
+      },
+    });
+
+    return {
+      ...(await this.getWhatsAppConfig(hotelId)),
+      coexistence_verified: result.is_on_biz_app === true,
+      sync_initiated: result.sync_initiated,
+      message: result.coexistence
+        ? 'WhatsApp Business conectado en modo coexistencia. Puedes seguir usando el celular y el bot.'
+        : 'WhatsApp conectado correctamente.',
     };
   }
 
