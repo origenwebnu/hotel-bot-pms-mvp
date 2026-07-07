@@ -20,6 +20,7 @@ model Hotel {
   reservationRecommendations String? @map("reservation_recommendations") @db.Text
   whatsappPhoneNumberId String?  @map("whatsapp_phone_number_id")
   whatsappDisplayPhone  String?  @map("whatsapp_display_phone")
+  whatsappWabaId        String?  @map("whatsapp_waba_id")
   isActive              Boolean  @default(true) @map("is_active")
   chatNotificationEmail String?  @map("chat_notification_email")
   serviceHoursJson      Json?    @map("service_hours_json")
@@ -123,6 +124,7 @@ model HotelIntegration {
   pmsConnected     Boolean   @default(false) @map("pms_connected")
   paymentConnected Boolean   @default(false) @map("payment_connected")
   whatsappConnected Boolean  @default(false) @map("whatsapp_connected")
+  whatsappCoexistence Boolean @default(false) @map("whatsapp_coexistence")
   lastValidatedAt  DateTime? @map("last_validated_at")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")

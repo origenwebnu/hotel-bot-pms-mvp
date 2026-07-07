@@ -34,6 +34,24 @@ class UpdateWhatsAppDto {
   display_phone?: string;
 }
 
+class CompleteEmbeddedSignupDto {
+  @IsString()
+  @MinLength(10)
+  code!: string;
+
+  @IsString()
+  @MinLength(5)
+  phone_number_id!: string;
+
+  @IsString()
+  @MinLength(5)
+  waba_id!: string;
+
+  @IsString()
+  @MinLength(3)
+  event!: string;
+}
+
 @Controller('hotels')
 @UseGuards(JwtAuthGuard)
 export class HotelsController {
@@ -137,5 +155,13 @@ export class HotelsController {
   async validateWhatsApp(@Request() req: { user: { hotelId: string } }) {
     const valid = await this.hotels.validateWhatsApp(req.user.hotelId);
     return { valid };
+  }
+
+  @Post('me/whatsapp/embedded-signup')
+  completeEmbeddedSignup(
+    @Request() req: { user: { hotelId: string } },
+    @Body() body: CompleteEmbeddedSignupDto,
+  ) {
+    return this.hotels.completeEmbeddedSignup(req.user.hotelId, body);
   }
 }

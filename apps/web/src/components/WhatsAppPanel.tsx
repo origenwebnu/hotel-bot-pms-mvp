@@ -12,6 +12,7 @@ import {
   validatePhoneNumberId,
   type WizardStepId,
 } from '@/lib/whatsapp-setup-wizard';
+import { WhatsAppCoexistenceConnect } from '@/components/WhatsAppCoexistenceConnect';
 
 interface Props {
   onConnectionChange?: (connected: boolean) => void;
@@ -26,7 +27,7 @@ const PREREQUISITE_ITEMS = [
   },
   {
     id: 'whatsapp-number',
-    label: 'Mi hotel tiene un número de WhatsApp Business verificado',
+    label: 'Mi negocio tiene un número de WhatsApp Business verificado',
     link: META_LINKS.whatsappManager,
     linkLabel: 'Abrir WhatsApp Manager',
   },
@@ -87,6 +88,8 @@ export function WhatsAppPanel({ onConnectionChange }: Props) {
           setCurrentStep('validate');
         } else if (c.phone_number_id) {
           setCurrentStep('token');
+        } else if (c.embedded_signup?.enabled) {
+          setCurrentStep('connect');
         }
       })
       .catch(console.error);
@@ -97,12 +100,22 @@ export function WhatsAppPanel({ onConnectionChange }: Props) {
   const completedSteps = useMemo(() => {
     const done = new Set<WizardStepId>();
     if (prerequisitesDone) done.add('prerequisites');
+    if (config?.connected || config?.coexistence) done.add('connect');
     if (!validatePhoneNumberId(phoneNumberId)) done.add('phone-id');
     if (!validateAccessToken(accessToken, config?.has_token ?? false)) done.add('token');
     if (displayPhone.trim() || config?.connected) done.add('display-phone');
     if (config?.connected) done.add('validate');
     return done;
   }, [prerequisitesDone, phoneNumberId, accessToken, config, displayPhone]);
+
+  async function refreshConfig() {
+    const refreshed = await api.getWhatsApp();
+    setConfig(refreshed);
+    setPhoneNumberId(refreshed.phone_number_id ?? '');
+    setDisplayPhone(refreshed.display_phone ?? '');
+    onConnectionChange?.(refreshed.connected);
+    return refreshed;
+  }
 
   function goToStep(step: WizardStepId) {
     setCurrentStep(step);
@@ -185,6 +198,11 @@ export function WhatsAppPanel({ onConnectionChange }: Props) {
       return;
     }
 
+    if (currentStep === 'connect') {
+      setMessage('Usa el botón de coexistencia o continúa con configuración manual.');
+      return;
+    }
+
     if (currentStep === 'display-phone') {
       const saved = await handleSave({ advance: true, silent: !displayPhone.trim() });
       if (saved || !displayPhone.trim()) goNext();
@@ -263,7 +281,7 @@ export function WhatsAppPanel({ onConnectionChange }: Props) {
               <>
                 <h3 className="wa-wizard-title">Antes de empezar</h3>
                 <p className="integration-lead">
-                  Necesitas acceso a Meta Business y un número de WhatsApp Business del hotel.
+                  Necesitas acceso a Meta Business y un número de WhatsApp Business del negocio.
                   BookiChat se conecta a tu número; el webhook ya está configurado por nosotros.
                 </p>
 
@@ -311,16 +329,59 @@ export function WhatsAppPanel({ onConnectionChange }: Props) {
               </>
             )}
 
+            {currentStep === 'connect' && (
+              <>
+                <h3 className="wa-wizard-title">Paso 2 — Conectar WhatsApp</h3>
+                {config.embedded_signup?.enabled &&
+                config.embedded_signup.app_id &&
+                config.embedded_signup.config_id ? (
+                  <WhatsAppCoexistenceConnect
+                    appId={config.embedded_signup.app_id}
+                    configId={config.embedded_signup.config_id}
+                    apiVersion={config.embedded_signup.api_version}
+                    onSuccess={async (msg) => {
+                      setMessage(msg);
+                      await refreshConfig();
+                      goToStep('validate');
+                    }}
+                    onError={(msg) => setMessage(msg)}
+                    onConnected={() => onConnectionChange?.(true)}
+                  />
+                ) : (
+                  <div className="integration-info-box">
+                    <p>
+                      La conexión automática (coexistencia) no está habilitada en esta instancia.
+                      Continúa con la configuración manual en los siguientes pasos.
+                    </p>
+                  </div>
+                )}
+
+                <hr className="account-divider" />
+
+                <h4>Configuración manual</h4>
+                <p className="muted">
+                  Solo si vas a crear un número nuevo en Meta o ya tienes Phone Number ID y token.
+                </p>
+                <button type="button" className="btn-secondary" onClick={() => goToStep('phone-id')}>
+                  Usar configuración manual →
+                </button>
+              </>
+            )}
+
             {currentStep === 'phone-id' && (
               <>
-                <h3 className="wa-wizard-title">Paso 2 — Phone Number ID</h3>
+                <h3 className="wa-wizard-title">Paso 3 — Phone Number ID (manual)</h3>
                 <ol className="wa-instructions">
+                  <li>
+                    Si tu número <strong>ya está en WhatsApp Business en el celular</strong>, vuelve al
+                    paso anterior y usa <strong>Conectar mi WhatsApp Business</strong>.
+                  </li>
                   <li>
                     Abre{' '}
                     <a href={META_LINKS.developersApps} target="_blank" rel="noopener noreferrer">
                       Meta for Developers ↗
                     </a>{' '}
-                    y entra a la app de WhatsApp de tu hotel.
+                    y entra a la app de WhatsApp de tu negocio.
                   </li>
                   <li>
                     Ve a <strong>WhatsApp → Configuración de la API</strong> (API Setup).
@@ -358,7 +419,7 @@ export function WhatsAppPanel({ onConnectionChange }: Props) {
 
             {currentStep === 'token' && (
               <>
-                <h3 className="wa-wizard-title">Paso 3 — Access Token permanente</h3>
+                <h3 className="wa-wizard-title">Paso 4 — Access Token permanente</h3>
                 <ol className="wa-instructions">
                   <li>
                     En{' '}
@@ -417,7 +478,7 @@ export function WhatsAppPanel({ onConnectionChange }: Props) {
 
             {currentStep === 'display-phone' && (
               <>
-                <h3 className="wa-wizard-title">Paso 4 — Número público (opcional)</h3>
+                <h3 className="wa-wizard-title">Paso 5 — Número público (opcional)</h3>
                 <p className="integration-lead">
                   Este número se usa en la galería de habitaciones para el botón &quot;Continuar
                   reserva&quot;. Si lo dejas vacío, intentamos detectarlo al validar la conexión.
@@ -450,7 +511,13 @@ export function WhatsAppPanel({ onConnectionChange }: Props) {
 
             {currentStep === 'validate' && (
               <>
-                <h3 className="wa-wizard-title">Paso 5 — Probar conexión</h3>
+                <h3 className="wa-wizard-title">Paso 6 — Probar conexión</h3>
+                {config.coexistence && (
+                  <p className="integration-info-box">
+                    <strong>Modo coexistencia activo.</strong> El bot y la app WhatsApp Business del
+                    celular comparten este número.
+                  </p>
+                )}
                 <p className="integration-lead">
                   Verificamos con Meta que el Phone Number ID y el token funcionen con tu número.
                 </p>
@@ -524,7 +591,7 @@ export function WhatsAppPanel({ onConnectionChange }: Props) {
                   Anterior
                 </button>
               )}
-              {currentStep !== 'validate' && (
+              {currentStep !== 'validate' && currentStep !== 'connect' && (
                 <button
                   type="button"
                   className="btn-primary"

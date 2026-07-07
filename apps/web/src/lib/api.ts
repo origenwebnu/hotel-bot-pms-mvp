@@ -135,6 +135,21 @@ export const api = {
       method: 'POST',
     }),
 
+  completeWhatsAppEmbeddedSignup: (data: {
+    code: string;
+    phone_number_id: string;
+    waba_id: string;
+    event: string;
+  }) =>
+    request<WhatsAppConfig & {
+      message?: string;
+      coexistence_verified?: boolean;
+      sync_initiated?: boolean;
+    }>('/hotels/me/whatsapp/embedded-signup', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
   listKnowledge: () => request<KnowledgeDoc[]>('/hotels/me/knowledge'),
 
   createKnowledge: (data: { title: string; content: string }) =>
@@ -568,11 +583,19 @@ export interface PaymentConfig {
 export interface WhatsAppConfig {
   phone_number_id: string | null;
   display_phone: string | null;
+  waba_id?: string | null;
+  coexistence?: boolean;
   connected: boolean;
   has_token: boolean;
   webhook_url: string;
   verify_token_hint: string | null;
   setup_steps: string[];
+  embedded_signup?: {
+    enabled: boolean;
+    app_id: string | null;
+    config_id: string | null;
+    api_version: string;
+  };
 }
 
 export interface KnowledgeDoc {
