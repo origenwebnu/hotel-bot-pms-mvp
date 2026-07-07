@@ -21,6 +21,8 @@ model Hotel {
   whatsappPhoneNumberId String?  @map("whatsapp_phone_number_id")
   whatsappDisplayPhone  String?  @map("whatsapp_display_phone")
   isActive              Boolean  @default(true) @map("is_active")
+  chatNotificationEmail String?  @map("chat_notification_email")
+  serviceHoursJson      Json?    @map("service_hours_json")
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
 

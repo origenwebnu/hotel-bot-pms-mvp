@@ -522,78 +522,65 @@ export class WhatsAppRendererService {
   renderWelcomeMenu(business: {
     name: string;
     vertical: BusinessVertical;
-  }): WhatsAppButtonMessage {
+  }): WhatsAppListMessage | WhatsAppButtonMessage {
     const { name, vertical } = business;
     const canTransact = supportsTransactionalFlow(vertical);
+    const typeLabel = BUSINESS_VERTICAL_LABELS[vertical].toLowerCase();
 
-    if (!canTransact) {
-      const typeLabel = BUSINESS_VERTICAL_LABELS[vertical].toLowerCase();
-      const intro =
-        `Hola, bienvenido a *${name}* 👋\n\n` +
-        `Soy tu asistente virtual. Puedo responder preguntas sobre nuestro ${typeLabel}. ` +
-        `Muy pronto también podrás reservar o comprar desde aquí.`;
+    const rows: Array<{ id: string; title: string; description?: string }> = [];
 
-      return {
-        type: 'button',
-        body: { text: `${intro}\n\n¿En qué te puedo ayudar?` },
-        action: {
-          buttons: [
-            {
-              type: 'reply',
-              reply: { id: WHATSAPP_BUTTON_IDS.MENU_FAQ, title: 'Hacer una pregunta' },
-            },
-          ],
-        },
-      };
+    if (canTransact) {
+      rows.push({
+        id: WHATSAPP_BUTTON_IDS.MENU_BOOK,
+        title: vertical === 'restaurant' ? 'Reservar mesa' : 'Reservar habitación',
+        description: 'Iniciar una nueva reserva',
+      });
+      rows.push({
+        id: WHATSAPP_BUTTON_IDS.MENU_MY_RESERVATION,
+        title: 'Consultar mi reserva',
+        description: 'Ver reservas con este WhatsApp',
+      });
     }
 
-    if (vertical === 'restaurant') {
-      return {
-        type: 'button',
-        body: {
-          text:
-            `Hola, bienvenido a *${name}* 👋\n\n` +
-            `Reserva tu mesa o pregúntanos lo que necesites, todo desde este chat.\n\n` +
-            `¿Qué te gustaría hacer?`,
-        },
-        action: {
-          buttons: [
-            {
-              type: 'reply',
-              reply: { id: WHATSAPP_BUTTON_IDS.MENU_BOOK, title: 'Reservar mesa' },
-            },
-            {
-              type: 'reply',
-              reply: { id: WHATSAPP_BUTTON_IDS.MENU_FAQ, title: 'Hacer una pregunta' },
-            },
-          ],
-        },
-      };
+    rows.push({
+      id: WHATSAPP_BUTTON_IDS.MENU_HUMAN,
+      title: 'Hablar con el equipo',
+      description: 'Atención humana por este chat',
+    });
+
+    rows.push({
+      id: WHATSAPP_BUTTON_IDS.MENU_FAQ,
+      title: 'Preguntas frecuentes',
+      description: 'Resolver dudas con el asistente',
+    });
+
+    if (vertical === 'hotel' && canTransact) {
+      rows.push({
+        id: WHATSAPP_BUTTON_IDS.MENU_RATES,
+        title: 'Ver tarifas',
+        description: 'Precios de habitaciones',
+      });
     }
+
+    if (vertical === 'restaurant' && canTransact) {
+      rows.push({
+        id: WHATSAPP_BUTTON_IDS.MENU_RATES,
+        title: 'Ver tarifas',
+        description: 'Precios por zona y mesa',
+      });
+    }
+
+    const intro = canTransact
+      ? `Hola, bienvenido a *${name}* 👋\n\nElige una opción para continuar:`
+      : `Hola, bienvenido a *${name}* 👋\n\nSoy tu asistente virtual. Puedo ayudarte con nuestro ${typeLabel} y conectarte con el equipo.\n\n¿Qué necesitas?`;
 
     return {
-      type: 'button',
-      body: {
-        text:
-          `Hola, bienvenido a *${name}* 👋\n\n` +
-          `Te ayudaré con tu reserva de forma ágil y todo desde este chat.\n\n` +
-          `¿Qué te gustaría hacer?`,
-      },
+      type: 'list',
+      body: { text: intro },
+      footer: { text: 'También puedes escribir menu en cualquier momento' },
       action: {
-        buttons: [
-          {
-            type: 'reply',
-            reply: { id: WHATSAPP_BUTTON_IDS.MENU_BOOK, title: 'Reservar habitación' },
-          },
-          {
-            type: 'reply',
-            reply: { id: WHATSAPP_BUTTON_IDS.MENU_FAQ, title: 'Resolver dudas' },
-          },
-          {
-            type: 'reply',
-            reply: { id: WHATSAPP_BUTTON_IDS.MENU_RATES, title: 'Conocer tarifas' },
-          },
-        ],
+        button: 'Ver opciones',
+        sections: [{ title: 'Menú principal', rows }],
       },
     };
   }

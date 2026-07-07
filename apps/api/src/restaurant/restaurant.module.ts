@@ -8,9 +8,10 @@ import { CheckoutModule } from '../checkout/checkout.module';
 import { WhatsAppModule } from '../whatsapp/whatsapp.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
 import { EmailModule } from '../email/email.module';
+import { HumanHandoffModule } from '../conversation/human-handoff.module';
 
 @Module({
-  imports: [AiModule, CheckoutModule, WhatsAppModule, SubscriptionModule, EmailModule],
+  imports: [AiModule, CheckoutModule, WhatsAppModule, SubscriptionModule, EmailModule, HumanHandoffModule],
   controllers: [RestaurantController],
   providers: [RestaurantInventoryService, RestaurantBookingFlowService, RestaurantReservationService],
   exports: [RestaurantInventoryService, RestaurantBookingFlowService, RestaurantReservationService],

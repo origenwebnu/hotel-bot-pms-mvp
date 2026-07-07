@@ -557,7 +557,8 @@ export function RestaurantInventoryPanel() {
           </label>
           <p className="muted small" style={{ margin: '-0.5rem 0 1rem' }}>
             Recibirás un correo con el detalle de cada reserva nueva (incluye peticiones especiales
-            y link al recibo).
+            y link al recibo). Este mismo email recibe alertas cuando un cliente pide atención humana
+            por WhatsApp.
           </p>
           <div className="rest-inventory-form-grid rest-inventory-form-grid--2">
             <label>

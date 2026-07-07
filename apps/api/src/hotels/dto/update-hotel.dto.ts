@@ -1,4 +1,5 @@
-import { IsIn, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsIn, IsObject, IsOptional, IsString, MinLength } from 'class-validator';
+import type { ServiceHoursMap } from '@hotel-bot/shared';
 
 const CURRENCIES = ['COP', 'USD', 'EUR', 'MXN'] as const;
 
@@ -27,4 +28,12 @@ export class UpdateHotelDto {
   @IsString()
   @IsIn(CURRENCIES)
   currency?: string;
+
+  @IsOptional()
+  @IsEmail()
+  chat_notification_email?: string;
+
+  @IsOptional()
+  @IsObject()
+  service_hours_json?: ServiceHoursMap;
 }

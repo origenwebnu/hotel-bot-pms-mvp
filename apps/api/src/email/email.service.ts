@@ -11,6 +11,7 @@ import {
   renderMonthlyQuotaEmail,
   renderRegistrationCodeEmail,
   renderRestaurantReservationNotificationEmail,
+  renderHumanHandoffNotificationEmail,
   renderTrialExpiredEmail,
   renderTrialQuotaEmail,
 } from './email-templates';
@@ -252,6 +253,33 @@ export class EmailService {
 
     const html = renderRestaurantReservationNotificationEmail(data);
     await this.sendOptional(to, subject, text, html, 'restaurant reservation');
+  }
+
+  async sendHumanHandoffNotification(
+    to: string,
+    data: {
+      businessName: string;
+      verticalLabel: string;
+      guestPhone: string;
+      contextNote?: string | null;
+      openNow: boolean;
+    },
+  ): Promise<void> {
+    const subject = `Atención humana — ${data.guestPhone}`;
+    const text = [
+      `Un cliente solicitó hablar con el equipo de ${data.businessName}.`,
+      ``,
+      `WhatsApp: ${data.guestPhone}`,
+      data.contextNote ? `Contexto: ${data.contextNote}` : '',
+      data.openNow ? 'Dentro de horario de atención.' : 'Fuera de horario.',
+      ``,
+      `Responde desde WhatsApp Business.`,
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const html = renderHumanHandoffNotificationEmail(data);
+    await this.sendOptional(to, subject, text, html, 'human handoff');
   }
 
   private async sendOptional(

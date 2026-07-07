@@ -8,6 +8,8 @@ const LABELS: Record<ConversationHistoryLabel, string> = {
   abandoned: 'Abandonado',
 };
 
+const HUMAN_HANDOFF_STATE = 'human_handoff';
+
 function formatPhone(phone: string) {
   const digits = phone.replace(/\D/g, '');
   if (digits.length === 10) {
@@ -131,7 +133,12 @@ export function ConversationHistoryPanel() {
                 >
                   <div className="conv-item-top">
                     <span className="conv-phone">{formatPhone(item.whatsapp_phone)}</span>
-                    <span className={`conv-label ${item.label}`}>{LABELS[item.label]}</span>
+                    <div className="conv-badges">
+                      {item.state === HUMAN_HANDOFF_STATE && (
+                        <span className="conv-label human">Requiere humano</span>
+                      )}
+                      <span className={`conv-label ${item.label}`}>{LABELS[item.label]}</span>
+                    </div>
                   </div>
                   <p className="conv-preview">
                     {item.preview_direction === 'outbound' ? '↗ ' : '↙ '}
@@ -163,7 +170,12 @@ export function ConversationHistoryPanel() {
               <div>
                 <h4>{formatPhone(thread.session.whatsapp_phone)}</h4>
                 <p className="muted small">
-                  Estado del bot: <code>{thread.session.state}</code>
+                  Estado del bot:{' '}
+                  {thread.session.state === HUMAN_HANDOFF_STATE ? (
+                    <span className="conv-label human inline">Requiere humano</span>
+                  ) : (
+                    <code>{thread.session.state}</code>
+                  )}
                 </p>
               </div>
               <span className={`conv-label ${thread.session.label}`}>
@@ -260,6 +272,12 @@ export function ConversationHistoryPanel() {
           align-items: center;
           gap: 0.5rem;
         }
+        .conv-badges {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 0.35rem;
+          justify-content: flex-end;
+        }
         .conv-phone {
           font-weight: 700;
           font-size: 0.95rem;
@@ -279,6 +297,14 @@ export function ConversationHistoryPanel() {
         .conv-label.abandoned {
           background: #fee2e2;
           color: #991b1b;
+        }
+        .conv-label.human {
+          background: #fef3c7;
+          color: #92400e;
+        }
+        .conv-label.inline {
+          display: inline-block;
+          vertical-align: middle;
         }
         .conv-preview {
           margin: 0.35rem 0;

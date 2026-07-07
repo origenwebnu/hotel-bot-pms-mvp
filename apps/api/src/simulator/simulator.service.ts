@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import {
   BUSINESS_VERTICAL_LABELS,
+  HUMAN_HANDOFF_STATE,
   RESTAURANT_OCCASION_LABELS,
   type BusinessVertical,
   type RestaurantOccasion,
@@ -11,6 +12,9 @@ import {
   parseRestaurantBookingTime,
   parsePartySizeFromText,
   supportsTransactionalFlow,
+  wantsHumanHandoff,
+  wantsMainMenu,
+  wantsReservationLookup,
 } from '@hotel-bot/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { AiService } from '../conversation/ai.service';
@@ -79,6 +83,52 @@ export class SimulatorService {
         replies: [this.welcomeMessage(business)],
         session: { state: 'idle' },
         suggestions: this.defaultSuggestions(business.vertical),
+      };
+    }
+
+    if (session.state === HUMAN_HANDOFF_STATE) {
+      if (wantsMainMenu(text)) {
+        return {
+          replies: [
+            `Volviste al asistente virtual de *${business.name}*.\n\n_Escribe *menu* para ver las opciones._`,
+            this.welcomeMessage(business),
+          ],
+          session: { state: 'idle' },
+          suggestions: this.defaultSuggestions(business.vertical),
+        };
+      }
+      return {
+        replies: [
+          '_(Simulador: el bot está en silencio. Un humano respondería por WhatsApp Business. Escribe *menu* para volver al asistente.)_',
+        ],
+        session,
+        suggestions: ['menu'],
+      };
+    }
+
+    if (wantsHumanHandoff(text)) {
+      const teamLabel = BUSINESS_VERTICAL_LABELS[business.vertical].toLowerCase();
+      return {
+        replies: [
+          `Te conectamos con nuestro equipo 👤\n\n` +
+            `Un asesor del ${teamLabel} vería tu mensaje por este mismo WhatsApp. ` +
+            `Puedes seguir escribiendo aquí.\n\n` +
+            `_Escribe *menu* cuando quieras volver al asistente virtual._`,
+        ],
+        session: { state: HUMAN_HANDOFF_STATE },
+        suggestions: ['menu'],
+      };
+    }
+
+    if (wantsReservationLookup(text)) {
+      const teamLabel = BUSINESS_VERTICAL_LABELS[business.vertical].toLowerCase();
+      return {
+        replies: [
+          `_(Simulador: aquí buscaríamos reservas activas vinculadas a tu WhatsApp.)_\n\n` +
+            `Si necesitas cambiar algo, escribe *asesor* para hablar con el ${teamLabel}.`,
+        ],
+        session: { state: 'idle' },
+        suggestions: ['asesor', 'menu', 'reservar'],
       };
     }
 
@@ -870,31 +920,36 @@ export class SimulatorService {
 
   private welcomeMessage(business: { name: string; vertical: BusinessVertical }) {
     const label = BUSINESS_VERTICAL_LABELS[business.vertical].toLowerCase();
+    const menuHint =
+      'Menú: *reservar*, *mi reserva*, *asesor*, *menu*, FAQ y tarifas (según el negocio).';
     if (business.vertical === 'restaurant') {
       return (
         `Hola, bienvenido a *${business.name}* 👋\n\n` +
         `Simulador del bot de restaurante. Puedo mostrar *tarifas de mesa*, responder preguntas con tu knowledge base + inventario, o simular una *reserva completa*.\n\n` +
-        `Prueba: *¿Cuánto cuesta la reserva?* o *Reservar mesa*`
+        `Prueba: *¿Cuánto cuesta la reserva?*, *Reservar mesa* o *asesor*.\n\n_${menuHint}_`
       );
     }
     if (business.vertical === 'hotel') {
       return (
         `Hola, bienvenido a *${business.name}* 👋\n\n` +
         `Simulador del bot hotelero. Pregúntame sobre políticas y servicios, o escribe *reservar* con fechas y huéspedes.\n\n` +
-        `También uso tu inventario y documentos de entrenamiento AI.`
+        `También uso tu inventario y documentos de entrenamiento AI.\n\n_${menuHint}_`
       );
     }
-    return `Hola, soy el asistente de *${business.name}* (${label}). ¿En qué te ayudo?`;
+    return (
+      `Hola, soy el asistente de *${business.name}* (${label}). ` +
+      `Puedo responder preguntas o conectarte con el equipo (*asesor*).\n\n_${menuHint}_`
+    );
   }
 
   private defaultSuggestions(vertical: BusinessVertical): string[] {
     if (vertical === 'restaurant') {
-      return ['¿Cuánto cuesta la reserva?', 'Reservar mesa', 'menu'];
+      return ['¿Cuánto cuesta la reserva?', 'Reservar mesa', 'mi reserva', 'asesor', 'menu'];
     }
     if (vertical === 'hotel') {
-      return ['¿Aceptan mascotas?', 'reservar', 'menu'];
+      return ['¿Aceptan mascotas?', 'reservar', 'mi reserva', 'asesor', 'menu'];
     }
-    return ['menu'];
+    return ['asesor', 'menu'];
   }
 
   private isReset(text: string) {
