@@ -249,3 +249,36 @@ export function renderRestaurantReservationNotificationEmail(data: {
       </p>`,
   });
 }
+
+export function renderHumanHandoffNotificationEmail(data: {
+  businessName: string;
+  verticalLabel: string;
+  guestPhone: string;
+  contextNote?: string | null;
+  openNow: boolean;
+}): string {
+  const rows = [
+    receiptRow('Negocio', `${data.businessName} (${data.verticalLabel})`),
+    receiptRow('WhatsApp del cliente', data.guestPhone),
+    receiptRow(
+      'Horario',
+      data.openNow ? 'Dentro de horario de atención' : 'Fuera de horario — responder cuando puedan',
+    ),
+    ...(data.contextNote?.trim() ? [receiptRow('Contexto del chat', data.contextNote.trim())] : []),
+  ].join('');
+
+  return renderBrandedEmail({
+    preheader: `Atención humana solicitada — ${data.businessName}`,
+    title: 'Cliente solicita atención humana',
+    bodyHtml: `
+      <p style="margin:0 0 16px;font-size:16px;line-height:1.6;color:${BRAND.textMuted};text-align:center">
+        Un cliente pidió hablar con el equipo por WhatsApp.
+      </p>
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 8px">
+        ${rows}
+      </table>
+      <p style="margin:16px 0 0;font-size:12px;line-height:1.5;color:${BRAND.textMuted};text-align:center">
+        Responde desde la app WhatsApp Business. Mientras atiendes, el bot permanece en silencio.
+      </p>`,
+  });
+}

@@ -9,6 +9,8 @@ import {
   type HotelSubscription,
   type UserProfile,
 } from '@/lib/api';
+import { DEFAULT_SERVICE_HOURS, supportsRestaurantBooking, type BusinessVertical, type ServiceHoursMap } from '@hotel-bot/shared';
+import { ServiceHoursSettings } from '@/components/ServiceHoursSettings';
 import { buildHotelDashboardPath } from '@/lib/app-shell-nav';
 import { subscriptionNeedsPlanPicker } from '@/lib/subscription-ui';
 
@@ -114,6 +116,10 @@ export function MyAccountPanel({ hotel, subscription, onHotelUpdate }: Props) {
     timezone: hotel.timezone ?? 'America/Bogota',
     currency: hotel.currency ?? 'COP',
   });
+  const [chatForm, setChatForm] = useState({
+    chat_notification_email: hotel.chat_notification_email ?? '',
+    service_hours_json: hotel.service_hours_json ?? DEFAULT_SERVICE_HOURS,
+  });
   const [profileForm, setProfileForm] = useState({ name: '' });
   const [passwordForm, setPasswordForm] = useState({
     current_password: '',
@@ -131,6 +137,10 @@ export function MyAccountPanel({ hotel, subscription, onHotelUpdate }: Props) {
       name: hotel.name,
       timezone: hotel.timezone ?? 'America/Bogota',
       currency: hotel.currency ?? 'COP',
+    });
+    setChatForm({
+      chat_notification_email: hotel.chat_notification_email ?? '',
+      service_hours_json: hotel.service_hours_json ?? DEFAULT_SERVICE_HOURS,
     });
   }, [hotel]);
 
@@ -207,6 +217,26 @@ export function MyAccountPanel({ hotel, subscription, onHotelUpdate }: Props) {
   }
 
   const needsPlan = subscription && subscriptionNeedsPlanPicker(subscription);
+  const vertical = (hotel.businessVertical ?? 'hotel') as BusinessVertical;
+  const showChatHandoffSettings = !supportsRestaurantBooking(vertical);
+
+  async function handleSaveChatSettings(e: React.FormEvent) {
+    e.preventDefault();
+    setSavingHotel(true);
+    setMessage('');
+    try {
+      const updated = await api.updateHotel({
+        chat_notification_email: chatForm.chat_notification_email.trim(),
+        service_hours_json: chatForm.service_hours_json,
+      });
+      onHotelUpdate({ ...hotel, ...updated });
+      setMessage('Configuración de atención humana guardada.');
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : 'Error al guardar');
+    } finally {
+      setSavingHotel(false);
+    }
+  }
 
   return (
     <div className="account-panel">
@@ -262,6 +292,38 @@ export function MyAccountPanel({ hotel, subscription, onHotelUpdate }: Props) {
             </button>
           </form>
         </section>
+
+        {showChatHandoffSettings && (
+          <section className="panel account-section">
+            <h2>Atención humana por WhatsApp</h2>
+            <p className="muted">
+              Cuando un cliente pida hablar con alguien, el bot se silencia y recibes un aviso por
+              email. Responde desde la app WhatsApp Business del negocio.
+            </p>
+            <form className="form-panel" onSubmit={handleSaveChatSettings}>
+              <label>
+                Email de alertas
+                <input
+                  type="email"
+                  value={chatForm.chat_notification_email}
+                  onChange={(e) =>
+                    setChatForm((f) => ({ ...f, chat_notification_email: e.target.value }))
+                  }
+                  placeholder="recepcion@tunegocio.com"
+                />
+              </label>
+              <ServiceHoursSettings
+                value={chatForm.service_hours_json}
+                onChange={(service_hours_json: ServiceHoursMap) =>
+                  setChatForm((f) => ({ ...f, service_hours_json }))
+                }
+              />
+              <button type="submit" className="btn-primary" disabled={savingHotel}>
+                {savingHotel ? 'Guardando…' : 'Guardar atención humana'}
+              </button>
+            </form>
+          </section>
+        )}
 
         <section className="panel account-section">
           <h2>Mi acceso</h2>

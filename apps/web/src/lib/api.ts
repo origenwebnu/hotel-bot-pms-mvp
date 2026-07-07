@@ -70,7 +70,13 @@ export const api = {
 
   getHotel: () => request<Hotel>('/hotels/me'),
 
-  updateHotel: (data: { name?: string; timezone?: string; currency?: string }) =>
+  updateHotel: (data: {
+    name?: string;
+    timezone?: string;
+    currency?: string;
+    chat_notification_email?: string;
+    service_hours_json?: import('@hotel-bot/shared').ServiceHoursMap;
+  }) =>
     request<Pick<Hotel, 'id' | 'name' | 'slug' | 'timezone' | 'currency'>>('/hotels/me', {
       method: 'PUT',
       body: JSON.stringify(data),
@@ -455,6 +461,8 @@ export interface Hotel {
   timezone?: string;
   currency: string;
   businessVertical?: string;
+  chat_notification_email?: string;
+  service_hours_json?: import('@hotel-bot/shared').ServiceHoursMap;
   integration?: IntegrationStatus;
 }
 

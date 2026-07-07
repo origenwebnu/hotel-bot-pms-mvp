@@ -28,6 +28,8 @@ export const WHATSAPP_BUTTON_IDS = {
   REST_SKIP_ADDONS: 'btn_rest_skip_addons',
   REST_WANT_ADDONS: 'btn_rest_want_addons',
   REST_CONFIRM_BOOKING: 'btn_rest_confirm_booking',
+  MENU_HUMAN: 'btn_menu_human',
+  MENU_MY_RESERVATION: 'btn_menu_my_reservation',
 } as const;
 
 export const QUEUE_NAMES = {

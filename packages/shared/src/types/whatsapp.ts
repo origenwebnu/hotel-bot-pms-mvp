@@ -87,4 +87,5 @@ export type ConversationState =
   | 'collecting_guest_info'
   | 'awaiting_payment'
   | 'confirmed'
-  | 'faq';
+  | 'faq'
+  | 'human_handoff';

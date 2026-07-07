@@ -13,6 +13,7 @@ import { LocalInventoryModule } from '../local-inventory/local-inventory.module'
 import { SubscriptionModule } from '../subscription/subscription.module';
 import { RestaurantModule } from '../restaurant/restaurant.module';
 import { ConversationHistoryModule } from '../conversation-history/conversation-history.module';
+import { HumanHandoffModule } from './human-handoff.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { ConversationHistoryModule } from '../conversation-history/conversation-
     SubscriptionModule,
     RestaurantModule,
     ConversationHistoryModule,
+    HumanHandoffModule,
   ],
   controllers: [WhatsAppWebhookController],
   providers: [

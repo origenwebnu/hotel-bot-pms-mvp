@@ -4,7 +4,9 @@ import {
   buildEpaycoWebhookUrl,
   buildStripeWebhookUrl,
   buildWompiWebhookUrl,
+  DEFAULT_SERVICE_HOURS,
   type PaymentProvider,
+  type ServiceHoursMap,
 } from '@hotel-bot/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../crypto/crypto.service';
@@ -26,22 +28,20 @@ export class HotelsService {
       include: { integration: true },
     });
     if (!hotel) throw new NotFoundException('Hotel not found');
-    return hotel;
+    return this.formatHotel(hotel);
   }
 
-  async updateHotel(
-    hotelId: string,
-    data: { name?: string; timezone?: string; currency?: string },
-  ) {
-    const hotel = await this.prisma.hotel.update({
-      where: { id: hotelId },
-      data: {
-        ...(data.name !== undefined ? { name: data.name.trim() } : {}),
-        ...(data.timezone !== undefined ? { timezone: data.timezone } : {}),
-        ...(data.currency !== undefined ? { currency: data.currency } : {}),
-      },
-    });
-
+  private formatHotel(hotel: {
+    id: string;
+    name: string;
+    slug: string;
+    timezone: string;
+    currency: string;
+    businessVertical: string;
+    chatNotificationEmail: string | null;
+    serviceHoursJson: unknown;
+    integration: unknown;
+  }) {
     return {
       id: hotel.id,
       name: hotel.name,
@@ -49,7 +49,40 @@ export class HotelsService {
       timezone: hotel.timezone,
       currency: hotel.currency,
       businessVertical: hotel.businessVertical,
+      chat_notification_email: hotel.chatNotificationEmail ?? '',
+      service_hours_json:
+        (hotel.serviceHoursJson as ServiceHoursMap | null) ?? DEFAULT_SERVICE_HOURS,
+      integration: hotel.integration,
     };
+  }
+
+  async updateHotel(
+    hotelId: string,
+    data: {
+      name?: string;
+      timezone?: string;
+      currency?: string;
+      chat_notification_email?: string;
+      service_hours_json?: ServiceHoursMap;
+    },
+  ) {
+    const hotel = await this.prisma.hotel.update({
+      where: { id: hotelId },
+      data: {
+        ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+        ...(data.timezone !== undefined ? { timezone: data.timezone } : {}),
+        ...(data.currency !== undefined ? { currency: data.currency } : {}),
+        ...(data.chat_notification_email !== undefined
+          ? { chatNotificationEmail: data.chat_notification_email.trim() || null }
+          : {}),
+        ...(data.service_hours_json !== undefined
+          ? { serviceHoursJson: data.service_hours_json as object }
+          : {}),
+      },
+      include: { integration: true },
+    });
+
+    return this.formatHotel(hotel);
   }
 
   async updateIntegration(

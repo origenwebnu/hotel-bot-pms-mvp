@@ -35,6 +35,12 @@ import { SubscriptionService } from '../subscription/subscription.service';
 import { SubscriptionLimitError } from '../subscription/subscription.errors';
 import { RestaurantBookingFlowService } from '../restaurant/restaurant-booking-flow.service';
 import { ConversationHistoryService } from '../conversation-history/conversation-history.service';
+import { HumanHandoffService } from './human-handoff.service';
+import {
+  wantsHumanHandoff,
+  wantsMainMenu,
+  wantsReservationLookup,
+} from '@hotel-bot/shared';
 
 @Injectable()
 export class ConversationService {
@@ -51,6 +57,7 @@ export class ConversationService {
     private readonly subscription: SubscriptionService,
     private readonly restaurantFlow: RestaurantBookingFlowService,
     private readonly conversationHistory: ConversationHistoryService,
+    private readonly handoff: HumanHandoffService,
     @InjectQueue(QUEUE_NAMES.WHATSAPP_INBOUND) private readonly inboundQueue: Queue,
   ) {}
 
@@ -76,6 +83,33 @@ export class ConversationService {
     this.conversationHistory.logInbound(hotelId, session.id, message, session.state, phone);
     const text = this.extractText(message);
     const business = await this.getBusinessProfile(hotelId);
+
+    if (await this.handoff.shouldBotStaySilent(session, text, wantsMainMenu)) {
+      if (wantsMainMenu(text)) {
+        await this.handoff.releaseToBot(hotelId, session.id, phone, business);
+        return this.sendWelcomeMenu(hotelId, session.id, phone);
+      }
+      return;
+    }
+
+    if (message.interactive?.list_reply) {
+      const listId = message.interactive.list_reply.id;
+      if (this.handoff.isMenuActionId(listId)) {
+        return this.handleButton(hotelId, session, listId);
+      }
+    }
+
+    if (wantsHumanHandoff(text)) {
+      const full = await this.getSession(session.id);
+      return this.handoff.requestHumanHandoff(hotelId, full, business, {
+        contextNote: this.handoff.buildFlowContextNote(full),
+      });
+    }
+
+    if (wantsReservationLookup(text)) {
+      return this.handoff.sendReservationLookupReply(hotelId, phone, business);
+    }
+
     const canTransact = supportsTransactionalFlow(business.vertical);
 
     if (business.vertical === 'restaurant') {
@@ -590,6 +624,23 @@ export class ConversationService {
       }
       await this.sendRatesOverview(hotelId, session.whatsappPhone);
       return;
+    }
+
+    if (buttonId === WHATSAPP_BUTTON_IDS.MENU_HUMAN) {
+      const business = await this.getBusinessProfile(hotelId);
+      const full = await this.getSession(session.id);
+      return this.handoff.requestHumanHandoff(hotelId, full, business, {
+        contextNote: this.handoff.buildFlowContextNote(full),
+      });
+    }
+
+    if (buttonId === WHATSAPP_BUTTON_IDS.MENU_MY_RESERVATION) {
+      const business = await this.getBusinessProfile(hotelId);
+      return this.handoff.sendReservationLookupReply(
+        hotelId,
+        session.whatsappPhone,
+        business,
+      );
     }
 
     if (buttonId.startsWith('room_')) {
