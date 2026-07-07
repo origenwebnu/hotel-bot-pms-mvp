@@ -466,69 +466,49 @@ export class RestaurantBookingFlowService {
     }
 
     const settings = await this.inventory.getSettings(hotelId);
-    const date = parseRestaurantBookingDate(text);
+    const parsedDate = parseRestaurantBookingDate(text);
+    const date = parsedDate ?? parseRestaurantBookingDate('hoy')!;
     const partySize = this.parsePartySize(text) ?? 2;
-    const defaultFee = settings.default_reservation_fee ?? 0;
-    const defaultPerGuest = settings.default_price_per_guest ?? 0;
 
-    let header = '*Tarifas de reserva de mesa*\n\n';
-    if (date) {
-      const formatted = this.formatDisplayDate(date);
-      header = `*Tarifas para ${formatted}*\n\n`;
-      try {
-        const slots = await this.inventory.getAvailableTimeSlots(hotelId, date);
-        header += slots.length
-          ? `Hay ${slots.length} horario(s) disponible(s).\n\n`
-          : `Sin horarios disponibles ese día.\n\n`;
-      } catch {
-        /* ignore invalid date */
-      }
-    } else if (defaultFee > 0 || defaultPerGuest > 0) {
-      header +=
-        `*Tarifas generales:* fee ${defaultFee.toLocaleString('es-CO')} + ${defaultPerGuest.toLocaleString('es-CO')}/persona\n` +
-        `(Ejemplo ${partySize} personas: ~${(defaultFee + defaultPerGuest * partySize).toLocaleString('es-CO')})\n\n`;
+    let header = parsedDate
+      ? `*Tarifas para ${this.formatDisplayDate(date)}*\n\n`
+      : `*Tarifas para hoy (${this.formatDisplayDate(date)})*\n\n`;
+
+    try {
+      const slots = await this.inventory.getAvailableTimeSlots(hotelId, date);
+      header += slots.length
+        ? `Hay ${slots.length} horario(s) disponible(s).\n\n`
+        : `Sin horarios disponibles ese día.\n\n`;
+    } catch {
+      header += `Consulta precios del calendario para esta fecha.\n\n`;
     }
 
     const lines: string[] = [];
     for (const zone of zones) {
       if (partySize < zone.min_party_size || partySize > zone.max_party_size) continue;
 
-      if (date) {
-        const pricing = await this.inventory.getZonePricingForDate(hotelId, zone.id, date);
-        const total = pricing.reservationFee + pricing.pricePerGuest * partySize;
-        const labelNote = pricing.label ? ` (${pricing.label})` : '';
-        lines.push(
-          `• *${zone.name}*${labelNote}\n` +
-            `  ${pricing.currency} ${pricing.reservationFee.toLocaleString('es-CO')} fee + ${pricing.currency} ${pricing.pricePerGuest.toLocaleString('es-CO')}/persona\n` +
-            `  Total ${partySize} personas: ~${pricing.currency} ${total.toLocaleString('es-CO')}`,
-        );
-      } else {
-        const fee = (zone.base_reservation_fee > 0 ? zone.base_reservation_fee : defaultFee).toLocaleString(
-          'es-CO',
-        );
-        const perGuest = (
-          zone.base_price_per_guest > 0 ? zone.base_price_per_guest : defaultPerGuest
-        ).toLocaleString('es-CO');
-        const effectiveFee = zone.base_reservation_fee > 0 ? zone.base_reservation_fee : defaultFee;
-        const effectivePerGuest =
-          zone.base_price_per_guest > 0 ? zone.base_price_per_guest : defaultPerGuest;
-        const example = effectiveFee + effectivePerGuest * partySize;
-        lines.push(
-          `• *${zone.name}* (${zone.min_party_size}–${zone.max_party_size} pax)\n` +
-            `  Fee: ${zone.currency} ${fee} + ${zone.currency} ${perGuest}/persona\n` +
-            `  Ejemplo ${partySize} personas: ~${zone.currency} ${example.toLocaleString('es-CO')}`,
-        );
-      }
+      const pricing = await this.inventory.getZonePricingForDate(hotelId, zone.id, date);
+      const total = pricing.reservationFee + pricing.pricePerGuest * partySize;
+      const labelNote = pricing.label ? ` (${pricing.label})` : '';
+      lines.push(
+        `• *${zone.name}*${labelNote} (${zone.min_party_size}–${zone.max_party_size} pax)\n` +
+          `  ${pricing.currency} ${pricing.reservationFee.toLocaleString('es-CO')} fee + ${pricing.currency} ${pricing.pricePerGuest.toLocaleString('es-CO')}/persona\n` +
+          `  Total ${partySize} personas: ~${pricing.currency} ${total.toLocaleString('es-CO')}`,
+      );
     }
 
     const paymentNote = settings.require_payment
       ? '\n\n💳 Este restaurante *requiere pago* al reservar.'
       : '\n\n✅ Puedes reservar *sin cobro anticipado*.';
 
+    const calendarHint = parsedDate
+      ? ''
+      : '\n\n_Para otra fecha escribe por ejemplo: *tarifas el domingo*._';
+
     const body =
       lines.length > 0
-        ? `${header}${lines.join('\n\n')}${paymentNote}\n\n_Escribe *Reservar mesa* o usa el menú para reservar._`
-        : `${header}No hay zonas disponibles para ${partySize} personas.${paymentNote}`;
+        ? `${header}${lines.join('\n\n')}${paymentNote}${calendarHint}\n\n_Escribe *Reservar mesa* o usa el menú para reservar._`
+        : `${header}No hay zonas disponibles para ${partySize} personas.${paymentNote}${calendarHint}`;
 
     await this.whatsapp.sendText(hotelId, phone, body);
   }

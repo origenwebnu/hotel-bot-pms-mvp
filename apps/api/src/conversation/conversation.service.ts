@@ -94,7 +94,7 @@ export class ConversationService {
 
     if (message.interactive?.list_reply) {
       const listId = message.interactive.list_reply.id;
-      if (this.handoff.isMenuActionId(listId)) {
+      if (this.handoff.isMenuActionId(listId) && business.vertical !== 'restaurant') {
         return this.handleButton(hotelId, session, listId);
       }
     }
