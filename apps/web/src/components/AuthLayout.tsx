@@ -1,7 +1,5 @@
-'use client';
-
-import Image from 'next/image';
 import { ReactNode } from 'react';
+import { BRAND } from '@/lib/brand-assets';
 
 interface AuthLayoutProps {
   title: string;
@@ -15,21 +13,15 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
     <div className="auth-page">
       <div className="auth-card glass-panel">
         <div className="auth-header">
-          <Image
-            src="/brand/logo-full-light.svg"
+          <img
+            src={BRAND.logoFullLight}
             alt="BookiChat"
-            width={180}
-            height={34}
             className="auth-logo auth-logo-light"
-            priority
           />
-          <Image
-            src="/brand/logo-full-dark.svg"
+          <img
+            src={BRAND.logoFullDark}
             alt="BookiChat"
-            width={180}
-            height={34}
             className="auth-logo auth-logo-dark"
-            priority
           />
           <h1>{title}</h1>
           <p>{subtitle}</p>

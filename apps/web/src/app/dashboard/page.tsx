@@ -15,7 +15,6 @@ import {
   type HotelSubscription,
   clearAuthSession,
 } from '@/lib/api';
-import Image from 'next/image';
 import { AppShell } from '@/components/AppShell';
 import { useTheme } from '@/components/ThemeProvider';
 import { brandLogoIcon } from '@/lib/brand-assets';
@@ -59,13 +58,7 @@ function PanelLoading() {
 
   return (
     <div className="loading loading-with-logo">
-      <Image
-        src={brandLogoIcon(theme)}
-        alt="BookiChat"
-        width={40}
-        height={40}
-        priority
-      />
+      <img src={brandLogoIcon(theme)} alt="BookiChat" className="loading-logo" />
       <span>Cargando panel...</span>
     </div>
   );

@@ -106,23 +106,9 @@ export function AppShell({
         <div className={`sidebar-top ${collapsed ? 'is-collapsed' : ''}`}>
           <div className="sidebar-brand">
             {collapsed ? (
-              <Image
-                src={logoIcon}
-                alt="BookiChat"
-                width={40}
-                height={40}
-                className="brand-icon"
-                priority
-              />
+              <img src={logoIcon} alt="BookiChat" className="brand-icon" />
             ) : (
-              <Image
-                src={logoFull}
-                alt="BookiChat"
-                width={160}
-                height={32}
-                className="brand-full"
-                priority
-              />
+              <img src={logoFull} alt="BookiChat" className="brand-full" />
             )}
           </div>
           <button
