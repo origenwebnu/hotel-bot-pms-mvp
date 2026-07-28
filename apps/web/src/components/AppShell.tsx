@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import { useEffect, useState, type ReactNode } from 'react';
+import { BrandImg } from '@/components/BrandImg';
 import { useTheme } from '@/components/ThemeProvider';
 import { brandLogoFull, brandLogoIcon } from '@/lib/brand-assets';
 import { SIDEBAR_STORAGE_KEY } from '@/lib/theme';
@@ -106,9 +107,9 @@ export function AppShell({
         <div className={`sidebar-top ${collapsed ? 'is-collapsed' : ''}`}>
           <div className="sidebar-brand">
             {collapsed ? (
-              <img src={logoIcon} alt="BookiChat" className="brand-icon" />
+              <BrandImg src={logoIcon} className="brand-icon" />
             ) : (
-              <img src={logoFull} alt="BookiChat" className="brand-full" />
+              <BrandImg src={logoFull} className="brand-full" />
             )}
           </div>
           <button

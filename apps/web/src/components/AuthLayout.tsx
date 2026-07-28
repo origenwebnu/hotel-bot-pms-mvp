@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { BrandImg } from '@/components/BrandImg';
 import { BRAND } from '@/lib/brand-assets';
 
 interface AuthLayoutProps {
@@ -13,16 +14,8 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
     <div className="auth-page">
       <div className="auth-card glass-panel">
         <div className="auth-header">
-          <img
-            src={BRAND.logoFullLight}
-            alt="BookiChat"
-            className="auth-logo auth-logo-light"
-          />
-          <img
-            src={BRAND.logoFullDark}
-            alt="BookiChat"
-            className="auth-logo auth-logo-dark"
-          />
+          <BrandImg src={BRAND.logoFullLight} className="auth-logo auth-logo-light" />
+          <BrandImg src={BRAND.logoFullDark} className="auth-logo auth-logo-dark" />
           <h1>{title}</h1>
           <p>{subtitle}</p>
         </div>
