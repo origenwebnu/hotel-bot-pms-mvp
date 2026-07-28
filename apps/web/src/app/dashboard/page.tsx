@@ -16,6 +16,7 @@ import {
   clearAuthSession,
 } from '@/lib/api';
 import { AppShell } from '@/components/AppShell';
+import { BrandImg } from '@/components/BrandImg';
 import { useTheme } from '@/components/ThemeProvider';
 import { brandLogoIcon } from '@/lib/brand-assets';
 import {
@@ -58,7 +59,7 @@ function PanelLoading() {
 
   return (
     <div className="loading loading-with-logo">
-      <img src={brandLogoIcon(theme)} alt="BookiChat" className="loading-logo" />
+      <BrandImg src={brandLogoIcon(theme)} className="loading-logo" />
       <span>Cargando panel...</span>
     </div>
   );
