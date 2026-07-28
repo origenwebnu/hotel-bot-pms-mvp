@@ -2,8 +2,8 @@
 
 import Image from 'next/image';
 import { useEffect, useState, type ReactNode } from 'react';
-import { BookiChatLogo } from '@/components/BookiChatLogo';
 import { useTheme } from '@/components/ThemeProvider';
+import { brandLogoFull, brandLogoIcon } from '@/lib/brand-assets';
 import { SIDEBAR_STORAGE_KEY } from '@/lib/theme';
 
 export interface AppNavChild {
@@ -88,7 +88,8 @@ export function AppShell({
     return expandedGroups[item.id] ?? isChildActive(item, activeId);
   }
 
-  const logoBackground = theme === 'dark' ? 'dark' : 'light';
+  const logoFull = brandLogoFull(theme);
+  const logoIcon = brandLogoIcon(theme);
 
   return (
     <div className={`app-shell ${collapsed ? 'sidebar-collapsed' : ''}`}>
@@ -105,18 +106,22 @@ export function AppShell({
         <div className={`sidebar-top ${collapsed ? 'is-collapsed' : ''}`}>
           <div className="sidebar-brand">
             {collapsed ? (
-              <BookiChatLogo
-                variant="mark"
-                forBackground={logoBackground}
+              <Image
+                src={logoIcon}
+                alt="BookiChat"
+                width={40}
                 height={40}
                 className="brand-icon"
+                priority
               />
             ) : (
-              <BookiChatLogo
-                variant="wordmark"
-                forBackground={logoBackground}
+              <Image
+                src={logoFull}
+                alt="BookiChat"
+                width={160}
                 height={32}
                 className="brand-full"
+                priority
               />
             )}
           </div>

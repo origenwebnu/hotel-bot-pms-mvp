@@ -15,9 +15,10 @@ import {
   type HotelSubscription,
   clearAuthSession,
 } from '@/lib/api';
+import Image from 'next/image';
 import { AppShell } from '@/components/AppShell';
-import { BookiChatLogo } from '@/components/BookiChatLogo';
 import { useTheme } from '@/components/ThemeProvider';
+import { brandLogoIcon } from '@/lib/brand-assets';
 import {
   buildDashboardNav,
   buildHotelDashboardPath,
@@ -55,11 +56,16 @@ function resolveVertical(hotel: Hotel): BusinessVertical {
 
 function PanelLoading() {
   const { theme } = useTheme();
-  const logoBackground = theme === 'dark' ? 'dark' : 'light';
 
   return (
     <div className="loading loading-with-logo">
-      <BookiChatLogo variant="mark" forBackground={logoBackground} height={40} />
+      <Image
+        src={brandLogoIcon(theme)}
+        alt="BookiChat"
+        width={40}
+        height={40}
+        priority
+      />
       <span>Cargando panel...</span>
     </div>
   );
