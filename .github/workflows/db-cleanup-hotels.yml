@@ -1,0 +1,36 @@
+name: DB Cleanup Test Hotels
+
+on:
+  workflow_dispatch:
+    inputs:
+      keep_slug:
+        description: 'Slug del hotel demo a conservar'
+        required: true
+        default: 'hotel-origen-web-1782248576158'
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    if: github.repository == 'origenwebnu/hotel-bot-pms-mvp'
+
+    steps:
+      - name: Cleanup via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DROPLET_IP }}
+          username: root
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          command_timeout: 10m
+          script: |
+            set -e
+            export KEEP_SLUG="${{ inputs.keep_slug }}"
+            if [ -d /opt/hotel-bot/.git ]; then
+              cd /opt/hotel-bot
+              git fetch origin
+              git checkout main
+              git pull origin main
+            else
+              git clone --branch main https://github.com/origenwebnu/hotel-bot-pms-mvp.git /opt/hotel-bot
+              cd /opt/hotel-bot
+            fi
+            bash infra/digitalocean/cleanup-test-hotels.sh "$KEEP_SLUG"

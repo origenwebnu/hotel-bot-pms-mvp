@@ -1,4 +1,4 @@
-export type PaymentProvider = 'wompi' | 'stripe' | 'payu';
+export type PaymentProvider = 'wompi' | 'stripe' | 'bold' | 'epayco' | 'payu';
 
 export type PaymentStatus =
   | 'pending'
@@ -40,4 +40,5 @@ export interface PaymentCredentials {
   public_key?: string;
   private_key?: string;
   webhook_secret?: string;
+  customer_id?: string;
 }

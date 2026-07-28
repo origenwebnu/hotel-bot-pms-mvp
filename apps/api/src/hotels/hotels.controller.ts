@@ -2,14 +2,55 @@ import {
   Controller,
   Get,
   Put,
+  Post,
   Param,
   Body,
   UseGuards,
   Request,
 } from '@nestjs/common';
+import { IsOptional, IsString, MinLength } from 'class-validator';
 import { HotelsService } from './hotels.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CoreIntegratorService } from '../core-integrator/core-integrator.service';
+import { CheckoutService } from '../checkout/checkout.service';
+import { SubscriptionService } from '../subscription/subscription.service';
+import { SubscriptionBillingService } from '../platform-billing/subscription-billing.service';
+import { UpdateIntegrationDto } from './dto/update-integration.dto';
+import { UpdateHotelDto } from './dto/update-hotel.dto';
+
+class UpdateWhatsAppDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(5)
+  phone_number_id?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(20)
+  access_token?: string;
+
+  @IsOptional()
+  @IsString()
+  display_phone?: string;
+}
+
+class CompleteEmbeddedSignupDto {
+  @IsString()
+  @MinLength(10)
+  code!: string;
+
+  @IsString()
+  @MinLength(5)
+  phone_number_id!: string;
+
+  @IsString()
+  @MinLength(5)
+  waba_id!: string;
+
+  @IsString()
+  @MinLength(3)
+  event!: string;
+}
 
 @Controller('hotels')
 @UseGuards(JwtAuthGuard)
@@ -17,11 +58,49 @@ export class HotelsController {
   constructor(
     private readonly hotels: HotelsService,
     private readonly pms: CoreIntegratorService,
+    private readonly checkout: CheckoutService,
+    private readonly subscription: SubscriptionService,
+    private readonly subscriptionBilling: SubscriptionBillingService,
   ) {}
 
   @Get('me')
   getMyHotel(@Request() req: { user: { hotelId: string } }) {
     return this.hotels.getHotel(req.user.hotelId);
+  }
+
+  @Put('me')
+  updateMyHotel(
+    @Request() req: { user: { hotelId: string } },
+    @Body() body: UpdateHotelDto,
+  ) {
+    return this.hotels.updateHotel(req.user.hotelId, body);
+  }
+
+  @Get('me/subscription')
+  getMySubscription(@Request() req: { user: { hotelId: string } }) {
+    return this.subscription.getUsageSnapshot(req.user.hotelId);
+  }
+
+  @Get('me/billing-history')
+  getMyBillingHistory(@Request() req: { user: { hotelId: string } }) {
+    return this.subscription.getBillingHistory(req.user.hotelId);
+  }
+
+  @Get('me/subscription/plans')
+  listSubscriptionPlans() {
+    return this.subscriptionBilling.listActivePlansForHotel();
+  }
+
+  @Post('me/subscription/checkout')
+  createSubscriptionCheckout(
+    @Request() req: { user: { hotelId: string; email?: string } },
+    @Body() body: { plan_id: string; payer_email?: string },
+  ) {
+    return this.subscriptionBilling.createCheckout(
+      req.user.hotelId,
+      body.plan_id,
+      body.payer_email ?? req.user.email,
+    );
   }
 
   @Get('me/integration')
@@ -30,16 +109,59 @@ export class HotelsController {
   }
 
   @Put('me/integration')
-  updateIntegration(
+  async updateIntegration(
     @Request() req: { user: { hotelId: string } },
-    @Body() body: Record<string, string>,
+    @Body() body: UpdateIntegrationDto,
   ) {
-    return this.hotels.updateIntegration(req.user.hotelId, body);
+    await this.hotels.updateIntegration(req.user.hotelId, body);
+
+    if (body.payment_private_key?.trim() || body.payment_public_key?.trim()) {
+      await this.checkout.validatePaymentSetup(req.user.hotelId).catch(() => undefined);
+    }
+
+    return this.hotels.getIntegrationStatus(req.user.hotelId);
   }
 
   @Get('me/integration/validate-pms')
   async validatePms(@Request() req: { user: { hotelId: string } }) {
     const valid = await this.pms.validatePmsCredentials(req.user.hotelId);
     return { valid };
+  }
+
+  @Get('me/payment-config')
+  getPaymentConfig(@Request() req: { user: { hotelId: string } }) {
+    return this.hotels.getPaymentConfig(req.user.hotelId);
+  }
+
+  @Post('me/integration/validate-payment')
+  async validatePayment(@Request() req: { user: { hotelId: string } }) {
+    return this.checkout.validatePaymentSetup(req.user.hotelId);
+  }
+
+  @Get('me/whatsapp')
+  getWhatsApp(@Request() req: { user: { hotelId: string } }) {
+    return this.hotels.getWhatsAppConfig(req.user.hotelId);
+  }
+
+  @Put('me/whatsapp')
+  updateWhatsApp(
+    @Request() req: { user: { hotelId: string } },
+    @Body() body: UpdateWhatsAppDto,
+  ) {
+    return this.hotels.updateWhatsApp(req.user.hotelId, body);
+  }
+
+  @Post('me/whatsapp/validate')
+  async validateWhatsApp(@Request() req: { user: { hotelId: string } }) {
+    const valid = await this.hotels.validateWhatsApp(req.user.hotelId);
+    return { valid };
+  }
+
+  @Post('me/whatsapp/embedded-signup')
+  completeEmbeddedSignup(
+    @Request() req: { user: { hotelId: string } },
+    @Body() body: CompleteEmbeddedSignupDto,
+  ) {
+    return this.hotels.completeEmbeddedSignup(req.user.hotelId, body);
   }
 }

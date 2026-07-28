@@ -94,6 +94,12 @@ export class WhatsAppWebhookController {
         where: { whatsappPhoneNumberId: phoneNumberId, isActive: true },
       });
       if (hotel) return hotel.id;
+
+      this.logger.warn(
+        `No hotel for WhatsApp phone_number_id=${phoneNumberId}; using DEFAULT_HOTEL_ID`,
+      );
+    } else {
+      this.logger.warn('WhatsApp webhook missing phone_number_id; using DEFAULT_HOTEL_ID');
     }
     return process.env.DEFAULT_HOTEL_ID ?? 'default';
   }

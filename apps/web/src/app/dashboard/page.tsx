@@ -1,214 +1,262 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { api, type Hotel, type IntegrationStatus } from '@/lib/api';
+import { Suspense, useCallback, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  isBusinessVertical,
+  supportsHotelBooking,
+  supportsRestaurantBooking,
+  type BusinessVertical,
+} from '@hotel-bot/shared';
+import {
+  api,
+  type Hotel,
+  type IntegrationStatus,
+  type HotelSubscription,
+  clearAuthSession,
+} from '@/lib/api';
+import { AppShell } from '@/components/AppShell';
 import { BookiChatLogo } from '@/components/BookiChatLogo';
-import { IntegrationsPanel } from '@/components/IntegrationsPanel';
+import { useTheme } from '@/components/ThemeProvider';
+import {
+  buildDashboardNav,
+  buildHotelDashboardPath,
+  getDashboardOverviewTitle,
+  getDashboardTabTitle,
+  isIntegrationTab,
+  parseDashboardTab,
+  type HotelTab,
+} from '@/lib/app-shell-nav';
+import { WhatsAppPanel } from '@/components/WhatsAppPanel';
+import { PmsIntegrationPanel } from '@/components/PmsIntegrationPanel';
+import { PaymentIntegrationPanel } from '@/components/PaymentIntegrationPanel';
 import { KnowledgePanel } from '@/components/KnowledgePanel';
+import { DiscountTiersPanel } from '@/components/DiscountTiersPanel';
+import { InventoryPanel } from '@/components/InventoryPanel';
+import { RestaurantInventoryPanel } from '@/components/RestaurantInventoryPanel';
 import { ChatSimulator } from '@/components/ChatSimulator';
+import { ConversationHistoryPanel } from '@/components/ConversationHistoryPanel';
+import { DashboardOverviewPanel } from '@/components/DashboardOverviewPanel';
+import { ReservationsHistoryPanel } from '@/components/ReservationsHistoryPanel';
+import { RestaurantReservationsPanel } from '@/components/RestaurantReservationsPanel';
+import { MyAccountPanel } from '@/components/MyAccountPanel';
+import { SubscriptionPlansPanel } from '@/components/SubscriptionPlansPanel';
+import { BusinessOnboardingPanel } from '@/components/BusinessOnboardingPanel';
+import { subscriptionBannerMessage } from '@/lib/subscription-ui';
 
-type Tab = 'integrations' | 'knowledge' | 'simulator';
+const DEFAULT_INTEGRATION_TAB: HotelTab = 'integration-whatsapp';
+
+function resolveVertical(hotel: Hotel): BusinessVertical {
+  if (hotel.businessVertical && isBusinessVertical(hotel.businessVertical)) {
+    return hotel.businessVertical;
+  }
+  return 'hotel';
+}
+
+function PanelLoading() {
+  const { theme } = useTheme();
+  const logoBackground = theme === 'dark' ? 'dark' : 'light';
+
+  return (
+    <div className="loading loading-with-logo">
+      <BookiChatLogo variant="mark" forBackground={logoBackground} height={40} />
+      <span>Cargando panel...</span>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
+  return (
+    <Suspense fallback={<PanelLoading />}>
+      <DashboardPageContent />
+    </Suspense>
+  );
+}
+
+function DashboardPageContent() {
   const router = useRouter();
-  const [tab, setTab] = useState<Tab>('integrations');
+  const searchParams = useSearchParams();
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [integration, setIntegration] = useState<IntegrationStatus | null>(null);
+  const [subscription, setSubscription] = useState<HotelSubscription | null>(null);
 
   useEffect(() => {
     const token = localStorage.getItem('token');
+    const role = localStorage.getItem('role');
     if (!token) {
       router.push('/');
       return;
     }
+    if (role === 'super_admin') {
+      router.push('/super-admin');
+      return;
+    }
 
-    Promise.all([api.getHotel(), api.getIntegration()])
-      .then(([h, i]) => {
+    Promise.all([api.getHotel(), api.getIntegration(), api.getSubscription()])
+      .then(([h, i, s]) => {
         setHotel(h);
         setIntegration(i);
+        setSubscription(s);
       })
       .catch(() => router.push('/'));
   }, [router]);
 
-  function logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('hotel_id');
-    router.push('/');
+  const loadStats = useCallback(
+    (range: { from: string; to: string }) =>
+      api.getReservationStats({ from: range.from, to: range.to }),
+    [],
+  );
+
+  const loadReservations = useCallback(
+    (params: {
+      outcome?: 'approved' | 'rejected' | 'pending';
+      from?: string;
+      to?: string;
+      booking_from?: string;
+      booking_to?: string;
+      booking_kind?: string;
+      page?: number;
+      limit?: number;
+    }) => api.listReservations(params),
+    [],
+  );
+
+  function handleNavigate(id: string) {
+    const nextTab: HotelTab =
+      id === 'integrations' ? DEFAULT_INTEGRATION_TAB : (id as HotelTab);
+    router.replace(buildHotelDashboardPath(nextTab), { scroll: false });
   }
+
+  useEffect(() => {
+    if (!hotel) return;
+    const vertical = resolveVertical(hotel);
+    const requested = searchParams.get('tab');
+    if (!requested) return;
+    const allowed = parseDashboardTab(requested, vertical);
+    if (requested !== allowed) {
+      router.replace(buildHotelDashboardPath(allowed), { scroll: false });
+    }
+  }, [hotel, searchParams, router]);
 
   if (!hotel) {
-    return (
-      <div className="loading">
-        <BookiChatLogo variant="mark" forBackground="dark" height={40} />
-        <span>Cargando panel...</span>
-      </div>
-    );
+    return <PanelLoading />;
   }
 
+  const vertical = resolveVertical(hotel);
+  const showHotelBooking = supportsHotelBooking(vertical);
+  const showRestaurantBooking = supportsRestaurantBooking(vertical);
+  const tab = parseDashboardTab(searchParams.get('tab'), vertical);
+  const navItems = buildDashboardNav(vertical);
+
+  const panelTitle =
+    tab === 'overview' ? getDashboardOverviewTitle(vertical) : getDashboardTabTitle(tab, vertical);
+
+  const headerExtra = isIntegrationTab(tab) && integration && (
+    <div className="status-badges">
+      <span className={`badge ${integration.whatsapp_connected ? 'ok' : 'warn'}`}>
+        WhatsApp {integration.whatsapp_connected ? '✓' : '○'}
+      </span>
+      {showHotelBooking && (
+        <span className={`badge ${integration.pms_connected ? 'ok' : 'warn'}`}>
+          PMS {integration.pms_connected ? '✓' : '○'}
+        </span>
+      )}
+      <span className={`badge ${integration.payment_connected ? 'ok' : 'warn'}`}>
+        Pagos {integration.payment_connected ? '✓' : '○'}
+      </span>
+    </div>
+  );
+
   return (
-    <div className="dashboard">
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <BookiChatLogo variant="mark" forBackground="dark" height={36} className="sidebar-logo-mark" />
-          <div>
-            <BookiChatLogo variant="wordmark" forBackground="dark" height={22} className="sidebar-logo-wordmark" />
-            <small>{hotel.name}</small>
-          </div>
+    <AppShell
+      title={panelTitle}
+      subtitle={hotel.name}
+      navItems={navItems}
+      activeId={tab}
+      onNavigate={handleNavigate}
+      onLogout={() => {
+        clearAuthSession();
+        router.push('/');
+      }}
+      headerExtra={headerExtra}
+    >
+      {subscription && (showHotelBooking || showRestaurantBooking) && tab !== 'overview' && tab !== 'account' && tab !== 'subscription' && (
+        <SubscriptionBanner subscription={subscription} onChoosePlan={() => handleNavigate('subscription')} />
+      )}
+
+      {tab === 'overview' && (
+        <>
+          {subscription && (showHotelBooking || showRestaurantBooking) && (
+            <SubscriptionBanner subscription={subscription} onChoosePlan={() => handleNavigate('subscription')} />
+          )}
+          <BusinessOnboardingPanel vertical={vertical} />
+          {showHotelBooking && <DashboardOverviewPanel loadStats={loadStats} />}
+        </>
+      )}
+      {tab === 'reservations' && showHotelBooking && (
+        <ReservationsHistoryPanel loadReservations={loadReservations} />
+      )}
+      {tab === 'reservations' && showRestaurantBooking && (
+        <RestaurantReservationsPanel loadReservations={loadReservations} />
+      )}
+      {tab === 'conversations' && <ConversationHistoryPanel />}
+      {tab === 'integration-whatsapp' && (
+        <WhatsAppPanel
+          onConnectionChange={(connected) =>
+            setIntegration((prev) => (prev ? { ...prev, whatsapp_connected: connected } : prev))
+          }
+        />
+      )}
+      {tab === 'integration-pms' && showHotelBooking && (
+        <PmsIntegrationPanel integration={integration} onUpdate={setIntegration} />
+      )}
+      {tab === 'integration-payments' && (
+        <PaymentIntegrationPanel integration={integration} onUpdate={setIntegration} />
+      )}
+      {tab === 'inventory' && showHotelBooking && <InventoryPanel />}
+      {tab === 'inventory' && showRestaurantBooking && <RestaurantInventoryPanel />}
+      {tab === 'discounts' && showHotelBooking && <DiscountTiersPanel />}
+      {tab === 'knowledge' && <KnowledgePanel />}
+      {tab === 'simulator' && <ChatSimulator />}
+      {tab === 'subscription' && (
+        <SubscriptionPlansPanel subscription={subscription} />
+      )}
+      {tab === 'account' && (
+        <MyAccountPanel
+          hotel={hotel}
+          subscription={subscription}
+          onHotelUpdate={(updated) => {
+            setHotel((prev) => (prev ? { ...prev, ...updated } : prev));
+          }}
+        />
+      )}
+    </AppShell>
+  );
+}
+
+function SubscriptionBanner({
+  subscription,
+  onChoosePlan,
+}: {
+  subscription: HotelSubscription;
+  onChoosePlan: () => void;
+}) {
+  const banner = subscriptionBannerMessage(subscription);
+  if (!banner) return null;
+
+  return (
+    <div className={`subscription-banner ${banner.tone}`}>
+      <div className="subscription-banner-content">
+        <div>
+          <strong>{banner.title}</strong>
+          <small>{banner.body}</small>
         </div>
-        <nav>
-          <button
-            className={tab === 'integrations' ? 'active' : ''}
-            onClick={() => setTab('integrations')}
-          >
-            ⚙️ Integraciones
+        {banner.showPlanCta && (
+          <button type="button" className="btn-primary subscription-banner-cta" onClick={onChoosePlan}>
+            {banner.ctaLabel}
           </button>
-          <button
-            className={tab === 'knowledge' ? 'active' : ''}
-            onClick={() => setTab('knowledge')}
-          >
-            📚 Knowledge Base
-          </button>
-          <button
-            className={tab === 'simulator' ? 'active' : ''}
-            onClick={() => setTab('simulator')}
-          >
-            💬 Simulador IA
-          </button>
-        </nav>
-        <button className="logout-btn" onClick={logout}>
-          Cerrar sesión
-        </button>
-      </aside>
-
-      <main className="main">
-        <header className="main-header">
-          <h1>
-            {tab === 'integrations' && 'Integraciones'}
-            {tab === 'knowledge' && 'Knowledge Base'}
-            {tab === 'simulator' && 'Simulador de Chat'}
-          </h1>
-          <div className="status-badges">
-            <span className={`badge ${integration?.pms_connected ? 'ok' : 'warn'}`}>
-              PMS {integration?.pms_connected ? '✓' : '○'}
-            </span>
-            <span className={`badge ${integration?.payment_connected ? 'ok' : 'warn'}`}>
-              Pagos {integration?.payment_connected ? '✓' : '○'}
-            </span>
-          </div>
-        </header>
-
-        {tab === 'integrations' && (
-          <IntegrationsPanel
-            integration={integration}
-            onUpdate={setIntegration}
-          />
         )}
-        {tab === 'knowledge' && <KnowledgePanel />}
-        {tab === 'simulator' && <ChatSimulator />}
-      </main>
-
-      <style jsx>{`
-        .dashboard {
-          display: flex;
-          min-height: 100vh;
-        }
-        .sidebar {
-          width: 260px;
-          background: var(--surface);
-          border-right: 1px solid var(--border);
-          padding: 1.5rem;
-          display: flex;
-          flex-direction: column;
-          gap: 1rem;
-        }
-        .sidebar-brand {
-          display: flex;
-          gap: 0.75rem;
-          align-items: center;
-          padding-bottom: 1rem;
-          border-bottom: 1px solid var(--border);
-        }
-        .sidebar-brand :global(.sidebar-logo-mark) {
-          flex-shrink: 0;
-        }
-        .sidebar-brand :global(.sidebar-logo-wordmark) {
-          display: block;
-        }
-        .sidebar-brand small {
-          color: var(--text-muted);
-          font-size: 0.8rem;
-        }
-        nav {
-          display: flex;
-          flex-direction: column;
-          gap: 0.25rem;
-          flex: 1;
-        }
-        nav button {
-          text-align: left;
-          padding: 0.75rem 1rem;
-          background: none;
-          border: none;
-          border-radius: 8px;
-          color: var(--text-muted);
-          font-size: 0.95rem;
-        }
-        nav button.active,
-        nav button:hover {
-          background: var(--surface-hover);
-          color: var(--text);
-        }
-        .logout-btn {
-          padding: 0.75rem;
-          background: none;
-          border: 1px solid var(--border);
-          border-radius: 8px;
-          color: var(--text-muted);
-        }
-        .main {
-          flex: 1;
-          padding: 2rem;
-          overflow-y: auto;
-        }
-        .main-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 2rem;
-        }
-        h1 {
-          font-size: 1.75rem;
-        }
-        .status-badges {
-          display: flex;
-          gap: 0.5rem;
-        }
-        .badge {
-          padding: 0.35rem 0.75rem;
-          border-radius: 20px;
-          font-size: 0.8rem;
-          font-weight: 500;
-        }
-        .badge.ok {
-          background: rgba(34, 197, 94, 0.15);
-          color: var(--success);
-        }
-        .badge.warn {
-          background: rgba(245, 158, 11, 0.15);
-          color: var(--warning);
-        }
-        .loading {
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          justify-content: center;
-          gap: 1rem;
-          min-height: 100vh;
-          color: var(--text-muted);
-        }
-      `}</style>
+      </div>
     </div>
   );
 }

@@ -15,8 +15,15 @@ model Hotel {
   slug                  String   @unique
   timezone              String   @default("America/Bogota")
   currency              String   @default("COP")
+  businessVertical      String   @default("hotel") @map("business_vertical")
+  infoOnlyMode          Boolean  @default(false) @map("info_only_mode")
+  reservationRecommendations String? @map("reservation_recommendations") @db.Text
   whatsappPhoneNumberId String?  @map("whatsapp_phone_number_id")
+  whatsappDisplayPhone  String?  @map("whatsapp_display_phone")
+  whatsappWabaId        String?  @map("whatsapp_waba_id")
   isActive              Boolean  @default(true) @map("is_active")
+  chatNotificationEmail String?  @map("chat_notification_email")
+  serviceHoursJson      Json?    @map("service_hours_json")
   createdAt             DateTime @default(now()) @map("created_at")
   updatedAt             DateTime @updatedAt @map("updated_at")
 
@@ -26,9 +33,56 @@ model Hotel {
   knowledge     KnowledgeDocument[]
   reservations  Reservation[]
   conversations ConversationSession[]
+  conversationMessages ConversationMessage[]
   vectors       KnowledgeVector[]
+  roomTypes     RoomType[]
+  discountTiers HotelDiscountTier[]
+  subscription  HotelSubscription?
+  subscriptionPayments HotelSubscriptionPayment[]
+  restaurantSettings RestaurantSettings?
+  diningZones   DiningZone[]
+  restaurantDateRates RestaurantDateRate[]
+  restaurantAddOns RestaurantAddOn[]
 
   @@map("hotels")
+}
+
+model RoomType {
+  id            String   @id @default(cuid())
+  hotelId       String   @map("hotel_id")
+  name          String
+  description   String?  @db.Text
+  pricePerNight Float    @map("price_per_night")
+  currency      String   @default("COP")
+  maxOccupancy  Int      @default(2) @map("max_occupancy")
+  totalUnits    Int      @default(1) @map("total_units")
+  photoUrls     String[] @default([]) @map("photo_urls")
+  isActive      Boolean  @default(true) @map("is_active")
+  sortOrder     Int      @default(0) @map("sort_order")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId])
+  @@map("room_types")
+}
+
+model HotelDiscountTier {
+  id              String   @id @default(cuid())
+  hotelId         String   @map("hotel_id")
+  minTotal        Float    @map("min_total")
+  maxTotal        Float?   @map("max_total")
+  discountPercent Float    @map("discount_percent")
+  isActive        Boolean  @default(true) @map("is_active")
+  sortOrder       Int      @default(0) @map("sort_order")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId])
+  @@map("hotel_discount_tiers")
 }
 
 model AdminUser {
@@ -46,6 +100,21 @@ model AdminUser {
   @@map("admin_users")
 }
 
+model RegistrationVerification {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  codeHash     String   @map("code_hash")
+  name         String
+  hotelName    String   @map("hotel_name")
+  businessVertical String @default("hotel") @map("business_vertical")
+  infoOnlyMode Boolean  @default(false) @map("info_only_mode")
+  passwordHash String   @map("password_hash")
+  expiresAt    DateTime @map("expires_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("registration_verifications")
+}
+
 model HotelIntegration {
   id               String    @id @default(cuid())
   hotelId          String    @unique @map("hotel_id")
@@ -54,6 +123,8 @@ model HotelIntegration {
   paymentProvider  String?   @map("payment_provider")
   pmsConnected     Boolean   @default(false) @map("pms_connected")
   paymentConnected Boolean   @default(false) @map("payment_connected")
+  whatsappConnected Boolean  @default(false) @map("whatsapp_connected")
+  whatsappCoexistence Boolean @default(false) @map("whatsapp_coexistence")
   lastValidatedAt  DateTime? @map("last_validated_at")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
@@ -85,6 +156,7 @@ model KnowledgeDocument {
   sourceType String   @default("text") @map("source_type")
   fileName   String?  @map("file_name")
   isIndexed  Boolean  @default(false) @map("is_indexed")
+  aiUsageCount Int    @default(0) @map("ai_usage_count")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
@@ -118,6 +190,12 @@ model ConversationSession {
   adults             Int?
   children           Int?
   selectedRoomTypeId String?  @map("selected_room_type_id")
+  bookingDate        String?  @map("booking_date")
+  bookingTime        String?  @map("booking_time")
+  partySize          Int?     @map("party_size")
+  selectedDiningZoneId String? @map("selected_dining_zone_id")
+  occasionType       String?  @map("occasion_type")
+  selectedAddOnsJson Json?    @map("selected_addons_json")
   reservationId      String?  @map("reservation_id")
   contextJson        Json?    @map("context_json")
   lastMessageAt      DateTime @default(now()) @map("last_message_at")
@@ -125,9 +203,31 @@ model ConversationSession {
   updatedAt          DateTime @updatedAt @map("updated_at")
 
   hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  messages ConversationMessage[]
 
   @@unique([hotelId, whatsappPhone])
+  @@index([hotelId, lastMessageAt(sort: Desc)])
   @@map("conversation_sessions")
+}
+
+model ConversationMessage {
+  id           String   @id @default(cuid())
+  hotelId      String   @map("hotel_id")
+  sessionId    String   @map("session_id")
+  direction    String
+  body         String   @db.Text
+  messageType  String   @default("text") @map("message_type")
+  externalId   String?  @map("external_id")
+  sessionState String?  @map("session_state")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  hotel   Hotel               @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  session ConversationSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([hotelId, externalId])
+  @@index([sessionId, createdAt])
+  @@index([hotelId, createdAt(sort: Desc)])
+  @@map("conversation_messages")
 }
 
 model Reservation {
@@ -136,18 +236,33 @@ model Reservation {
   whatsappSessionId  String    @map("whatsapp_session_id")
   idempotencyKey     String    @unique @map("idempotency_key")
   status             String    @default("inquiry")
+  bookingKind        String    @default("hotel_stay") @map("booking_kind")
   roomTypeId         String?   @map("room_type_id")
   roomName           String?   @map("room_name")
+  diningZoneId       String?   @map("dining_zone_id")
+  diningZoneName     String?   @map("dining_zone_name")
+  bookingDate        String?   @map("booking_date")
+  bookingTime        String?   @map("booking_time")
+  partySize          Int?      @map("party_size")
+  occasionType       String?   @map("occasion_type")
+  guestCountryCode   String?   @map("guest_country_code")
+  specialRequests    String?   @map("special_requests") @db.Text
+  addOnsJson         Json?     @map("addons_json")
   checkIn            String?   @map("check_in")
   checkOut           String?   @map("check_out")
   adults             Int?
   children           Int?
   totalAmount        Float?    @map("total_amount")
+  originalAmount     Float?    @map("original_amount")
+  discountPercent    Float?    @map("discount_percent")
+  discountTierId     String?   @map("discount_tier_id")
   currency           String?
   pmsReservationId   String?   @map("pms_reservation_id")
   holdExpiresAt      DateTime? @map("hold_expires_at")
   paymentLink        String?   @map("payment_link")
   paymentId          String?   @map("payment_id")
+  paymentAccessToken String?   @unique @map("payment_access_token")
+  paymentStatus      String?   @map("payment_status")
   guestFirstName     String?   @map("guest_first_name")
   guestLastName      String?   @map("guest_last_name")
   guestEmail         String?   @map("guest_email")
@@ -157,7 +272,99 @@ model Reservation {
 
   hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
 
+  @@index([hotelId, createdAt(sort: Desc)])
+  @@index([hotelId, bookingDate, bookingTime])
   @@map("reservations")
+}
+
+model RestaurantSettings {
+  id                      String   @id @default(cuid())
+  hotelId                 String   @unique @map("hotel_id")
+  requirePayment          Boolean  @default(true) @map("require_payment")
+  postPaymentMessage      String?  @map("post_payment_message") @db.Text
+  postPaymentLink         String?  @map("post_payment_link")
+  summaryFooterMessage    String?  @map("summary_footer_message") @db.Text
+  summaryFooterLink       String?  @map("summary_footer_link")
+  notificationEmail       String?  @map("notification_email")
+  slotIntervalMinutes     Int      @default(30) @map("slot_interval_minutes")
+  defaultDurationMinutes  Int      @default(90) @map("default_duration_minutes")
+  maxCoversPerSlot        Int?     @map("max_covers_per_slot")
+  advanceBookingDays      Int      @default(60) @map("advance_booking_days")
+  minAdvanceHours         Int      @default(2) @map("min_advance_hours")
+  defaultReservationFee   Float    @default(0) @map("default_reservation_fee")
+  defaultPricePerGuest    Float    @default(0) @map("default_price_per_guest")
+  serviceHoursJson        Json?    @map("service_hours_json")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@map("restaurant_settings")
+}
+
+model DiningZone {
+  id                 String   @id @default(cuid())
+  hotelId            String   @map("hotel_id")
+  name               String
+  description        String?  @db.Text
+  minPartySize       Int      @default(1) @map("min_party_size")
+  maxPartySize       Int      @map("max_party_size")
+  capacityPerSlot    Int      @default(1) @map("capacity_per_slot")
+  baseReservationFee Float    @default(0) @map("base_reservation_fee")
+  basePricePerGuest  Float    @default(0) @map("base_price_per_guest")
+  currency           String   @default("COP")
+  photoUrls          String[] @default([]) @map("photo_urls")
+  isActive           Boolean  @default(true) @map("is_active")
+  sortOrder          Int      @default(0) @map("sort_order")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  hotel      Hotel                  @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  dateRates  RestaurantDateRate[]
+
+  @@index([hotelId])
+  @@map("dining_zones")
+}
+
+model RestaurantDateRate {
+  id                    String   @id @default(cuid())
+  hotelId               String   @map("hotel_id")
+  diningZoneId          String?  @map("dining_zone_id")
+  date                  DateTime @db.Date
+  closed                Boolean  @default(false)
+  label                 String?
+  openTimeOverride      String?  @map("open_time_override")
+  closeTimeOverride     String?  @map("close_time_override")
+  reservationFeeOverride Float?  @map("reservation_fee_override")
+  pricePerGuestOverride  Float?  @map("price_per_guest_override")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  hotel      Hotel       @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  diningZone DiningZone? @relation(fields: [diningZoneId], references: [id], onDelete: Cascade)
+
+  @@unique([hotelId, diningZoneId, date])
+  @@index([hotelId, date])
+  @@map("restaurant_date_rates")
+}
+
+model RestaurantAddOn {
+  id          String   @id @default(cuid())
+  hotelId     String   @map("hotel_id")
+  name        String
+  description String?  @db.Text
+  price       Float
+  currency    String   @default("COP")
+  maxQuantity Int      @default(1) @map("max_quantity")
+  isActive    Boolean  @default(true) @map("is_active")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@index([hotelId])
+  @@map("restaurant_addons")
 }
 
 model PaymentEvent {
@@ -175,4 +382,108 @@ model PaymentEvent {
 
   @@unique([provider, externalId])
   @@map("payment_events")
+}
+
+model PlatformAdmin {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  role         String   @default("super_admin")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_admins")
+}
+
+model PlatformSetting {
+  key       String   @id
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_settings")
+}
+
+model SubscriptionPlan {
+  id                      String   @id @default(cuid())
+  name                    String
+  maxReservationsPerMonth Int      @map("max_reservations_per_month")
+  priceMonthly            Float    @map("price_monthly")
+  currency                String   @default("COP")
+  description             String?  @db.Text
+  isActive                Boolean  @default(true) @map("is_active")
+  sortOrder               Int      @default(0) @map("sort_order")
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  subscriptions HotelSubscription[]
+
+  @@map("subscription_plans")
+}
+
+model HotelSubscription {
+  id                   String    @id @default(cuid())
+  hotelId              String    @unique @map("hotel_id")
+  planId               String?   @map("plan_id")
+  status               String    @default("trial")
+  trialStartedAt       DateTime  @default(now()) @map("trial_started_at")
+  trialEndsAt          DateTime  @map("trial_ends_at")
+  currentPeriodStart   DateTime? @map("current_period_start")
+  currentPeriodEnd     DateTime? @map("current_period_end")
+  quotaNotifiedAt      DateTime? @map("quota_notified_at")
+  trialQuotaNotifiedAt DateTime? @map("trial_quota_notified_at")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+
+  hotel Hotel             @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  plan  SubscriptionPlan? @relation(fields: [planId], references: [id], onDelete: SetNull)
+
+  @@map("hotel_subscriptions")
+}
+
+model BillableReservation {
+  id            String   @id @default(cuid())
+  hotelId       String   @map("hotel_id")
+  reservationId String   @unique @map("reservation_id")
+  isTrialPeriod Boolean  @default(false) @map("is_trial_period")
+  billedAt      DateTime @default(now()) @map("billed_at")
+  periodMonth   String   @map("period_month")
+
+  @@index([hotelId, periodMonth])
+  @@map("billable_reservations")
+}
+
+model HotelSubscriptionPayment {
+  id          String    @id @default(cuid())
+  hotelId     String    @map("hotel_id")
+  periodMonth String    @map("period_month")
+  planId      String?   @map("plan_id")
+  amount      Float
+  currency    String    @default("COP")
+  planName    String?   @map("plan_name")
+  status      String    @default("pending")
+  provider    String?
+  externalId  String?   @unique @map("external_id")
+  checkoutUrl String?   @map("checkout_url")
+  description String?   @db.Text
+  paidAt      DateTime? @map("paid_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  hotel Hotel @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+
+  @@unique([hotelId, periodMonth])
+  @@index([hotelId])
+  @@map("hotel_subscription_payments")
+}
+
+model PlatformCredential {
+  id             String   @id @default(cuid())
+  credentialType String   @unique @map("credential_type")
+  encryptedValue String   @map("encrypted_value") @db.Text
+  keyHint        String?  @map("key_hint")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("platform_credentials")
 }

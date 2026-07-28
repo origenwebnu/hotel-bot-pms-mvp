@@ -41,13 +41,13 @@ docker compose exec -T web node -e \
   "fetch('http://api:4000/api/health').then(r=>r.text()).then(t=>console.log('API:',t)).catch(e=>console.error('FALLA:',e.message))"
 
 echo ""
-echo "=== 7. Test registro (interno) ==="
+echo "=== 7. Test registro (interno) — flujo verificación ==="
 docker compose exec -T web node -e "
-fetch('http://api:4000/api/auth/register',{
+fetch('http://api:4000/api/auth/register/send-code',{
   method:'POST',
   headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({email:'diagnostico@test.com',password:'test12345',name:'Diag',hotelName:'Hotel Diag'})
-}).then(r=>r.text()).then(t=>console.log('Register:',t)).catch(e=>console.error('FALLA:',e.message))
+  body:JSON.stringify({email:'diag-' + Date.now() + '@test.com',password:'test12345',passwordConfirm:'test12345',name:'Diag',hotelName:'Hotel Diag'})
+}).then(r=>r.text()).then(t=>console.log('Send code:',t)).catch(e=>console.error('FALLA:',e.message))
 "
 
 echo ""

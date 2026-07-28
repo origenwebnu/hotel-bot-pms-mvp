@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Delete,
   Param,
   Body,
@@ -21,6 +22,8 @@ class CreateDocumentDto {
   @MinLength(10)
   content!: string;
 }
+
+class UpdateDocumentDto extends CreateDocumentDto {}
 
 class TestChatDto {
   @IsString()
@@ -47,6 +50,15 @@ export class KnowledgeController {
     @Body() dto: CreateDocumentDto,
   ) {
     return this.knowledge.createDocument(req.user.hotelId, dto);
+  }
+
+  @Put(':id')
+  update(
+    @Request() req: { user: { hotelId: string } },
+    @Param('id') id: string,
+    @Body() dto: UpdateDocumentDto,
+  ) {
+    return this.knowledge.updateDocument(req.user.hotelId, id, dto);
   }
 
   @Delete(':id')

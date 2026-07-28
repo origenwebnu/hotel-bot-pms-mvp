@@ -25,7 +25,7 @@ export interface AvailabilityResult {
   fallback_code?: PmsFallbackCode;
 }
 
-export type PmsProvider = 'cloudbeds' | 'lobby';
+export type PmsProvider = 'cloudbeds' | 'lobby' | 'local';
 
 export type PmsFallbackCode =
   | 'PMS_UNAVAILABLE'

@@ -3,8 +3,9 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { api } from '@/lib/api';
+import { api, saveAuthSession, getPostLoginPath } from '@/lib/api';
 import { AuthLayout } from '@/components/AuthLayout';
+import { PasswordInput } from '@/components/PasswordInput';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,9 +20,8 @@ export default function LoginPage() {
 
     try {
       const data = await api.login(form);
-      localStorage.setItem('token', data.access_token);
-      localStorage.setItem('hotel_id', data.hotel_id);
-      router.push('/dashboard');
+      saveAuthSession(data);
+      router.push(getPostLoginPath(data.role));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error de autenticación');
     } finally {
@@ -51,17 +51,15 @@ export default function LoginPage() {
             placeholder="admin@hotel.com"
           />
         </label>
-        <label>
-          Contraseña
-          <input
-            type="password"
-            required
-            autoComplete="current-password"
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-            placeholder="••••••••"
-          />
-        </label>
+        <PasswordInput
+          label="Contraseña"
+          name="password"
+          required
+          autoComplete="current-password"
+          value={form.password}
+          onChange={(e) => setForm({ ...form, password: e.target.value })}
+          placeholder="••••••••"
+        />
 
         {error && <div className="error-banner">{error}</div>}
 

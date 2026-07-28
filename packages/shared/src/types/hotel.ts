@@ -14,7 +14,7 @@ export interface HotelIntegration {
   hotel_id: string;
   pms_provider?: 'cloudbeds' | 'lobby';
   pms_property_id?: string;
-  payment_provider?: 'wompi' | 'stripe' | 'payu';
+  payment_provider?: 'wompi' | 'stripe' | 'bold' | 'epayco' | 'payu';
   pms_connected: boolean;
   payment_connected: boolean;
   last_validated_at?: string;

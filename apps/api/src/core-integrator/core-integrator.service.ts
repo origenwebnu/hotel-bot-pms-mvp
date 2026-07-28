@@ -11,6 +11,7 @@ import type {
 } from '@hotel-bot/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../crypto/crypto.service';
+import { LocalInventoryService } from '../local-inventory/local-inventory.service';
 
 @Injectable()
 export class CoreIntegratorService {
@@ -19,6 +20,7 @@ export class CoreIntegratorService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
+    private readonly localInventory: LocalInventoryService,
   ) {}
 
   async getAvailability(
@@ -26,6 +28,9 @@ export class CoreIntegratorService {
     query: AvailabilityQuery,
   ): Promise<AvailabilityResult> {
     const credentials = await this.getPmsCredentials(hotelId);
+    if (credentials.provider === 'local') {
+      return this.localInventory.getAvailability(hotelId, query);
+    }
     const adapter = getPmsAdapter(credentials.provider);
     return adapter.getAvailability(credentials, query);
   }
@@ -35,6 +40,9 @@ export class CoreIntegratorService {
     request: RoomHoldRequest,
   ): Promise<RoomHoldResult> {
     const credentials = await this.getPmsCredentials(hotelId);
+    if (credentials.provider === 'local') {
+      return this.localInventory.holdRoom(hotelId, request);
+    }
     const adapter = getPmsAdapter(credentials.provider);
     return adapter.holdRoom(credentials, request);
   }
@@ -44,12 +52,18 @@ export class CoreIntegratorService {
     request: ConfirmReservationRequest,
   ): Promise<{ reservation_id: string; confirmation_code?: string }> {
     const credentials = await this.getPmsCredentials(hotelId);
+    if (credentials.provider === 'local') {
+      return this.localInventory.confirmReservation(hotelId, request);
+    }
     const adapter = getPmsAdapter(credentials.provider);
     return adapter.confirmReservation(credentials, request);
   }
 
   async releaseHold(hotelId: string, pmsReservationId: string): Promise<void> {
     const credentials = await this.getPmsCredentials(hotelId);
+    if (credentials.provider === 'local') {
+      return this.localInventory.releaseHold(hotelId, pmsReservationId);
+    }
     const adapter = getPmsAdapter(credentials.provider);
     await adapter.releaseHold(credentials, pmsReservationId);
   }
@@ -57,6 +71,16 @@ export class CoreIntegratorService {
   async validatePmsCredentials(hotelId: string): Promise<boolean> {
     try {
       const credentials = await this.getPmsCredentials(hotelId);
+
+      if (credentials.provider === 'local') {
+        const valid = await this.localInventory.hasInventory(hotelId);
+        await this.prisma.hotelIntegration.update({
+          where: { hotelId },
+          data: { pmsConnected: valid, lastValidatedAt: new Date() },
+        });
+        return valid;
+      }
+
       const adapter = getPmsAdapter(credentials.provider);
       const valid = await adapter.validateCredentials(credentials);
 
@@ -85,6 +109,10 @@ export class CoreIntegratorService {
 
     if (!integration?.pmsProvider) {
       throw new NotFoundException('PMS not configured for this hotel');
+    }
+
+    if (integration.pmsProvider === 'local') {
+      return { provider: 'local' };
     }
 
     const creds = await this.prisma.encryptedCredential.findMany({

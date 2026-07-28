@@ -1,7 +1,18 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  buildBoldWebhookUrl,
+  buildEpaycoWebhookUrl,
+  buildStripeWebhookUrl,
+  buildWompiWebhookUrl,
+  DEFAULT_SERVICE_HOURS,
+  type PaymentProvider,
+  type ServiceHoursMap,
+} from '@hotel-bot/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../crypto/crypto.service';
 import { CoreIntegratorService } from '../core-integrator/core-integrator.service';
+import { WhatsAppCredentialsService } from '../whatsapp/whatsapp-credentials.service';
+import { MetaEmbeddedSignupService } from '../whatsapp/meta-embedded-signup.service';
 
 @Injectable()
 export class HotelsService {
@@ -9,6 +20,8 @@ export class HotelsService {
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     private readonly pms: CoreIntegratorService,
+    private readonly whatsappCredentials: WhatsAppCredentialsService,
+    private readonly metaEmbeddedSignup: MetaEmbeddedSignupService,
   ) {}
 
   async getHotel(hotelId: string) {
@@ -17,7 +30,61 @@ export class HotelsService {
       include: { integration: true },
     });
     if (!hotel) throw new NotFoundException('Hotel not found');
-    return hotel;
+    return this.formatHotel(hotel);
+  }
+
+  private formatHotel(hotel: {
+    id: string;
+    name: string;
+    slug: string;
+    timezone: string;
+    currency: string;
+    businessVertical: string;
+    chatNotificationEmail: string | null;
+    serviceHoursJson: unknown;
+    integration: unknown;
+  }) {
+    return {
+      id: hotel.id,
+      name: hotel.name,
+      slug: hotel.slug,
+      timezone: hotel.timezone,
+      currency: hotel.currency,
+      businessVertical: hotel.businessVertical,
+      chat_notification_email: hotel.chatNotificationEmail ?? '',
+      service_hours_json:
+        (hotel.serviceHoursJson as ServiceHoursMap | null) ?? DEFAULT_SERVICE_HOURS,
+      integration: hotel.integration,
+    };
+  }
+
+  async updateHotel(
+    hotelId: string,
+    data: {
+      name?: string;
+      timezone?: string;
+      currency?: string;
+      chat_notification_email?: string;
+      service_hours_json?: ServiceHoursMap;
+    },
+  ) {
+    const hotel = await this.prisma.hotel.update({
+      where: { id: hotelId },
+      data: {
+        ...(data.name !== undefined ? { name: data.name.trim() } : {}),
+        ...(data.timezone !== undefined ? { timezone: data.timezone } : {}),
+        ...(data.currency !== undefined ? { currency: data.currency } : {}),
+        ...(data.chat_notification_email !== undefined
+          ? { chatNotificationEmail: data.chat_notification_email.trim() || null }
+          : {}),
+        ...(data.service_hours_json !== undefined
+          ? { serviceHoursJson: data.service_hours_json as object }
+          : {}),
+      },
+      include: { integration: true },
+    });
+
+    return this.formatHotel(hotel);
   }
 
   async updateIntegration(
@@ -31,29 +98,55 @@ export class HotelsService {
       payment_public_key?: string;
       payment_private_key?: string;
       payment_webhook_secret?: string;
+      payment_customer_id?: string;
+      reservation_recommendations?: string;
     },
   ) {
+    if (data.reservation_recommendations !== undefined) {
+      await this.prisma.hotel.update({
+        where: { id: hotelId },
+        data: { reservationRecommendations: data.reservation_recommendations.trim() || null },
+      });
+    }
+
+    const existing = await this.prisma.hotelIntegration.findUnique({
+      where: { hotelId },
+    });
+
+    const integrationData: {
+      pmsProvider?: string;
+      pmsPropertyId?: string;
+      paymentProvider?: string;
+    } = {};
+
+    if (data.pms_provider !== undefined) {
+      integrationData.pmsProvider = data.pms_provider;
+    }
+    if (data.pms_property_id?.trim()) {
+      integrationData.pmsPropertyId = data.pms_property_id.trim();
+    }
+    if (data.payment_provider !== undefined) {
+      integrationData.paymentProvider = data.payment_provider;
+    }
+
     await this.prisma.hotelIntegration.upsert({
       where: { hotelId },
       create: {
         hotelId,
-        pmsProvider: data.pms_provider,
-        pmsPropertyId: data.pms_property_id,
-        paymentProvider: data.payment_provider,
+        pmsProvider: data.pms_provider ?? 'local',
+        pmsPropertyId: data.pms_property_id?.trim() || null,
+        paymentProvider: data.payment_provider ?? 'wompi',
       },
-      update: {
-        pmsProvider: data.pms_provider,
-        pmsPropertyId: data.pms_property_id,
-        paymentProvider: data.payment_provider,
-      },
+      update: integrationData,
     });
 
     const credentialUpdates: Array<{ type: string; value?: string }> = [
-      { type: 'pms_api_key', value: data.pms_api_key },
-      { type: 'pms_api_secret', value: data.pms_api_secret },
-      { type: 'payment_public_key', value: data.payment_public_key },
-      { type: 'payment_private_key', value: data.payment_private_key },
-      { type: 'payment_webhook_secret', value: data.payment_webhook_secret },
+      { type: 'pms_api_key', value: data.pms_api_key?.trim() },
+      { type: 'pms_api_secret', value: data.pms_api_secret?.trim() },
+      { type: 'payment_public_key', value: data.payment_public_key?.trim() },
+      { type: 'payment_private_key', value: data.payment_private_key?.trim() },
+      { type: 'payment_webhook_secret', value: data.payment_webhook_secret?.trim() },
+      { type: 'payment_customer_id', value: data.payment_customer_id?.trim() },
     ];
 
     for (const { type, value } of credentialUpdates) {
@@ -70,18 +163,33 @@ export class HotelsService {
       }
     }
 
-    let pmsConnected = false;
-    let paymentConnected = false;
+    let pmsConnected = existing?.pmsConnected ?? false;
+    let paymentConnected = existing?.paymentConnected ?? false;
 
-    if (data.pms_provider && data.pms_api_key) {
+    const pmsProvider = data.pms_provider ?? existing?.pmsProvider;
+    if (pmsProvider === 'local') {
+      pmsConnected = await this.pms.validatePmsCredentials(hotelId);
+    } else if (data.pms_api_key?.trim()) {
       pmsConnected = await this.pms.validatePmsCredentials(hotelId);
     }
 
-    if (data.payment_provider && data.payment_private_key) {
+    if (data.payment_private_key?.trim()) {
       paymentConnected = true;
+    } else {
+      const storedPrivateKey = await this.prisma.encryptedCredential.findUnique({
+        where: {
+          hotelId_credentialType: {
+            hotelId,
+            credentialType: 'payment_private_key',
+          },
+        },
+      });
+      if (!storedPrivateKey) {
+        paymentConnected = false;
+      }
     }
 
-    return this.prisma.hotelIntegration.update({
+    await this.prisma.hotelIntegration.update({
       where: { hotelId },
       data: {
         pmsConnected,
@@ -92,9 +200,14 @@ export class HotelsService {
   }
 
   async getIntegrationStatus(hotelId: string) {
-    const integration = await this.prisma.hotelIntegration.findUnique({
-      where: { hotelId },
-    });
+    const [integration, hotel] = await Promise.all([
+      this.prisma.hotelIntegration.findUnique({ where: { hotelId } }),
+      this.prisma.hotel.findUnique({
+        where: { id: hotelId },
+        select: { whatsappPhoneNumberId: true },
+      }),
+    ]);
+
     if (!integration) throw new NotFoundException('Integration not found');
 
     return {
@@ -102,7 +215,367 @@ export class HotelsService {
       pms_connected: integration.pmsConnected,
       payment_provider: integration.paymentProvider,
       payment_connected: integration.paymentConnected,
+      whatsapp_connected: integration.whatsappConnected,
+      whatsapp_phone_number_id: hotel?.whatsappPhoneNumberId ?? null,
+      whatsapp_has_token: await this.whatsappCredentials.hasOwnToken(hotelId),
       last_validated_at: integration.lastValidatedAt,
     };
+  }
+
+  async getPaymentConfig(hotelId: string) {
+    const [integration, hotel, paymentCreds] = await Promise.all([
+      this.prisma.hotelIntegration.findUnique({ where: { hotelId } }),
+      this.prisma.hotel.findUnique({
+        where: { id: hotelId },
+        select: { reservationRecommendations: true },
+      }),
+      this.prisma.encryptedCredential.findMany({
+        where: {
+          hotelId,
+          credentialType: {
+            in: [
+              'payment_public_key',
+              'payment_private_key',
+              'payment_webhook_secret',
+              'payment_customer_id',
+            ],
+          },
+        },
+      }),
+    ]);
+
+    const credTypes = new Set(paymentCreds.map((c) => c.credentialType));
+    let publicKeyHint: string | null = null;
+    let customerIdHint: string | null = null;
+
+    const publicCred = paymentCreds.find(
+      (c) => c.credentialType === 'payment_public_key',
+    );
+    if (publicCred) {
+      try {
+        const full = this.crypto.decrypt(publicCred.encryptedValue);
+        publicKeyHint =
+          full.length > 12 ? `${full.slice(0, 12)}…${full.slice(-4)}` : `${full.slice(0, 4)}…`;
+      } catch {
+        publicKeyHint = 'configurada';
+      }
+    }
+
+    const customerCred = paymentCreds.find(
+      (c) => c.credentialType === 'payment_customer_id',
+    );
+    if (customerCred) {
+      try {
+        const full = this.crypto.decrypt(customerCred.encryptedValue);
+        customerIdHint =
+          full.length > 8 ? `${full.slice(0, 4)}…${full.slice(-4)}` : `${full.slice(0, 2)}…`;
+      } catch {
+        customerIdHint = 'configurado';
+      }
+    }
+
+    const appUrl = process.env.APP_URL ?? 'https://app.bookichat.com';
+    const provider = (integration?.paymentProvider ?? 'wompi') as PaymentProvider;
+    const providerConfig = this.buildPaymentProviderConfig(provider, appUrl);
+
+    return {
+      provider: integration?.paymentProvider ?? null,
+      connected: integration?.paymentConnected ?? false,
+      has_public_key: credTypes.has('payment_public_key'),
+      has_private_key: credTypes.has('payment_private_key'),
+      has_webhook_secret: credTypes.has('payment_webhook_secret'),
+      has_customer_id: credTypes.has('payment_customer_id'),
+      public_key_hint: publicKeyHint,
+      customer_id_hint: customerIdHint,
+      webhook_url: providerConfig.webhook_url,
+      wompi_webhook_url: buildWompiWebhookUrl(appUrl),
+      bold_webhook_url: buildBoldWebhookUrl(appUrl),
+      epayco_webhook_url: buildEpaycoWebhookUrl(appUrl),
+      stripe_webhook_url: buildStripeWebhookUrl(appUrl),
+      reservation_recommendations: hotel?.reservationRecommendations ?? '',
+      setup_steps: providerConfig.setup_steps,
+      webhook_help: providerConfig.webhook_help,
+      requires_public_key: providerConfig.requires_public_key,
+      requires_customer_id: providerConfig.requires_customer_id,
+      private_key_label: providerConfig.private_key_label,
+      public_key_label: providerConfig.public_key_label,
+      webhook_secret_label: providerConfig.webhook_secret_label,
+    };
+  }
+
+  private buildPaymentProviderConfig(provider: PaymentProvider, appUrl: string) {
+    switch (provider) {
+      case 'bold':
+        return {
+          webhook_url: buildBoldWebhookUrl(appUrl),
+          requires_public_key: false,
+          requires_customer_id: false,
+          private_key_label: 'API Key (llave de identidad)',
+          public_key_label: 'Public Key',
+          webhook_secret_label: 'Webhook Secret',
+          webhook_help:
+            'En el panel de Bold → Integraciones → Webhooks, agrega la URL indicada abajo para eventos SALE_APPROVED y SALE_REJECTED.',
+          setup_steps: [
+            'Obtén tu API Key en Bold → Integraciones → Llaves de integración.',
+            'Pégala en *API Key* y guarda.',
+            'Configura la URL de webhook en Bold (eventos de venta aprobada/rechazada).',
+            'Pulsa *Validar pasarela de pagos* para confirmar la conexión.',
+            'Realiza una reserva de prueba desde WhatsApp.',
+          ],
+        };
+      case 'epayco':
+        return {
+          webhook_url: buildEpaycoWebhookUrl(appUrl),
+          requires_public_key: true,
+          requires_customer_id: true,
+          private_key_label: 'Private Key (llave privada)',
+          public_key_label: 'Public Key (llave pública)',
+          webhook_secret_label: 'P_KEY (firma de confirmación)',
+          webhook_help:
+            'En ePayco → Integraciones → Webhooks, configura la URL de confirmación indicada abajo (método POST). El P_KEY y Customer ID (COD_EMP) están en tu panel de ePayco.',
+          setup_steps: [
+            'Ingresa Public Key y Private Key de ePayco (Apify).',
+            'Ingresa Customer ID (COD_EMP) y P_KEY para verificar confirmaciones.',
+            'Configura la URL de confirmación en ePayco con la URL indicada abajo.',
+            'Pulsa *Validar pasarela de pagos* para confirmar las credenciales.',
+            'Realiza una reserva de prueba desde WhatsApp.',
+          ],
+        };
+      case 'stripe':
+        return {
+          webhook_url: buildStripeWebhookUrl(appUrl),
+          requires_public_key: false,
+          requires_customer_id: false,
+          private_key_label: 'Secret Key',
+          public_key_label: 'Public Key',
+          webhook_secret_label: 'Webhook Signing Secret',
+          webhook_help:
+            'En Stripe → Developers → Webhooks, agrega la URL indicada abajo.',
+          setup_steps: [
+            'Ingresa tu Secret Key de Stripe.',
+            'Configura el webhook en Stripe con la URL indicada abajo.',
+            'Pulsa *Validar pasarela de pagos*.',
+          ],
+        };
+      case 'wompi':
+      default:
+        return {
+          webhook_url: buildWompiWebhookUrl(appUrl),
+          requires_public_key: true,
+          requires_customer_id: false,
+          private_key_label: 'Private Key',
+          public_key_label: 'Public Key',
+          webhook_secret_label: 'Webhook Secret (Events Secret)',
+          webhook_help:
+            'Copia esta URL en Wompi → Configuración → Eventos. El Webhook Secret es el "Events Secret" que te da Wompi.',
+          setup_steps: [
+            'En Wompi → Configuración → Eventos, agrega la URL de eventos (webhook) indicada abajo.',
+            'Copia el *Events Secret* de Wompi y pégalo en *Webhook Secret*.',
+            'Ingresa tu Public Key y Private Key de Wompi (modo producción o pruebas).',
+            'Pulsa *Validar pasarela de pagos* para confirmar que Wompi acepta tus llaves.',
+            'Opcional: escribe recomendaciones post-pago que el bot enviará tras un pago aprobado.',
+            'Guarda y realiza una reserva de prueba desde WhatsApp.',
+          ],
+        };
+    }
+  }
+
+  async getWhatsAppConfig(hotelId: string) {
+    const hotel = await this.prisma.hotel.findUnique({
+      where: { id: hotelId },
+      select: {
+        whatsappPhoneNumberId: true,
+        whatsappDisplayPhone: true,
+        whatsappWabaId: true,
+      },
+    });
+    if (!hotel) throw new NotFoundException('Hotel not found');
+
+    const integration = await this.prisma.hotelIntegration.findUnique({
+      where: { hotelId },
+    });
+
+    const appUrl = process.env.APP_URL ?? 'https://app.bookichat.com';
+    const embeddedSignup = this.metaEmbeddedSignup.getPublicConfig();
+
+    return {
+      phone_number_id: hotel.whatsappPhoneNumberId,
+      display_phone: hotel.whatsappDisplayPhone,
+      waba_id: hotel.whatsappWabaId,
+      coexistence: integration?.whatsappCoexistence ?? false,
+      connected: integration?.whatsappConnected ?? false,
+      has_token: await this.whatsappCredentials.hasOwnToken(hotelId),
+      webhook_url: `${appUrl.replace(/\/$/, '')}/api/webhooks/whatsapp`,
+      verify_token_hint: process.env.WHATSAPP_VERIFY_TOKEN
+        ? 'Configurado en la plataforma (contacta soporte si necesitas cambiarlo)'
+        : null,
+      embedded_signup: embeddedSignup,
+      setup_steps: embeddedSignup.enabled
+        ? [
+            'Recomendado: usa *Conectar WhatsApp Business existente* si ya usas el número en el celular.',
+            'Meta te pedirá confirmar en la app WhatsApp Business (coexistencia).',
+            'BookiChat recibe el token automáticamente; no necesitas copiarlo a mano.',
+            'Alternativa: configuración manual con Phone Number ID y token.',
+          ]
+        : [
+            'En Meta Business → WhatsApp, copia el Phone Number ID de tu número.',
+            'Genera un Access Token permanente (Usuario del sistema → Generar identificador).',
+            'El webhook lo configura BookiChat una sola vez; todos los negocios usan la misma URL.',
+            'Guarda aquí tu Phone Number ID y token, luego pulsa Validar.',
+          ],
+    };
+  }
+
+  async completeEmbeddedSignup(
+    hotelId: string,
+    data: {
+      code: string;
+      phone_number_id: string;
+      waba_id: string;
+      event: string;
+    },
+  ) {
+    const result = await this.metaEmbeddedSignup.completeOnboarding(data);
+
+    await this.prisma.hotel.update({
+      where: { id: hotelId },
+      data: {
+        whatsappPhoneNumberId: result.phone_number_id,
+        whatsappWabaId: result.waba_id,
+        whatsappDisplayPhone: result.display_phone,
+      },
+    });
+
+    await this.prisma.encryptedCredential.upsert({
+      where: {
+        hotelId_credentialType: {
+          hotelId,
+          credentialType: 'whatsapp_access_token',
+        },
+      },
+      create: {
+        hotelId,
+        credentialType: 'whatsapp_access_token',
+        encryptedValue: this.crypto.encrypt(result.access_token),
+      },
+      update: {
+        encryptedValue: this.crypto.encrypt(result.access_token),
+      },
+    });
+
+    await this.ensureIntegration(hotelId);
+    await this.prisma.hotelIntegration.update({
+      where: { hotelId },
+      data: {
+        whatsappCoexistence: result.coexistence,
+        whatsappConnected: true,
+        lastValidatedAt: new Date(),
+      },
+    });
+
+    return {
+      ...(await this.getWhatsAppConfig(hotelId)),
+      coexistence_verified: result.is_on_biz_app === true,
+      sync_initiated: result.sync_initiated,
+      message: result.coexistence
+        ? 'WhatsApp Business conectado en modo coexistencia. Puedes seguir usando el celular y el bot.'
+        : 'WhatsApp conectado correctamente.',
+    };
+  }
+
+  async updateWhatsApp(
+    hotelId: string,
+    data: { phone_number_id?: string; access_token?: string; display_phone?: string },
+  ) {
+    if (data.phone_number_id !== undefined) {
+      await this.prisma.hotel.update({
+        where: { id: hotelId },
+        data: { whatsappPhoneNumberId: data.phone_number_id.trim() || null },
+      });
+    }
+
+    if (data.display_phone !== undefined) {
+      await this.prisma.hotel.update({
+        where: { id: hotelId },
+        data: {
+          whatsappDisplayPhone: data.display_phone.trim().replace(/\s+/g, '') || null,
+        },
+      });
+    }
+
+    if (data.access_token?.trim()) {
+      await this.prisma.encryptedCredential.upsert({
+        where: {
+          hotelId_credentialType: {
+            hotelId,
+            credentialType: 'whatsapp_access_token',
+          },
+        },
+        create: {
+          hotelId,
+          credentialType: 'whatsapp_access_token',
+          encryptedValue: this.crypto.encrypt(data.access_token.trim()),
+        },
+        update: {
+          encryptedValue: this.crypto.encrypt(data.access_token.trim()),
+        },
+      });
+    }
+
+    await this.ensureIntegration(hotelId);
+
+    return this.getWhatsAppConfig(hotelId);
+  }
+
+  async validateWhatsApp(hotelId: string): Promise<boolean> {
+    const { phoneNumberId, accessToken } =
+      await this.whatsappCredentials.resolve(hotelId);
+
+    if (!phoneNumberId || !accessToken) {
+      await this.setWhatsAppConnected(hotelId, false);
+      return false;
+    }
+
+    const apiVersion = process.env.WHATSAPP_API_VERSION ?? 'v21.0';
+    const response = await fetch(
+      `https://graph.facebook.com/${apiVersion}/${phoneNumberId}?fields=display_phone_number`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+
+    const valid = response.ok;
+    if (valid) {
+      try {
+        const data = (await response.json()) as { display_phone_number?: string };
+        if (data.display_phone_number?.trim()) {
+          await this.prisma.hotel.update({
+            where: { id: hotelId },
+            data: {
+              whatsappDisplayPhone: data.display_phone_number.replace(/\D/g, ''),
+            },
+          });
+        }
+      } catch {
+        // ignore parse errors; connection still valid
+      }
+    }
+
+    await this.setWhatsAppConnected(hotelId, valid);
+    return valid;
+  }
+
+  private async ensureIntegration(hotelId: string) {
+    await this.prisma.hotelIntegration.upsert({
+      where: { hotelId },
+      create: { hotelId },
+      update: {},
+    });
+  }
+
+  private async setWhatsAppConnected(hotelId: string, connected: boolean) {
+    await this.ensureIntegration(hotelId);
+    await this.prisma.hotelIntegration.update({
+      where: { hotelId },
+      data: { whatsappConnected: connected, lastValidatedAt: new Date() },
+    });
   }
 }

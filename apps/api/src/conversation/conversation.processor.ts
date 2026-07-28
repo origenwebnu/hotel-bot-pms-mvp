@@ -16,6 +16,19 @@ export class ConversationProcessor extends WorkerHost {
   async process(job: Job<{ hotelId: string; message: WhatsAppInboundMessage }>) {
     const { hotelId, message } = job.data;
     this.logger.debug(`Processing message ${message.message_id} for hotel ${hotelId}`);
-    await this.conversation.processMessage(hotelId, message);
+    try {
+      await this.conversation.processMessage(hotelId, message);
+    } catch (err) {
+      this.logger.error(
+        `Failed processing message ${message.message_id}: ${err instanceof Error ? err.stack : err}`,
+      );
+      try {
+        await this.conversation.notifyUnexpectedError(hotelId, message.from);
+      } catch (notifyErr) {
+        this.logger.error(
+          `Failed to notify user of processing error: ${notifyErr instanceof Error ? notifyErr.message : notifyErr}`,
+        );
+      }
+    }
   }
 }

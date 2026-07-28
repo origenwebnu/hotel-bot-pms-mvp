@@ -7,6 +7,9 @@ import { EmbeddingsService } from './embeddings.service';
 
 const CHUNK_SIZE = 500;
 const CHUNK_OVERLAP = 50;
+/** Similitud mínima (coseno) para considerar que un documento aportó al RAG */
+const RAG_MIN_SIMILARITY = 0.68;
+const RAG_CANDIDATE_LIMIT = 20;
 
 @Injectable()
 export class KnowledgeService {
@@ -44,8 +47,31 @@ export class KnowledgeService {
   async listDocuments(hotelId: string) {
     return this.prisma.knowledgeDocument.findMany({
       where: { hotelId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ aiUsageCount: 'desc' }, { createdAt: 'desc' }],
     });
+  }
+
+  async updateDocument(
+    hotelId: string,
+    documentId: string,
+    data: { title: string; content: string },
+  ) {
+    const doc = await this.prisma.knowledgeDocument.update({
+      where: { id: documentId, hotelId },
+      data: {
+        title: data.title,
+        content: data.content,
+        isIndexed: false,
+      },
+    });
+
+    await this.indexQueue.add(
+      JOB_NAMES.INDEX_DOCUMENT,
+      { documentId: doc.id, hotelId },
+      { removeOnComplete: true },
+    );
+
+    return doc;
   }
 
   async deleteDocument(hotelId: string, documentId: string) {
@@ -97,19 +123,35 @@ export class KnowledgeService {
     const vectorStr = `[${embedding.join(',')}]`;
 
     const results = await this.prisma.$queryRawUnsafe<
-      Array<{ content: string; similarity: number }>
+      Array<{ content: string; document_id: string; similarity: number }>
     >(
-      `SELECT content, 1 - (embedding <=> $1::vector) AS similarity
+      `SELECT content, document_id, 1 - (embedding <=> $1::vector) AS similarity
        FROM knowledge_vectors
        WHERE hotel_id = $2 AND embedding IS NOT NULL
        ORDER BY embedding <=> $1::vector
        LIMIT $3`,
       vectorStr,
       hotelId,
-      limit,
+      RAG_CANDIDATE_LIMIT,
     );
 
-    return results.map((r) => r.content).join('\n---\n');
+    const ranked = results.map((r) => ({
+      ...r,
+      similarity: Number(r.similarity),
+    }));
+
+    const relevant = ranked.filter((r) => r.similarity >= RAG_MIN_SIMILARITY);
+    const selected = (relevant.length > 0 ? relevant : ranked.slice(0, 1)).slice(0, limit);
+
+    const documentIds = [...new Set(selected.map((r) => r.document_id))];
+    if (documentIds.length > 0) {
+      await this.prisma.knowledgeDocument.updateMany({
+        where: { id: { in: documentIds }, hotelId },
+        data: { aiUsageCount: { increment: 1 } },
+      });
+    }
+
+    return selected.map((r) => r.content).join('\n---\n');
   }
 
   async testChat(hotelId: string, message: string, generateResponse: (msg: string, ctx: string) => Promise<string>): Promise<string> {
