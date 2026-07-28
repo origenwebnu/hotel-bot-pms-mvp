@@ -1,8 +1,5 @@
-'use client';
-
 import { ReactNode } from 'react';
-import { BookiChatLogo } from '@/components/BookiChatLogo';
-import { useTheme } from '@/components/ThemeProvider';
+import { BRAND } from '@/lib/brand-assets';
 
 interface AuthLayoutProps {
   title: string;
@@ -12,18 +9,19 @@ interface AuthLayoutProps {
 }
 
 export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProps) {
-  const { theme } = useTheme();
-  const logoBackground = theme === 'dark' ? 'dark' : 'light';
-
   return (
     <div className="auth-page">
       <div className="auth-card glass-panel">
         <div className="auth-header">
-          <BookiChatLogo
-            variant="wordmark"
-            forBackground={logoBackground}
-            height={34}
-            className="auth-logo"
+          <img
+            src={BRAND.logoFullLight}
+            alt="BookiChat"
+            className="auth-logo auth-logo-light"
+          />
+          <img
+            src={BRAND.logoFullDark}
+            alt="BookiChat"
+            className="auth-logo auth-logo-dark"
           />
           <h1>{title}</h1>
           <p>{subtitle}</p>
@@ -54,10 +52,6 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
         .auth-header {
           text-align: center;
           margin-bottom: 2rem;
-        }
-        .auth-header :global(.auth-logo) {
-          display: block;
-          margin: 0 auto 1rem;
         }
         h1 {
           font-size: 1.5rem;
