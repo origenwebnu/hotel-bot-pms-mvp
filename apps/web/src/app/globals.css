@@ -180,21 +180,7 @@ input, select, textarea {
 }
 
 .auth-logo {
-  width: auto;
-  height: 34px;
   margin: 0 auto 1rem;
-  display: block;
-}
-
-.auth-logo-dark {
-  display: none;
-}
-
-[data-theme='dark'] .auth-logo-light {
-  display: none;
-}
-
-[data-theme='dark'] .auth-logo-dark {
   display: block;
 }
 
@@ -620,16 +606,13 @@ input, select, textarea {
 }
 
 .brand-full {
+  display: block;
   width: auto;
   max-width: 100%;
-  height: 32px;
-  object-fit: contain;
-  object-position: left center;
 }
 
 .brand-icon {
-  width: 40px;
-  height: 40px;
+  display: block;
   flex-shrink: 0;
 }
 
@@ -940,6 +923,11 @@ input, select, textarea {
   justify-content: center;
   min-height: 100vh;
   color: var(--text-muted);
+}
+
+.loading-with-logo {
+  flex-direction: column;
+  gap: 1rem;
 }
 
 @media (max-width: 900px) {

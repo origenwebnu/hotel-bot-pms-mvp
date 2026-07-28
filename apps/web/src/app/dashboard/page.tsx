@@ -16,6 +16,8 @@ import {
   clearAuthSession,
 } from '@/lib/api';
 import { AppShell } from '@/components/AppShell';
+import { BookiChatLogo } from '@/components/BookiChatLogo';
+import { useTheme } from '@/components/ThemeProvider';
 import {
   buildDashboardNav,
   buildHotelDashboardPath,
@@ -51,9 +53,21 @@ function resolveVertical(hotel: Hotel): BusinessVertical {
   return 'hotel';
 }
 
+function PanelLoading() {
+  const { theme } = useTheme();
+  const logoBackground = theme === 'dark' ? 'dark' : 'light';
+
+  return (
+    <div className="loading loading-with-logo">
+      <BookiChatLogo variant="mark" forBackground={logoBackground} height={40} />
+      <span>Cargando panel...</span>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<div className="loading">Cargando panel...</div>}>
+    <Suspense fallback={<PanelLoading />}>
       <DashboardPageContent />
     </Suspense>
   );
@@ -125,7 +139,7 @@ function DashboardPageContent() {
   }, [hotel, searchParams, router]);
 
   if (!hotel) {
-    return <div className="loading">Cargando panel...</div>;
+    return <PanelLoading />;
   }
 
   const vertical = resolveVertical(hotel);
