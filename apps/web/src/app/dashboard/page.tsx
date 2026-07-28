@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { api, type Hotel, type IntegrationStatus } from '@/lib/api';
+import { BookiChatLogo } from '@/components/BookiChatLogo';
 import { IntegrationsPanel } from '@/components/IntegrationsPanel';
 import { KnowledgePanel } from '@/components/KnowledgePanel';
 import { ChatSimulator } from '@/components/ChatSimulator';
@@ -38,16 +39,21 @@ export default function DashboardPage() {
   }
 
   if (!hotel) {
-    return <div className="loading">Cargando panel...</div>;
+    return (
+      <div className="loading">
+        <BookiChatLogo variant="mark" forBackground="dark" height={40} />
+        <span>Cargando panel...</span>
+      </div>
+    );
   }
 
   return (
     <div className="dashboard">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <span>🏨</span>
+          <BookiChatLogo variant="mark" forBackground="dark" height={36} className="sidebar-logo-mark" />
           <div>
-            <strong>BookiChat</strong>
+            <BookiChatLogo variant="wordmark" forBackground="dark" height={22} className="sidebar-logo-wordmark" />
             <small>{hotel.name}</small>
           </div>
         </div>
@@ -124,12 +130,11 @@ export default function DashboardPage() {
           padding-bottom: 1rem;
           border-bottom: 1px solid var(--border);
         }
-        .sidebar-brand span:first-child {
-          font-size: 1.75rem;
+        .sidebar-brand :global(.sidebar-logo-mark) {
+          flex-shrink: 0;
         }
-        .sidebar-brand strong {
+        .sidebar-brand :global(.sidebar-logo-wordmark) {
           display: block;
-          font-size: 1rem;
         }
         .sidebar-brand small {
           color: var(--text-muted);
@@ -196,8 +201,10 @@ export default function DashboardPage() {
         }
         .loading {
           display: flex;
+          flex-direction: column;
           align-items: center;
           justify-content: center;
+          gap: 1rem;
           min-height: 100vh;
           color: var(--text-muted);
         }

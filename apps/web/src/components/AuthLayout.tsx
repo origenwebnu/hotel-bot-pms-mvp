@@ -1,5 +1,5 @@
-import Link from 'next/link';
 import { ReactNode } from 'react';
+import { BookiChatLogo } from '@/components/BookiChatLogo';
 
 interface AuthLayoutProps {
   title: string;
@@ -13,7 +13,7 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
     <div className="auth-page">
       <div className="auth-card">
         <div className="auth-header">
-          <span className="logo">BookiChat</span>
+          <BookiChatLogo variant="wordmark" forBackground="dark" height={32} className="auth-logo" />
           <h1>{title}</h1>
           <p>{subtitle}</p>
         </div>
@@ -42,11 +42,9 @@ export function AuthLayout({ title, subtitle, children, footer }: AuthLayoutProp
           text-align: center;
           margin-bottom: 2rem;
         }
-        .logo {
-          font-size: 1.5rem;
-          font-weight: 700;
-          color: var(--accent);
-          letter-spacing: -0.02em;
+        .auth-header :global(.auth-logo) {
+          display: block;
+          margin: 0 auto;
         }
         h1 {
           font-size: 1.5rem;
